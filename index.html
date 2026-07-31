@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0a0b0a">
+  <meta name="description" content="继承渡鸦堡，在四季经营、家臣政治与真实战争中夺取铁冠。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23090a09' d='M4 4h56v56H4z'/%3E%3Cpath fill='none' stroke='%23c8a96a' stroke-width='4' d='M16 10h32v29c0 8-7 13-16 17-9-4-16-9-16-17z'/%3E%3Ctext x='32' y='40' text-anchor='middle' font-size='28' fill='%23ead7a2'%3ER%3C/text%3E%3C/svg%3E">
+  <title>模拟中世纪领主 · 铁冠之路</title>
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="weather" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <section id="menu" class="screen menu-screen">
+    <div class="menu-art">
+      <img src="assets/player.webp" alt="渡鸦堡的新领主">
+      <div class="portrait-fade"></div>
+      <div class="house-mark" aria-hidden="true"><span>R</span><small>渡鸦家</small></div>
+    </div>
+    <div class="menu-copy glass">
+      <span class="eyebrow">A LORDSHIP SIMULATION</span>
+      <h1>模拟中世纪领主</h1>
+      <div class="title-rule"><i></i><b>铁冠之路</b><i></i></div>
+      <p class="subtitle">父亲留给你的不是王国，是一座漏雨的城堡、四个挨饿的村庄，和一封催税的王命。</p>
+      <button id="continueBtn" class="primary-btn hidden" type="button"></button>
+      <button id="newGameBtn" class="secondary-btn" type="button">继承渡鸦堡</button>
+      <p class="fine-print">原创架空世界 · 本地自动存档 · 无数据上传</p>
+    </div>
+  </section>
+
+  <section id="creator" class="screen creator-screen hidden">
+    <div class="creator-art">
+      <img src="assets/oswin.webp" alt="老管家奥斯温">
+      <div class="portrait-fade"></div>
+      <blockquote><span>老管家 · 奥斯温</span>“村民记得每一袋被拿走的麦子，家臣也记得每一块没分到的土地。”</blockquote>
+    </div>
+    <div class="creator-card glass">
+      <span class="eyebrow">序章 · 雨夜继承</span>
+      <h2>从今晚起，渡鸦堡的账都算在你名下</h2>
+      <label class="field-block"><span>领主姓名</span><input id="playerName" maxlength="8" value="罗恩" autocomplete="off"></label>
+      <div class="field-block">
+        <span>你准备靠什么统治</span>
+        <div id="oathPicker" class="choice-grid">
+          <button class="choice-card active" data-oath="oath" type="button"><b>守誓</b><small>民心与家臣忠诚更稳</small></button>
+          <button class="choice-card" data-oath="iron" type="button"><b>铁腕</b><small>军队士气与征召更强</small></button>
+          <button class="choice-card" data-oath="wealth" type="button"><b>富国</b><small>领地收入与建设更优</small></button>
+        </div>
+      </div>
+      <div class="field-block">
+        <span>北境会怎样对待你</span>
+        <div id="difficultyPicker" class="choice-grid difficulty-grid">
+          <button class="choice-card active" data-difficulty="standard" type="button"><b>领主</b><small>经营与战争压力均衡</small></button>
+          <button class="choice-card" data-difficulty="hard" type="button"><b>乱世</b><small>歉收更多，敌军更积极</small></button>
+          <button class="choice-card" data-difficulty="brutal" type="button"><b>铁与血</b><small>冬季和战败都会致命</small></button>
+        </div>
+      </div>
+      <button id="startGameBtn" class="primary-btn" type="button">接过领主印戒 <span>→</span></button>
+    </div>
+  </section>
+
+  <section id="prologue" class="screen story-screen hidden" aria-live="polite">
+    <div class="story-art"><img id="prologuePortrait" src="assets/oswin.webp" alt="剧情人物"><div class="portrait-fade"></div></div>
+    <div class="story-card glass">
+      <span id="prologueKicker" class="eyebrow">序章</span>
+      <h2 id="prologueTitle"></h2>
+      <div id="prologueBody" class="story-body"></div>
+      <div class="story-progress"><i id="prologueProgress"></i></div>
+      <button id="nextPrologueBtn" class="primary-btn" type="button">继续 <span>→</span></button>
+    </div>
+  </section>
+
+  <div id="game" class="game-shell hidden">
+    <header class="topbar">
+      <div class="brand-lockup"><span class="brand-seal">R</span><div><h1>渡鸦堡</h1><p id="chapterText">第一年 · 春</p></div></div>
+      <div class="top-resources">
+        <div><span>季度</span><b id="turnText">1 / 48</b></div>
+        <div><span>行动</span><b id="apText">3 / 3</b></div>
+        <div><span>金币</span><b id="goldText">58</b></div>
+        <div><span>粮食</span><b id="grainText">125</b></div>
+        <div><span>军队</span><b id="troopText">42</b></div>
+        <button id="soundBtn" class="icon-btn sound-btn" type="button" aria-label="关闭环境音" aria-pressed="true">声</button>
+        <button id="saveBtn" class="icon-btn" type="button" aria-label="保存进度">存</button>
+        <button id="restartBtn" class="icon-btn" type="button" aria-label="重新开始">重</button>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <aside class="side-column">
+        <article class="lord-card">
+          <img src="assets/player.webp" alt="玩家领主">
+          <div class="portrait-fade"></div>
+          <div class="lord-copy"><span id="oathBadge">守誓之人</span><h2 id="playerNameText">罗恩</h2><p>渡鸦堡 · 领主</p></div>
+        </article>
+        <section class="side-panel glass">
+          <div class="section-title"><h3>统治根基</h3><span id="territoryCount">1 / 7</span></div>
+          <div class="meter-row"><span>民心</span><b id="supportText">54</b></div><div class="meter green"><i id="supportBar"></i></div>
+          <div class="meter-row"><span>军心</span><b id="moraleText">58</b></div><div class="meter red"><i id="moraleBar"></i></div>
+          <div class="meter-row"><span>威望</span><b id="renownText">12</b></div><div class="meter gold"><i id="renownBar"></i></div>
+          <div class="meter-row"><span>正统</span><b id="legitimacyText">35</b></div><div class="meter blue"><i id="legitimacyBar"></i></div>
+          <div class="meter-row"><span>战争疲劳</span><b id="wearinessText">0</b></div><div class="meter purple"><i id="wearinessBar"></i></div>
+        </section>
+        <section class="side-panel glass">
+          <div class="section-title"><h3>下季预计</h3><span id="netGoldText">+0 金</span></div>
+          <div id="forecastList" class="forecast-list"></div>
+        </section>
+      </aside>
+
+      <section class="main-column">
+        <nav id="gameNav" class="game-nav" aria-label="游戏功能">
+          <button class="active" data-tab="hall"><span>议</span>议事厅</button>
+          <button data-tab="domain"><span>堡</span>领地</button>
+          <button data-tab="map"><span>图</span>北境地图</button>
+          <button data-tab="campaign"><span>剑</span>征战</button>
+          <button data-tab="court"><span>臣</span>家臣</button>
+          <button data-tab="chronicle"><span>录</span>编年史</button>
+        </nav>
+        <div class="turn-strip"><div><i class="live-dot"></i><b id="phaseText">春耕</b><span id="turnHint">本季度可做3件事</span></div><button id="endSeasonBtn" class="end-season-btn" type="button">结束本季</button></div>
+        <div id="panel" class="content-panel"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="modalMask" class="modal-mask hidden" role="presentation">
+    <section id="modal" class="decision-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div id="modalPortraitWrap" class="modal-portrait"><img id="modalPortrait" alt="事件人物"></div>
+      <div class="modal-copy"><span id="modalKicker" class="eyebrow">领地事件</span><h2 id="modalTitle"></h2><div id="modalBody" class="modal-body"></div><div id="modalResources" class="modal-resources" aria-label="当前资源"></div><div id="modalOptions" class="modal-options"></div></div>
+    </section>
+  </div>
+
+  <section id="ending" class="screen ending-screen hidden">
+    <div class="ending-art"><img id="endingPortrait" src="assets/player.webp" alt="铁冠结局"><div class="portrait-fade"></div></div>
+    <div id="endingBody" class="ending-card glass"></div>
+  </section>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="app.js?v=2"></script>
+</body>
+</html>
