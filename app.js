@@ -9,26 +9,26 @@ const CAMPAIGN_AP_COST = 2;
 const SEASONS = [
   { id: "spring", name: "春", phase: "春耕", grain: .45, gold: 1, note: "土地解冻，适合开垦与整顿村庄。" },
   { id: "summer", name: "夏", phase: "备战", grain: .75, gold: 1, note: "道路畅通，是训练和远征的好时节。" },
-  { id: "autumn", name: "秋", phase: "收获", grain: 1.55, gold: 1.25, note: "麦仓最充盈，也是王室催税的时候。" },
-  { id: "winter", name: "冬", phase: "越冬", grain: .1, gold: .75, note: "军队和百姓都在消耗你此前的积蓄。" }
+  { id: "autumn", name: "秋", phase: "收获", grain: 1.55, gold: 1.25, note: "秋季粮食和金币产量最高，也更容易遇到王室催税。" },
+  { id: "winter", name: "冬", phase: "越冬", grain: .1, gold: .75, note: "冬季产粮很少，军队和居民仍会继续消耗粮食。" }
 ];
 
 const OATHS = {
-  oath: { name: "守誓之人", short: "守誓", desc: "许下的承诺会成为你的力量，也会成为你的债。" },
-  iron: { name: "铁腕之主", short: "铁腕", desc: "恐惧能让命令更快抵达，但不能让人忘记代价。" },
-  wealth: { name: "富国之手", short: "富国", desc: "金币修得起城墙，也买不来所有人的忠诚。" }
+  oath: { name: "守信领主", short: "守信", desc: "开局民心更高，家臣关系更容易维持。" },
+  iron: { name: "强硬领主", short: "强硬", desc: "开局军队与军心更强，适合尽早征战。" },
+  wealth: { name: "经营领主", short: "经营", desc: "开局金币更多，税收更高，适合优先建设。" }
 };
 
 const DIFFICULTIES = {
-  standard: { name: "领主", income: 1, enemy: 1, winter: 1 },
-  hard: { name: "乱世", income: .9, enemy: 1.16, winter: 1.18 },
-  brutal: { name: "铁与血", income: .82, enemy: 1.32, winter: 1.38 }
+  standard: { name: "普通", income: 1, enemy: 1, winter: 1 },
+  hard: { name: "困难", income: .9, enemy: 1.16, winter: 1.18 },
+  brutal: { name: "极难", income: .82, enemy: 1.32, winter: 1.38 }
 };
 
 const FACTIONS = {
   player: { name: "渡鸦家", color: "#c7a665" },
   wolf: { name: "狼牙氏族", color: "#9c5045" },
-  river: { name: "河望伯领", color: "#66846f" },
+  river: { name: "河望领地", color: "#66846f" },
   crown: { name: "摄政公爵", color: "#77879a" }
 };
 
@@ -39,18 +39,20 @@ const TERRITORY_DEFS = {
   highpass: { name: "北境关", owner: "wolf", terrain: "山地要塞", gold: 6, grain: 13, people: 72, guard: 54, stability: 76, final: false, adj: ["pineford", "crownvale"], desc: "扼守山口的石堡。难攻，却能挡住整个北方的袭扰。" },
   crossford: { name: "十字渡", owner: "river", terrain: "河谷集市", gold: 15, grain: 18, people: 116, guard: 38, stability: 72, final: false, adj: ["ashfield", "riverwatch", "crownvale"], desc: "两条商路在此交汇。这里的税吏比守军更让商人害怕。" },
   riverwatch: { name: "河望城", owner: "river", terrain: "河畔石城", gold: 14, grain: 24, people: 138, guard: 49, stability: 78, final: false, adj: ["crossford", "crownvale"], desc: "艾芙琳伯爵的坚城。城下水网密布，骑兵难以展开。" },
-  crownvale: { name: "王冠谷", owner: "crown", terrain: "公爵王城", gold: 23, grain: 28, people: 186, guard: 68, stability: 82, final: true, adj: ["highpass", "crossford", "riverwatch"], desc: "摄政公爵把铁冠锁在这里。只有统一六领的人才有资格叩门。" }
+  crownvale: { name: "王冠谷", owner: "crown", terrain: "公爵王城", gold: 23, grain: 28, people: 186, guard: 68, stability: 82, final: true, adj: ["highpass", "crossford", "riverwatch"], desc: "摄政公爵把铁冠锁在这里。控制其余六块领地后才能进攻。" }
 };
 
 const OFFICER_DEFS = {
-  player: { name: "罗恩", title: "领主", portrait: "assets/player.webp", side: "player", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "亲临阵前", traitText: "随军时军心不会低于45；你的选择会决定家族最终的统治方式。", loyalty: 100, ambition: 55 },
-  oswin: { name: "奥斯温·维尔", title: "老管家", portrait: "assets/oswin.webp", side: "player", stats: { force: 27, command: 51, scheme: 78, govern: 88, charm: 69 }, trait: "旧账如山", traitText: "主持领地时收入更稳定；拒绝他的越冬警告会积累怨气。", loyalty: 76, ambition: 18 },
+  player: { name: "罗恩", title: "领主", portrait: "assets/player.webp", side: "player", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "亲临阵前", traitText: "领主出战时，本场军心最低按45点计算；各类选择会累计统治风格。", loyalty: 100, ambition: 55 },
+  oswin: { name: "奥斯温·维尔", title: "老管家", portrait: "assets/oswin.webp", side: "player", stats: { force: 27, command: 51, scheme: 78, govern: 88, charm: 69 }, trait: "旧账如山", traitText: "主持领地时收入更稳定；拒绝他的越冬警告会积累不满。", loyalty: 76, ambition: 18 },
   renard: { name: "雷纳德·霍尔特", title: "骑士长", portrait: "assets/renard.webp", side: "player", stats: { force: 86, command: 83, scheme: 43, govern: 31, charm: 47 }, trait: "破阵者", traitText: "强攻和骑兵冲击更有力；占尽优势后撤退会激怒他。", loyalty: 70, ambition: 48 },
   ysabel: { name: "伊莎贝尔·马伦", title: "财政官", portrait: "assets/ysabel.webp", side: "player", stats: { force: 30, command: 48, scheme: 80, govern: 92, charm: 72 }, trait: "精确到一粒麦", traitText: "随军可降低补给与撤退损失；主持财税能减少盘剥。", loyalty: 68, ambition: 34 },
-  edmund: { name: "埃德蒙·维恩", title: "私生表兄", portrait: "assets/edmund.webp", side: "player", stats: { force: 74, command: 76, scheme: 69, govern: 57, charm: 84 }, trait: "另一种继承", traitText: "伏击和招降能力出众；功劳越高，越希望得到自己的封地。", loyalty: 61, ambition: 82 },
-  aveline: { name: "艾芙琳·多尔", title: "河望伯爵", portrait: "assets/aveline.webp", side: "river", stats: { force: 71, command: 80, scheme: 75, govern: 74, charm: 78 }, trait: "河地之主", traitText: "熟悉河谷作战与治理。若被逼到绝境，她会选择一个值得效忠的人。", loyalty: 52, ambition: 65 },
-  bran: { name: "布兰·狼牙", title: "氏族战首", portrait: "assets/bran.webp", side: "wolf", stats: { force: 92, command: 80, scheme: 41, govern: 37, charm: 61 }, trait: "只服强者", traitText: "森林和山地作战极强；只会向正面击败自己的人低头。", loyalty: 48, ambition: 58 }
+  edmund: { name: "埃德蒙·维恩", title: "私生表兄", portrait: "assets/edmund.webp", side: "player", stats: { force: 74, command: 76, scheme: 69, govern: 57, charm: 84 }, trait: "另一种继承", traitText: "伏击和招降能力出众；功劳越高，越希望管理自己的领地。", loyalty: 61, ambition: 82 },
+  aveline: { name: "艾芙琳·多尔", title: "河望领主", portrait: "assets/aveline.webp", side: "river", stats: { force: 71, command: 80, scheme: 75, govern: 74, charm: 78 }, trait: "河地之主", traitText: "熟悉河谷作战与治理。若被逼到绝境，她会选择一个值得效忠的人。", loyalty: 52, ambition: 65 },
+  bran: { name: "布兰·狼牙", title: "狼牙首领", portrait: "assets/bran.webp", side: "wolf", stats: { force: 92, command: 80, scheme: 41, govern: 37, charm: 61 }, trait: "只服强者", traitText: "森林和山地作战极强；只会向正面击败自己的人低头。", loyalty: 48, ambition: 58 }
 };
+
+const STAT_LABELS = { force: "武力", command: "统率", scheme: "谋略", govern: "治理", charm: "魅力" };
 
 const BUILDINGS = {
   fields: { name: "农田与磨坊", base: 15, desc: "每级提高领地粮食产量，并缓解冬季缺粮。" },
@@ -60,23 +62,23 @@ const BUILDINGS = {
 };
 
 const PLANS = {
-  assault: { name: "正面强攻", desc: "平原与骑士冲阵最强；突破快，但连续冒进仍会被反制。", mult: 1.12, casualty: 1.08 },
-  steady: { name: "稳扎稳打", desc: "保存队列和人手，胜算稳定，突破能力较弱。", mult: .94, casualty: .72 },
-  ambush: { name: "迂回伏击", desc: "依赖谋略，只在森林与山地获得完整优势。", mult: .92, casualty: .78 },
-  parley: { name: "攻心劝降", desc: "正面战力最低；先打出优势后可减少伤亡与驻军压力。", mult: .86, casualty: .52 }
+  assault: { name: "正面强攻", desc: "适合平原和骑士冲锋。突破力强，连续冒进会增加伤亡。", mult: 1.12, casualty: 1.08 },
+  steady: { name: "稳扎稳打", desc: "保持队列，减少伤亡，但突破能力较弱。", mult: .94, casualty: .72 },
+  ambush: { name: "迂回伏击", desc: "依赖谋略，在森林和山地更有效。", mult: .92, casualty: .78 },
+  parley: { name: "攻心劝降", desc: "不适合正面强攻；先取得优势，再尝试劝降。", mult: .86, casualty: .52 }
 };
 
 const UNIT_DEFS = {
-  levy: { name: "长矛兵", short: "矛", gold: 10, grain: 6, amount: 8, desc: "便宜的盾墙骨架，适合守城和补充驻军，长期征发会拖累粮仓。" },
-  archers: { name: "弓箭手", short: "弓", gold: 12, grain: 5, amount: 6, desc: "森林、山地和河谷的主力，并能解锁低伤亡箭雨。" },
-  knights: { name: "披甲骑士", short: "骑", gold: 18, grain: 7, amount: 4, desc: "平原与强攻的破阵核心，昂贵但更不容易出现在伤亡名单里。" }
+  levy: { name: "长矛兵", short: "矛", gold: 10, grain: 6, amount: 8, desc: "招募便宜，适合守城和补充驻军，通常承担最多伤亡。" },
+  archers: { name: "弓箭手", short: "弓", gold: 12, grain: 5, amount: 6, desc: "适合森林、山地和河谷；达到人数要求后可使用箭雨。" },
+  knights: { name: "披甲骑士", short: "骑", gold: 18, grain: 7, amount: 4, desc: "在平原强攻中威力最高，招募和军饷成本也最高。" }
 };
 
 const POLICIES = {
-  balanced: { name: "常例治理", gold: 1, grain: 1, desc: "不额外压榨，也不额外减免。" },
-  relief: { name: "轻徭休养", gold: .76, grain: .96, desc: "少收税换稳定，每季稳定与民心恢复。" },
-  extract: { name: "加征赋税", gold: 1.3, grain: 1, desc: "迅速增加金币，但每季损耗稳定。" },
-  garrison: { name: "军屯边防", gold: .82, grain: .88, desc: "牺牲产出换守军恢复，适合新边境。" }
+  balanced: { name: "正常管理", gold: 1, grain: 1, desc: "保持正常税收，收入和稳定都不会额外变化。" },
+  relief: { name: "减税休养", gold: .76, grain: .96, desc: "减少税收。每季度恢复领地稳定和民心。" },
+  extract: { name: "提高税收", gold: 1.3, grain: 1, desc: "金币收入增加，但领地稳定会持续下降。" },
+  garrison: { name: "加强驻军", gold: .82, grain: .88, desc: "减少粮食和金币产出，逐步补充守军。适合刚占领的边境领地。" }
 };
 
 const MAP_POINTS = {
@@ -96,93 +98,93 @@ const PROLOGUE = [
 ];
 
 const WORLD_EVENTS = [
-  { id: "spring_flood", kicker: "泥水越过田埂", title: "上游决堤，三座村庄都在抢最后一批木料", portrait: "assets/oswin.webp", body: "水淹进播种后的田地。现在救田能保住收成，救桥能保住商路，什么都不救则能保住国库。", options: [
-    ["先保住田地", "金币 −12，粮食 +10，民心 +3", { gold: -12, grain: 10, support: 3 }, "领主的木料先送进了田间。"],
-    ["重修商桥", "立即净支出金币 −7，威望 +2", { gold: -7, renown: 2 }, "商队在新桥上重新排起长队。"],
-    ["让各村自己想办法", "金币不变；最低稳定 −8，民心 −5", { stabilityWeak: -8, support: -5 }, "洪水退去后，村民记住了城堡没有来人。"] ] },
-  { id: "summer_drought", kicker: "旱风吹过麦田", title: "井水降到绳索也够不到的地方", portrait: "assets/ysabel.webp", body: "牲畜和人开始共用一条浑水沟。再等一个月也许会下雨，也许不会。", options: [
-    ["买水车和外地粮", "金币 −18，粮食 +12，民心 +5", { gold: -18, grain: 12, support: 5 }, "运水车日夜进出城门。"],
-    ["军队先减口粮", "粮食 +8，军心 −7，战争疲劳 +5", { grain: 8, morale: -7, warWeariness: 5 }, "军营的锅里只剩稀粥。"],
-    ["维持原有配给", "粮食 −15，稳定 −3", { grain: -15, stabilityAll: -3 }, "粮仓替天空付了这笔账。"] ] },
-  { id: "autumn_mice", kicker: "仓墙里的窸窣声", title: "新粮入仓时，老鼠也一起搬了进去", portrait: "assets/oswin.webp", body: "守仓人说只损了一角，伊莎贝尔却在账上找到了连续三年的相同说法。", options: [
-    ["拆仓灭鼠", "金币 −10，粮食 −4，民心 +2", { gold: -10, grain: -4, support: 2 }, "旧仓墙被拆开，里面不只有鼠洞。"],
-    ["处罚守仓人", "正统 +2，粮食 −9，民心 −2", { legitimacy: 2, grain: -9, support: -2 }, "两个守仓人被戴上木枷。"],
-    ["封仓熏蒸，认下损失", "无需额外物资；最低稳定 −5，民心 −3", { stabilityWeak: -5, support: -3 }, "粮仓被封了三天。账本合上了，鼠声暂时停了。"] ] },
-  { id: "winter_fever", kicker: "冬营里的咳嗽", title: "热病从伤兵棚传进了下城", portrait: "assets/renard.webp", body: "军医要酒、干净布匹和隔离营。商人说这些东西现在都值三倍价钱。", options: [
-    ["照军医说的办", "金币 −17，粮食 −6，军心 +5", { gold: -17, grain: -6, morale: 5 }, "病棚外终于有了守卫和干净的水。"],
-    ["把病人送去修道院", "金币 −8，民心 −3，军心 +2", { gold: -8, support: -3, morale: 2 }, "雪地上留下了一长串担架印。"],
-    ["封住下城", "最低稳定 −7，民心 −8；最低守军 +3", { stabilityWeak: -7, support: -8, guardWeak: 3 }, "城门从里面上了闩。"] ] },
+  { id: "spring_flood", kicker: "春季洪水", title: "上游决堤，三座村庄开始抢运木料", portrait: "assets/oswin.webp", body: "洪水淹进刚播种的田地，西侧商桥也塌了一段。仓库剩下的木料只够先修一处。", options: [
+    ["先抢修田埂", "金币 −12，粮食 +10，民心 +3", { gold: -12, grain: 10, support: 3 }, "木料和民夫先被送往田间，十袋种粮免于被水冲走。"],
+    ["先重修商桥", "金币 −7，威望 +2", { gold: -7, renown: 2 }, "商桥当天开始抢修，四天后恢复车马通行。"],
+    ["不提供木料，让各村自己解决", "金币不变；最低稳定 −8，民心 −5", { stabilityWeak: -8, support: -5 }, "三座村庄各自拆屋取木，受灾最重的村庄稳定度下降。"] ] },
+  { id: "summer_drought", kicker: "夏季旱情", title: "三个村庄的水井已经见底", portrait: "assets/ysabel.webp", body: "村民开始从同一条浑水沟里给人和牲畜取水。奥斯温判断，如果十天内仍不下雨，牲畜会先大批死亡。", options: [
+    ["从南方购买水和粮食", "金币 −18，粮食 +12，民心 +5", { gold: -18, grain: 12, support: 5 }, "南方商队运来了水桶、麦粮和牲畜饲料。"],
+    ["削减军营口粮", "粮食 +8，军心 −7，战争疲劳 +5", { grain: 8, morale: -7, warWeariness: 5 }, "军营从今天起改发稀粥，几名士兵因此与伙夫发生争执。"],
+    ["维持原有配给", "粮食 −15，稳定 −3", { grain: -15, stabilityAll: -3 }, "仓库追加发出十五袋粮，三个村庄暂时没有断粮。"] ] },
+  { id: "autumn_mice", kicker: "秋粮入仓", title: "新粮入仓后，粮仓暴发鼠患", portrait: "assets/oswin.webp", body: "守仓人报告损失不足一成。伊莎贝尔却查到，过去三年秋天都报过几乎相同的损耗。", options: [
+    ["拆仓灭鼠", "金币 −10，粮食 −4，民心 +2", { gold: -10, grain: -4, support: 2 }, "旧仓被拆开，除了鼠洞，还查出了两本伪造的损耗账。"],
+    ["处罚守仓人", "王室认可 +2，粮食 −9，民心 −2", { legitimacy: 2, grain: -9, support: -2 }, "两名守仓人被戴上木枷，仓内已经损坏的粮食无法追回。"],
+    ["封仓灭鼠，不再追查", "无需额外物资；最低稳定 −5，民心 −3", { stabilityWeak: -5, support: -3 }, "粮仓封闭三天。鼠患暂时得到控制，守仓人继续留任。"] ] },
+  { id: "winter_fever", kicker: "冬季疫病", title: "伤兵棚的热病传进了下城", portrait: "assets/renard.webp", body: "军医要求设置隔离营，并购买烈酒和干净布匹。商人已经把这些物资的价格抬到平时三倍。", options: [
+    ["按军医要求设隔离营", "金币 −17，粮食 −6，军心 +5", { gold: -17, grain: -6, morale: 5 }, "士兵在病棚外设岗，病人开始使用单独的水井和布匹。"],
+    ["把病人送去修道院", "金币 −8，民心 −3，军心 +2", { gold: -8, support: -3, morale: 2 }, "伤兵和下城病患被分批送往修道院，城内床位很快腾空。"],
+    ["封锁下城", "最低稳定 −7，民心 −8；最低守军 +3", { stabilityWeak: -7, support: -8, guardWeak: 3 }, "守军封住下城出入口，并禁止居民在隔离期内离开。"] ] },
   { id: "wandering_masons", kicker: "来自南方的石匠", title: "一支石匠行会愿意留下，但要免三年人头税", portrait: "assets/ysabel.webp", body: "他们能修城墙、磨坊和桥。城里的老匠人则说，外来者会抢走所有好活。", options: [
-    ["给他们特许", "金币 −11，最低守军 +6，民心 +2", { gold: -11, guardWeak: 6, support: 2 }, "石匠的棚屋在城墙下排成一列。"],
-    ["让新旧匠人合营", "金币 −16，稳定 +4", { gold: -16, stabilityAll: 4 }, "两拨匠人先吵了三天，然后一起开工。"],
-    ["拒绝特许，任其离开", "无需花费；威望 −1", { renown: -1 }, "石匠收起工具南下，城墙仍由旧匠人慢慢修补。"] ] },
-  { id: "salt_merchants", kicker: "盐车到城门", title: "商人愿用一车盐换你的一纸护路令", portrait: "assets/ysabel.webp", body: "护路意味着要派兵，也意味着每个冬天都有人把盐送进北境。", options: [
-    ["派兵护送", "金币 +13，粮食 +7，战争疲劳 +3", { gold: 13, grain: 7, warWeariness: 3 }, "渡鸦旗第一次跟着盐车走完全程。"],
-    ["只收过路税", "金币 +18，民心 −3", { gold: 18, support: -3 }, "税吏数清了硬币，却没数路边的尸体。"],
-    ["把护路交给村镇", "金币 +7，稳定 +5", { gold: 7, stabilityAll: 5 }, "沿路村镇自己排出了守夜次序。"] ] },
+    ["同意免税三年", "金币 −11，最低守军 +6，民心 +2", { gold: -11, guardWeak: 6, support: 2 }, "石匠在城墙下搭起工棚，当周便开始修补北侧塔楼。"],
+    ["让外地和本地工匠一起干", "金币 −16，稳定 +4", { gold: -16, stabilityAll: 4 }, "城堡为两边分配了工钱和工位，争执三天后工程开工。"],
+    ["不同意免税，让他们离开", "无需花费；威望 −1", { renown: -1 }, "行会收起工具南下，现有工程继续由本地匠人负责。"] ] },
+  { id: "salt_merchants", kicker: "盐车到城门", title: "盐商愿意交钱和盐，请你派兵保护商路", portrait: "assets/ysabel.webp", body: "派兵会增加军队负担，但此后每个冬天都会有盐运进北境。", options: [
+    ["派兵保护盐商", "金币 +13，粮食 +7，战争疲劳 +3", { gold: 13, grain: 7, warWeariness: 3 }, "一队士兵护送盐车通过北境，商人按约交付盐和金币。"],
+    ["只收税，不派护卫", "金币 +18，民心 −3", { gold: 18, support: -3 }, "税吏收下过路费，没有为商队安排护卫。两辆盐车在返程时遭到抢劫。"],
+    ["让沿路村庄负责巡逻", "金币 +7，稳定 +5", { gold: 7, stabilityAll: 5 }, "沿路村镇自行排出守夜和巡路次序，商队恢复通行。"] ] },
   { id: "clipped_coin", kicker: "被剪薄的银币", title: "集市上每三枚银币就有一枚缺了边", portrait: "assets/ysabel.webp", body: "拒收会让交易停摆，照收会把坏钱塞满你的金库。", options: [
-    ["设官秤统一兑换", "金币 −9，正统 +5，稳定 +2", { gold: -9, legitimacy: 5, stabilityAll: 2 }, "每枚银币都要在官秤上过一次。"],
-    ["按重量收税", "金币 +10，民心 −4", { gold: 10, support: -4 }, "商人把缺掉的银边算进了货价。"],
-    ["暂时照旧流通", "金币 +5，正统 −4", { gold: 5, legitimacy: -4 }, "坏钱继续从一只手流向另一只手。"] ] },
+    ["设立官方兑换点", "金币 −9，王室认可 +5，稳定 +2", { gold: -9, legitimacy: 5, stabilityAll: 2 }, "集市设置官方兑换点，缺边银币按实际重量兑换后才能缴税。"],
+    ["银币按重量收税", "金币 +10，民心 −4", { gold: 10, support: -4 }, "税吏按重量收银，商人随即提高了盐、布和铁器的价格。"],
+    ["继续使用这些银币", "金币 +5，王室认可 −4", { gold: 5, legitimacy: -4 }, "缺边银币继续流通，几名商人拒绝接受渡鸦堡的税票。"] ] },
   { id: "mill_dispute", kicker: "磨坊水闸之争", title: "上游领主磨麦时，下游农田就没有水", portrait: "assets/oswin.webp", body: "双方都拿着旧契约，双方的契约也都是真的。", options: [
-    ["限定磨坊时辰", "金币 −5，民心 +6，稳定 +3", { gold: -5, support: 6, stabilityAll: 3 }, "水钟被挂在磨坊门口。"],
-    ["支持磨坊主", "金币 +11，民心 −6", { gold: 11, support: -6 }, "磨坊转得更快，下游的田更干。"],
-    ["拆掉私设水闸", "军心 +2，最低稳定 −3", { morale: 2, stabilityWeak: -3 }, "士兵用斧头结束了这场争论。"] ] },
+    ["规定磨坊用水时间", "金币 −5，民心 +6，稳定 +3", { gold: -5, support: 6, stabilityAll: 3 }, "水钟被挂在磨坊门口，磨坊和下游农户按时段分水。"],
+    ["让磨坊继续全天用水", "金币 +11，民心 −6", { gold: 11, support: -6 }, "磨坊获准全天开闸，下游两片农田很快出现干裂。"],
+    ["派兵拆掉水闸", "军心 +2，最低稳定 −3", { morale: 2, stabilityWeak: -3 }, "士兵拆掉私设水闸，磨坊主的护工与他们发生冲突。"] ] },
   { id: "deserter_band", kicker: "林中的逃兵", title: "一群南方逃兵占了旧猎屋，愿意拿剑换口粮", portrait: "assets/renard.webp", body: "他们有战斗经验，也有丢下旧主的前科。", options: [
-    ["编入长矛队", "粮食 −8，长矛兵 +7，军心 −2", { grain: -8, levy: 7, morale: -2 }, "逃兵换了旗帜，却没有换掉眼神。"],
-    ["缴械后安置开荒", "粮食 −10，民心 +4，稳定 +2", { grain: -10, support: 4, stabilityAll: 2 }, "七把剑换成了七把锄头。"],
-    ["限期离境", "威望 +2，民心 −2", { renown: 2, support: -2 }, "他们在夜里离开，带走了所有能带走的东西。"] ] },
+    ["招收他们当长矛兵", "粮食 −8，长矛兵 +7，军心 −2", { grain: -8, levy: 7, morale: -2 }, "七名逃兵宣誓后被编入长矛队，原有士兵对这项安排提出质疑。"],
+    ["收走武器，让他们开荒", "粮食 −10，民心 +4，稳定 +2", { grain: -10, support: 4, stabilityAll: 2 }, "逃兵交出武器，被送往东侧荒地修屋开垦。"],
+    ["赶出领地", "威望 +2，民心 −2", { renown: 2, support: -2 }, "守军押送他们离开边界，猎屋附近的村民失去了临时护卫。"] ] },
   { id: "forest_rights", kicker: "领主的鹿，村民的柴", title: "巡林人抓住了三个在禁林里设套的孩子", portrait: "assets/oswin.webp", body: "按旧法要砍手。按村民的说法，他们只是想熬过冬天。", options: [
-    ["开放枯木与小兽", "民心 +9，正统 −2", { support: 9, legitimacy: -2 }, "禁林第一次立起写着百姓权利的木牌。"],
-    ["罚做巡林工役", "稳定 +3，粮食 +5", { stabilityAll: 3, grain: 5 }, "孩子们用一个冬天学会了森林的每条路。"],
-    ["照旧法处置", "正统 +4，军心 +2，民心 −9", { legitimacy: 4, morale: 2, support: -9 }, "旧法得到了执行，村庄安静得过分。"] ] },
-  { id: "monastery_tithe", kicker: "修道院的旧契", title: "修士拿来一张契约，声称渡鸦家欠了二十年什一税", portrait: "assets/oswin.webp", body: "羊皮纸是真的，签字也是真的。唯一的问题是，欠债的人都已经死了。", options: [
-    ["承认旧债", "金币 −20，正统 +8", { gold: -20, legitimacy: 8 }, "修道院的钟为渡鸦家多响了一次。"],
-    ["用粮食抵一半", "粮食 −18，正统 +3", { grain: -18, legitimacy: 3 }, "粮车停满了修道院外院。"],
-    ["宣布债随人死", "金币不变，威望 +3，正统 −7", { renown: 3, legitimacy: -7 }, "契约被退回时，修士没有祝福你。"] ] },
+    ["允许村民捡柴和抓小兽", "民心 +9，王室认可 −2", { support: 9, legitimacy: -2 }, "城堡宣布，村民可以在禁林捡拾枯木并猎取兔类。"],
+    ["罚他们巡林一个冬天", "稳定 +3，粮食 +5", { stabilityAll: 3, grain: 5 }, "三个孩子免于断手，改在巡林队服役一个冬天。"],
+    ["按旧法砍手", "王室认可 +4，军心 +2，民心 −9", { legitimacy: 4, morale: 2, support: -9 }, "三个孩子按旧法受刑。此后一个月，附近村民不再进入城堡集市。"] ] },
+  { id: "monastery_tithe", kicker: "修道院的旧契", title: "修道院要求你补交二十年前欠下的教会税", portrait: "assets/oswin.webp", body: "契约和签字都是真的。这笔税原本需要把收入的十分之一交给教会，但欠税的人都已经死了。", options: [
+    ["支付全部欠税", "金币 −20，王室认可 +8", { gold: -20, legitimacy: 8 }, "二十枚金币被送入修道院，院长在契约上盖下结清印记。"],
+    ["用粮食抵掉一半", "粮食 −18，王室认可 +3", { grain: -18, legitimacy: 3 }, "十八袋粮食运进修道院，剩余欠款被重新记入契约。"],
+    ["拒绝偿还父亲的欠税", "金币不变，威望 +3，王室认可 −7", { renown: 3, legitimacy: -7 }, "使者退回契约，修道院随后停止为渡鸦家举行公开祈祷。"] ] },
   { id: "village_wedding", kicker: "一场跨村婚礼", title: "两个结仇三代的村庄想请你做证婚人", portrait: "assets/player.webp", body: "这是一场婚礼，也是一场停战。你带多少礼物去，会决定停战能维持多久。", options: [
-    ["带酒和两头牛", "金币 −9，粮食 −5，民心 +8", { gold: -9, grain: -5, support: 8 }, "婚宴一直持续到天亮。"],
-    ["只带领主祝福", "正统 +2，稳定 +2", { legitimacy: 2, stabilityAll: 2 }, "没有厚礼，但你的到场足以让两边放下刀。"],
-    ["让管家代你出席", "金币 −3，民心 +2", { gold: -3, support: 2 }, "奥斯温替你喝了三杯很差的麦酒。"] ] },
-  { id: "minor_heir", kicker: "没有土地的继承人", title: "一个小贵族的遗孤带着族谱来到大厅", portrait: "assets/edmund.webp", body: "族谱能证明他的姓，不能证明他还有多少追随者。收留他，也许是在养一名骑士，也许是在养一场争端。", options: [
-    ["收为侍从", "金币 −8，披甲骑士 +1，正统 +2", { gold: -8, knights: 1, legitimacy: 2 }, "年轻人把旧徽记缝在渡鸦黑袍里面。"],
-    ["给钱送去修道院", "金币 −12，民心 +2", { gold: -12, support: 2 }, "他离开时仍坚持按贵族礼仪行礼。"],
-    ["让他自己证明价值", "威望 +2，家臣怨气 +2", { renown: 2, grievanceAll: 2 }, "大厅里没有人为他让出座位。"] ] },
-  { id: "hostage_offer", kicker: "边境上的人质", title: "邻家骑士愿把长子留在渡鸦堡，换取停战和粮食", portrait: "assets/renard.webp", body: "这能让一段边境暂时安静，也会让一个孩子成为账本上的抵押物。", options: [
-    ["收下人质，送足粮食", "粮食 −16，最低守军 +5，正统 −2", { grain: -16, guardWeak: 5, legitimacy: -2 }, "边境安静下来，孩子住进了北塔。"],
-    ["只签停战，不收人", "粮食 −8，民心 +4，稳定 +2", { grain: -8, support: 4, stabilityAll: 2 }, "停战没有人质担保，只靠双方的脸面。"],
-    ["拒绝交易", "军心 +3，威望 +2", { morale: 3, renown: 2 }, "使者把孩子带回了边境。"] ] },
+    ["带酒和两头牛", "金币 −9，粮食 −5，民心 +8", { gold: -9, grain: -5, support: 8 }, "两头牛被分给双方亲族，婚宴持续到天亮，没有发生斗殴。"],
+    ["只带领主祝福", "王室认可 +2，稳定 +2", { legitimacy: 2, stabilityAll: 2 }, "你在两村代表面前完成证婚，双方当场交换了扣押的牲畜。"],
+    ["让管家代你出席", "金币 −3，民心 +2", { gold: -3, support: 2 }, "奥斯温代你宣读祝词，并记录了两村共同签下的停战约定。"] ] },
+  { id: "minor_heir", kicker: "没有土地的继承人", title: "一个小贵族的遗孤带着族谱来到大厅", portrait: "assets/edmund.webp", body: "族谱能证明他的姓，但他没有领地或追随者。收为侍从能补充一名骑士，也可能引来原领地的继承争端。", options: [
+    ["收为侍从", "金币 −8，披甲骑士 +1，王室认可 +2", { gold: -8, knights: 1, legitimacy: 2 }, "年轻人被编入领主侍从队，并保留了家族旧徽记。"],
+    ["给钱送去修道院", "金币 −12，民心 +2", { gold: -12, support: 2 }, "他带着十二枚金币前往修道院，族谱由奥斯温封存。"],
+    ["暂时留在外院观察", "威望 +2，家臣不满 +2", { renown: 2, grievanceAll: 2 }, "年轻人被安排住进外院，现有家臣拒绝为他提供席位和随从。"] ] },
+  { id: "hostage_offer", kicker: "边境上的人质", title: "邻家骑士愿把长子留在渡鸦堡，换取停战和粮食", portrait: "assets/renard.webp", body: "接受后，双方可暂时停战；若对方毁约，这个孩子将由渡鸦堡处置。", options: [
+    ["收下人质，送足粮食", "粮食 −16，最低守军 +5，王室认可 −2", { grain: -16, guardWeak: 5, legitimacy: -2 }, "十六袋粮食送往边境，骑士的长子被安置在北塔。"],
+    ["只签停战，不收人", "粮食 −8，民心 +4，稳定 +2", { grain: -8, support: 4, stabilityAll: 2 }, "双方签下停战书，孩子随父亲的使者返回边境。"],
+    ["拒绝交易", "军心 +3，威望 +2", { morale: 3, renown: 2 }, "使者带孩子离开，边境守军随即恢复战备。"] ] },
   { id: "border_beacon", kicker: "熄灭的烽火", title: "北边三座烽火台同时没有点灯", portrait: "assets/renard.webp", body: "是守夜人偷懒，还是有人故意让边境失明？雷纳德要求立刻换防。", options: [
-    ["彻查并换防", "金币 −10，最低守军 +8，军心 +3", { gold: -10, guardWeak: 8, morale: 3 }, "新守夜人整夜没有合眼。"],
-    ["加倍赏金", "金币 −14，稳定 +3", { gold: -14, stabilityAll: 3 }, "烽火重新亮起，原因却没有查清。"],
-    ["公开鞭打失职者", "军心 +5，民心 −5", { morale: 5, support: -5 }, "鞭声比烽火传得更远。"] ] },
-  { id: "royal_inspector", kicker: "王城来的眼睛", title: "一名王室巡察官要逐页查看你的税册和兵册", portrait: "assets/ysabel.webp", body: "配合会给王城留下好印象，也会暴露你真正拥有多少人和粮。", options: [
-    ["打开所有账册", "正统 +9，金币 −8", { legitimacy: 9, gold: -8 }, "巡察官带着整齐的副本离开。"],
-    ["准备一套更体面的账", "金币 −13，威望 +3", { gold: -13, renown: 3 }, "伊莎贝尔让每个数字都恰好能解释。"],
-    ["以边境战事为由拒绝", "正统 −8，军心 +4", { legitimacy: -8, morale: 4 }, "王室印章在门外等了一整天。"] ] },
+    ["彻查并换防", "金币 −10，最低守军 +8，军心 +3", { gold: -10, guardWeak: 8, morale: 3 }, "三名守夜人被撤换，新守军当晚接管了烽火台。"],
+    ["加倍守夜赏金", "金币 −14，稳定 +3", { gold: -14, stabilityAll: 3 }, "赏金翻倍后，三座烽火台重新点灯，失火原因仍未查清。"],
+    ["公开鞭打失职者", "军心 +5，民心 −5", { morale: 5, support: -5 }, "三名守夜人在城门前受刑，他们的家属随后离开了附近村庄。"] ] },
+  { id: "royal_inspector", kicker: "王城来的眼睛", title: "一名王室巡察官要逐页查看你的税册和兵册", portrait: "assets/ysabel.webp", body: "配合检查可提高王室认可，但巡察官也会带走你的实际兵力、人口和存粮数字。", options: [
+    ["打开所有账册", "王室认可 +9，金币 −8", { legitimacy: 9, gold: -8 }, "巡察官查阅税册和兵册三天，带走了盖印副本。"],
+    ["准备一套体面账册", "金币 −13，威望 +3", { gold: -13, renown: 3 }, "伊莎贝尔重做了缺页和涂改处，巡察官没有发现无法解释的数字。"],
+    ["以边境战事为由拒绝", "王室认可 −8，军心 +4", { legitimacy: -8, morale: 4 }, "守军没有打开城门，巡察官当晚写信向王城报告。"] ] },
   { id: "old_soldiers", kicker: "父亲留下的旧兵", title: "十二名老兵来讨当年远征欠下的军饷", portrait: "assets/renard.webp", body: "他们有人少了手指，有人带着父亲的剑，却没有一人带着欠条。", options: [
-    ["连本带息偿还", "金币 −22，军心 +9，威望 +3", { gold: -22, morale: 9, renown: 3 }, "老兵在大厅里第一次称你为真正的领主。"],
-    ["用土地工役抵账", "金币 −8，长矛兵 +5，稳定 −2", { gold: -8, levy: 5, stabilityAll: -2 }, "老兵重新列队，但这次旗帜属于你。"],
-    ["没有凭证就没有欠款", "金币不变，军心 −9，正统 +2", { morale: -9, legitimacy: 2 }, "他们没有争辩，只是把旧剑带走了。"] ] },
+    ["连本带息偿还", "金币 −22，军心 +9，威望 +3", { gold: -22, morale: 9, renown: 3 }, "十二名老兵领到欠饷和利息，雷纳德把收据交给了军需官。"],
+    ["用土地和守军职位抵债", "金币 −8，长矛兵 +5，稳定 −2", { gold: -8, levy: 5, stabilityAll: -2 }, "五名老兵接受土地和守军职位，随后加入渡鸦堡守军。"],
+    ["没有凭证就没有欠款", "金币不变，军心 −9，王室认可 +2", { morale: -9, legitimacy: 2 }, "他们没有争辩，只是把旧剑带走了。"] ] },
   { id: "blacksmith_guild", kicker: "铁匠行会停锤", title: "铁匠拒绝继续按旧价给军队打箭头和马蹄", portrait: "assets/renard.webp", body: "矿石涨价是真的，铁匠想借战争抬价也是真的。军队等不了太久。", options: [
-    ["接受新价", "金币 −17，弓箭手 +4，军心 +3", { gold: -17, archers: 4, morale: 3 }, "铁砧重新响了整夜。"],
-    ["给行会一处官营炉", "金币 −23，最低守军 +7，稳定 +2", { gold: -23, guardWeak: 7, stabilityAll: 2 }, "新炉火成了城里最亮的东西。"],
-    ["征用铁料", "无需花费；军心 +5，民心 −8，最低稳定 −2", { morale: 5, support: -8, stabilityWeak: -2 }, "士兵搬走铁料时，所有铁匠都停下了手。"] ] }
+    ["接受新价", "金币 −17，弓箭手 +4，军心 +3", { gold: -17, archers: 4, morale: 3 }, "行会按新价恢复开工，四名新弓手领到了箭头和护具。"],
+    ["出钱为铁匠建一座新炉", "金币 −23，最低守军 +7，稳定 +2", { gold: -23, guardWeak: 7, stabilityAll: 2 }, "新炉在城堡东侧开火，边境守军优先领取了新铁器。"],
+    ["强行拿走铁料", "无需花费；军心 +5，民心 −8，最低稳定 −2", { morale: 5, support: -8, stabilityWeak: -2 }, "士兵搬走行会库存，铁匠停工并关闭了两间作坊。"] ] }
 ];
 
 const NPC_ARCS = [
-  { id: "oswin_old_debt", officerId: "oswin", minTurn: 2, title: "奥斯温把父亲的另一册旧账放到你面前", body: "册子里没有金币，只有每户村民在饥荒年被多拿走的麦袋数。", options: [["逐户退还", "粮食 −14；奥斯温忠诚 +8，民心 +6", { grain: -14, support: 6, loyalty: 8 }, "旧债第一次被倒着清算。"], ["把旧账封存", "正统 +2；奥斯温怨气 +8", { legitimacy: 2, grievance: 8 }, "账册被锁进最里面的柜子。"], ["只退还仍有凭据的人", "粮食 −6；奥斯温忠诚 +2", { grain: -6, loyalty: 2 }, "奥斯温接受了折中，却没有称赞它。"]] },
-  { id: "renard_veterans", officerId: "renard", minTurn: 3, title: "雷纳德要求把最好的田留给阵亡者家属", body: "他说军队必须知道，倒下以后家里不会立刻失去一切。", options: [["设立军户田", "金币 −10，民心 +4；雷纳德忠诚 +8", { gold: -10, support: 4, loyalty: 8 }, "第一块军户田写下了阵亡者的名字。"], ["只发一次抚恤", "金币 −7；雷纳德忠诚 +2", { gold: -7, loyalty: 2 }, "钱袋发完，制度没有留下。"], ["土地属于活着的人", "正统 +2；雷纳德忠诚 −8、怨气 +10", { legitimacy: 2, loyalty: -8, grievance: 10 }, "雷纳德把名单收回了甲衣里。"]] },
-  { id: "ysabel_hidden_ledger", officerId: "ysabel", minTurn: 4, title: "伊莎贝尔发现税吏藏着一本只给自己看的账", body: "顺着这本账查下去，会牵出一批能交钱、也能办事的地方豪强。", options: [["一查到底", "金币 +8，民心 +5；伊莎贝尔忠诚 +7", { gold: 8, support: 5, loyalty: 7 }, "被藏起来的税重新回到了公账。"], ["罚钱但留任", "金币 +17；伊莎贝尔怨气 +6", { gold: 17, grievance: 6 }, "税吏交了钱，仍坐在原来的椅子上。"], ["把名单收为己用", "金币 +12，正统 −4；伊莎贝尔功勋 +3", { gold: 12, legitimacy: -4, merit: 3 }, "那本暗账换了一个上锁的抽屉。"]] },
-  { id: "edmund_bastard_seal", officerId: "edmund", minTurn: 5, title: "埃德蒙想在自己的军令上使用渡鸦封蜡", body: "这会让命令更快，也会让所有人看见他与领主共享家族标记。", options: [["给他一枚副印", "埃德蒙忠诚 +9、功勋 +4；正统 −3", { loyalty: 9, merit: 4, legitimacy: -3 }, "第二枚渡鸦印第一次落在军令上。"], ["只许战时使用", "埃德蒙忠诚 +3；威望 +1", { loyalty: 3, renown: 1 }, "副印被锁在军械库，只在出征时取出。"], ["拒绝", "正统 +4；埃德蒙怨气 +10", { legitimacy: 4, grievance: 10 }, "他把没有封蜡的军令折得很整齐。"]] },
-  { id: "oswin_village_rolls", officerId: "oswin", minTurn: 8, title: "奥斯温要把每户人口和存粮都登记进新册", body: "这能让救济更准确，也能让征税和征兵更准确。村民因此既期待又害怕。", options: [["只登记口粮与灾户", "民心 +5；奥斯温功勋 +5", { support: 5, merit: 5 }, "新册先记下谁可能熬不过冬天。"], ["人口、粮食、牲畜全登记", "金币 +9，正统 +3；民心 −4", { gold: 9, legitimacy: 3, support: -4 }, "渡鸦堡第一次知道自己究竟统治着多少。"], ["沿用旧册", "不花资源；奥斯温忠诚 −5", { loyalty: -5 }, "旧册又被摆回长桌。"]] },
-  { id: "renard_mercy", officerId: "renard", minTurn: 9, title: "雷纳德抓到一个临阵逃跑的年轻士兵", body: "按军法该处死。但这人是阵亡老兵唯一的儿子。", options: [["罚入最前列，不处死", "军心 +2；雷纳德忠诚 +5，民心 +3", { morale: 2, loyalty: 5, support: 3 }, "年轻人活了下来，也再没有离开过盾墙。"], ["军法不能开口子", "军心 +6，民心 −5；雷纳德怨气 +4", { morale: 6, support: -5, grievance: 4 }, "军法得以维持，雷纳德亲自埋了那名士兵。"], ["交给雷纳德决定", "雷纳德功勋 +4、忠诚 +3", { merit: 4, loyalty: 3 }, "他沉默很久，最后选择了鞭刑。"]] },
-  { id: "ysabel_market_charter", officerId: "ysabel", minTurn: 10, title: "伊莎贝尔提出让集市自己选出四名司秤人", body: "商人会更愿意来，也会形成一股不完全听命于城堡的力量。", options: [["颁发集市特许", "金币 +12，民心 +5，正统 −2；伊莎贝尔忠诚 +6", { gold: 12, support: 5, legitimacy: -2, loyalty: 6 }, "四枚铜秤砣成了集市自治的标记。"], ["司秤人由城堡任命", "金币 +8，正统 +3", { gold: 8, legitimacy: 3 }, "秤仍归商人使用，名字由城堡决定。"], ["维持税吏监管", "金币 +4；伊莎贝尔怨气 +7", { gold: 4, grievance: 7 }, "税吏继续坐在每一杆秤旁边。"]] },
-  { id: "edmund_whispers", officerId: "edmund", minTurn: 11, title: "大厅里开始流传埃德蒙才更像老领主的儿子", body: "谣言不是他放出的，但他也没有制止。现在所有人都在等你先开口。", options: [["公开称他为兄弟", "正统 −6；埃德蒙忠诚 +13、怨气 −10", { legitimacy: -6, loyalty: 13, grievance: -10 }, "你给了他族谱里没有的位置。"], ["让他当众宣誓", "正统 +5；埃德蒙忠诚 −4", { legitimacy: 5, loyalty: -4 }, "誓言很清楚，沉默也很清楚。"], ["查出传播者", "军心 +3；埃德蒙怨气 +6，民心 −3", { morale: 3, grievance: 6, support: -3 }, "三名侍从被赶出城堡，谣言却没有死。"]] },
-  { id: "aveline_river_envoy", officerId: "aveline", minTurn: 12, side: "any", title: "艾芙琳派来一名不带武器的渡船主人", body: "他只问一件事：如果河望有一天降旗，渡船和水闸是否仍由河地人管理？", options: [["答应保留河地旧例", "正统 −2，民心 +4；艾芙琳忠诚倾向 +8", { legitimacy: -2, support: 4, loyalty: 8 }, "你的答复沿河传得比军令更快。"], ["一切法令必须统一", "正统 +5；艾芙琳怨气 +6", { legitimacy: 5, grievance: 6 }, "渡船主人听完便离开了。"], ["先索要通行税", "金币 +9；艾芙琳忠诚倾向 −4", { gold: 9, loyalty: -4 }, "谈判先从九枚金币开始。"]] },
-  { id: "bran_blood_price", officerId: "bran", minTurn: 13, side: "any", title: "布兰送来三把断剑，要求交换战俘", body: "狼牙氏族用血债计算俘虏。按他们的规矩办，会让边境理解你的强硬，也会让俘虏家属憎恨你。", options: [["等额交换", "长矛兵 +4，民心 +2；布兰忠诚倾向 +6", { levy: 4, support: 2, loyalty: 6 }, "两队俘虏在河滩上擦肩而过。"], ["无条件放回伤员", "民心 +6，威望 −2；布兰怨气 −4", { support: 6, renown: -2, grievance: -4 }, "狼牙人没有道谢，却记住了这件事。"], ["拒绝并示众俘虏", "军心 +5，民心 −6；布兰怨气 +8", { morale: 5, support: -6, grievance: 8 }, "三把断剑被钉在城门上。"]] },
-  { id: "aveline_shared_table", officerId: "aveline", minTurn: 16, side: "player", title: "艾芙琳拒绝在长桌末尾落座", body: "她可以做你的家臣，但不会假装自己从未统治过河地。", options: [["给她河地席位", "艾芙琳忠诚 +11、功勋 +3；正统 −2", { loyalty: 11, merit: 3, legitimacy: -2 }, "长桌多了一把刻着波纹的椅子。"], ["所有家臣按功勋排位", "威望 +3；艾芙琳忠诚 +3", { renown: 3, loyalty: 3 }, "她接受了规则，并开始积攒功勋。"], ["这里没有河望伯爵", "正统 +4；艾芙琳忠诚 −9、怨气 +12", { legitimacy: 4, loyalty: -9, grievance: 12 }, "她坐下了，却没有碰酒杯。"]] },
-  { id: "bran_wolf_oath", officerId: "bran", minTurn: 17, side: "player", title: "布兰要带狼牙旧部在城外重新立誓", body: "他愿让渡鸦旗挂在最高处，但要保留氏族围火宣誓的方式。", options: [["亲自去围火旁受誓", "粮食 −6；布兰忠诚 +12，军心 +5", { grain: -6, loyalty: 12, morale: 5 }, "渡鸦与狼牙的名字在同一圈火边被喊出。"], ["让雷纳德代你监誓", "布兰忠诚 +4，威望 +2", { loyalty: 4, renown: 2 }, "两名战士用各自的方式确认了同一份忠诚。"], ["所有人必须在大厅跪下", "正统 +5；布兰忠诚 −10、怨气 +13", { legitimacy: 5, loyalty: -10, grievance: 13 }, "布兰跪下得很慢。"]] }
+  { id: "oswin_old_debt", officerId: "oswin", minTurn: 2, title: "奥斯温找到一册父亲留下的欠粮账", body: "“哪一户多收了几袋，都在这里。”奥斯温把账册推过来，“已经过去六年了。还不还，由您决定。”", options: [["逐户退还", "粮食 −14；奥斯温忠诚 +8，民心 +6", { grain: -14, support: 6, loyalty: 8 }, "奥斯温带着书记逐户核对，十四袋麦粮被退回原主。"], ["把旧账封存", "王室认可 +2；奥斯温不满 +8", { legitimacy: 2, grievance: 8 }, "账册被锁进旧领主的柜子。奥斯温此后没有再提这件事。"], ["只退还仍有凭据的人", "粮食 −6；奥斯温忠诚 +2", { grain: -6, loyalty: 2 }, "只有五户拿出了旧凭据，其余人的名字仍留在账上。"]] },
+  { id: "renard_veterans", officerId: "renard", minTurn: 3, title: "雷纳德为阵亡者家属申请田地", body: "“死人不能领军饷，家里人总得活。”雷纳德把十二个名字放在桌上，“士兵都在看您怎么处理。”", options: [["给家属免税田", "金币 −10，民心 +4；雷纳德忠诚 +8", { gold: -10, support: 4, loyalty: 8 }, "十二户阵亡者家属各分到一块免税田。"], ["只发一次补偿金", "金币 −7；雷纳德忠诚 +2", { gold: -7, loyalty: 2 }, "每户领到一次补偿金，此后不再享受额外田产。"], ["拒绝给予补偿", "王室认可 +2；雷纳德忠诚 −8、不满 +10", { legitimacy: 2, loyalty: -8, grievance: 10 }, "雷纳德收回名单，之后的会议没有再发言。"]] },
+  { id: "ysabel_hidden_ledger", officerId: "ysabel", minTurn: 4, title: "伊莎贝尔查到税吏的秘密账本", body: "“少掉的税不是一个人拿的。”伊莎贝尔指着账上的名字，“继续查，至少能追回八枚金币，但会得罪六个村镇里的大户。”", options: [["一查到底", "金币 +8，民心 +5；伊莎贝尔忠诚 +7", { gold: 8, support: 5, loyalty: 7 }, "六名涉案税吏被撤换，追回的八枚金币记入公账。"], ["罚钱但留任", "金币 +17；伊莎贝尔不满 +6", { gold: 17, grievance: 6 }, "税吏和地方大户交出罚金，原有征税人员继续留任。"], ["把名单收为己用", "金币 +12，王室认可 −4；伊莎贝尔功劳 +3", { gold: 12, legitimacy: -4, merit: 3 }, "暗账和名单被收入领主私库，伊莎贝尔保留了一份副本。"]] },
+  { id: "edmund_bastard_seal", officerId: "edmund", minTurn: 5, title: "埃德蒙要求使用渡鸦家的军令印章", body: "“我的军令每到一个村庄，都要重新核验身份。”埃德蒙说，“给我一枚备用印章，命令能早到半天。至于别人怎么想，不是我的问题。”", options: [["给他一枚备用印章", "埃德蒙忠诚 +9、功劳 +4；王室认可 −3", { loyalty: 9, merit: 4, legitimacy: -3 }, "埃德蒙接过备用印章，当场在一封军令上盖了印。"], ["只许战时使用", "埃德蒙忠诚 +3；威望 +1", { loyalty: 3, renown: 1 }, "备用印章被锁进军械库，只有出征时才能领用。"], ["拒绝给他备用印章", "王室认可 +4；埃德蒙不满 +10", { legitimacy: 4, grievance: 10 }, "埃德蒙收回没有盖印的军令，之后没有再提这件事。"]] },
+  { id: "oswin_village_rolls", officerId: "oswin", minTurn: 8, title: "奥斯温准备重新登记各村人口", body: "“旧册漏了三十七户，去年逃荒回来的人也没记。”奥斯温摊开登记册，“先记灾户，救济不会送错；全都记清，征税和征兵也不会送错。”", options: [["只登记需要救济的人", "民心 +5；奥斯温功劳 +5", { support: 5, merit: 5 }, "书记先登记缺粮、患病和失去劳力的家庭，救济名单重新排定。"], ["登记人口、粮食和牲畜", "金币 +9，王室认可 +3；民心 −4", { gold: 9, legitimacy: 3, support: -4 }, "书记逐户清点人口、存粮和牲畜，新增税户与可征兵人数被写入新册。"], ["继续使用旧记录", "不花资源；奥斯温忠诚 −5", { loyalty: -5 }, "旧记录继续使用，三十七户没有被纳入本季救济和征税安排。"]] },
+  { id: "renard_mercy", officerId: "renard", minTurn: 9, title: "雷纳德抓到一名临阵逃跑的士兵", body: "“按军法，该死。”雷纳德把剑放在桌上，“但他父亲死在上一场仗里，家里只剩这一个儿子。您来定。”", options: [["罚他去最前排，不处死", "军心 +2；雷纳德忠诚 +5，民心 +3", { morale: 2, loyalty: 5, support: 3 }, "年轻士兵被调入前列，并在接下来的两次训练中按时归队。"], ["按军法处死", "军心 +6，民心 −5；雷纳德不满 +4", { morale: 6, support: -5, grievance: 4 }, "士兵按军法被处死，雷纳德亲自主持了军营里的宣判。"], ["交给雷纳德决定", "雷纳德功劳 +4、忠诚 +3", { merit: 4, loyalty: 3 }, "雷纳德判处鞭刑，并把年轻士兵留在自己队中。"]] },
+  { id: "ysabel_market_charter", officerId: "ysabel", minTurn: 10, title: "伊莎贝尔提议让商人自己选人管理集市用秤", body: "“让商人选四个人负责检查秤，每季度大约能多收十二金币。”伊莎贝尔说，“城堡只负责定期检查。”", options: [["让商人自己选管理人员", "金币 +12，民心 +5，王室认可 −2；伊莎贝尔忠诚 +6", { gold: 12, support: 5, legitimacy: -2, loyalty: 6 }, "商人选出四名管理人员，城堡为铜秤砣加盖了查验印记。"], ["由城堡指定管理人员", "金币 +8，王室认可 +3", { gold: 8, legitimacy: 3 }, "四名管理人员由城堡任命，商人仍可推举候选者。"], ["继续让税吏直接管理", "金币 +4；伊莎贝尔不满 +7", { gold: 4, grievance: 7 }, "税吏继续监管每一杆秤，外地商队数量没有增加。"]] },
+  { id: "edmund_whispers", officerId: "edmund", minTurn: 11, title: "大厅里有人说埃德蒙更像老领主的儿子", body: "“不是我让他们说的。”埃德蒙先开了口，“您若要我堵住每个人的嘴，也请给我一个名分，免得他们明天再换一种说法。”", options: [["公开称他为兄弟", "王室认可 −6；埃德蒙忠诚 +13、不满 −10", { legitimacy: -6, loyalty: 13, grievance: -10 }, "你在家臣面前称埃德蒙为兄弟，并让书记把这句话写入家族记录。"], ["让他当众宣誓", "王室认可 +5；埃德蒙忠诚 −4", { legitimacy: 5, loyalty: -4 }, "埃德蒙完成效忠宣誓，随后回到自己的席位，没有再开口。"], ["查出传播者", "军心 +3；埃德蒙不满 +6，民心 −3", { morale: 3, grievance: 6, support: -3 }, "三名传播谣言的侍从被逐出城堡，关于埃德蒙身世的议论仍在村镇流传。"]] },
+  { id: "aveline_river_envoy", officerId: "aveline", minTurn: 12, side: "any", title: "艾芙琳派来一名不带武器的渡船主人", body: "渡船主人带来艾芙琳的口信：“若河望有一天降旗，渡船、水闸和河税，是否仍由河地人管理？”", options: [["答应保留河地旧规矩", "王室认可 −2，民心 +4；若她以后加入，初始忠诚 +8", { legitimacy: -2, support: 4, loyalty: 8 }, "你的答复被抄成六份，分别送往河望的渡口和集市。"], ["所有领地使用同一套命令", "王室认可 +5；艾芙琳不满 +6", { legitimacy: 5, grievance: 6 }, "渡船主人听完答复，当日便返回河望。"], ["先收取通行税", "金币 +9；若她以后加入，初始忠诚 −4", { gold: 9, loyalty: -4 }, "使者交出九枚金币，关于河地管理方式的谈判没有继续。"]] },
+  { id: "bran_blood_price", officerId: "bran", minTurn: 13, side: "any", title: "布兰送来三把断剑，要求交换战俘", body: "信使把三把断剑扔在地上：“三批俘虏换三批俘虏。布兰说，少一个人，就少换一队。”", options: [["等额交换", "长矛兵 +4，民心 +2；若他以后加入，初始忠诚 +6", { levy: 4, support: 2, loyalty: 6 }, "两队俘虏在河滩完成交换，四名长矛兵回到渡鸦军中。"], ["无条件放回伤员", "民心 +6，威望 −2；布兰不满 −4", { support: 6, renown: -2, grievance: -4 }, "狼牙人带走伤员，没有留下谢礼。"], ["拒绝并示众俘虏", "军心 +5，民心 −6；布兰不满 +8", { morale: 5, support: -6, grievance: 8 }, "三把断剑被钉上城门，狼牙氏族随即停止了谈判。"]] },
+  { id: "aveline_shared_table", officerId: "aveline", minTurn: 16, side: "player", title: "艾芙琳要求一个正式席位", body: "“如果您让我坐在最后，河地人就会认为我已经失去权力。”艾芙琳站在座位旁，“我要一个正式席位。”", options: [["给她河地代表席位", "艾芙琳忠诚 +11、功劳 +3；王室认可 −2", { loyalty: 11, merit: 3, legitimacy: -2 }, "长桌增设河地席位，椅背刻上了河望家的波纹。"], ["所有家臣按功劳排位", "威望 +3；艾芙琳忠诚 +3", { renown: 3, loyalty: 3 }, "家臣席位改按功劳排列，艾芙琳接受规则并坐在第三席。"], ["拒绝保留她的伯爵席位", "王室认可 +4；艾芙琳忠诚 −9、不满 +12", { legitimacy: 4, loyalty: -9, grievance: 12 }, "她坐下了，却没有碰酒杯。"]] },
+  { id: "bran_wolf_oath", officerId: "bran", minTurn: 17, side: "player", title: "布兰要带狼牙旧部在城外重新宣誓", body: "“狼牙人在火边发誓，不在屋里。”布兰说，“渡鸦旗可以挂最高。你来不来，给我一句话。”", options: [["亲自去接受狼牙人的宣誓", "粮食 −6；布兰忠诚 +12，军心 +5", { grain: -6, loyalty: 12, morale: 5 }, "你在城外围火旁接受狼牙旧部宣誓，渡鸦旗挂在氏族旗上方。"], ["派雷纳德代你前往", "布兰忠诚 +4，威望 +2", { loyalty: 4, renown: 2 }, "雷纳德代表渡鸦家参加宣誓，名单当晚送回城堡。"], ["要求他们进大厅跪下宣誓", "王室认可 +5；布兰忠诚 −10、不满 +13", { legitimacy: 5, loyalty: -10, grievance: 13 }, "布兰跪下得很慢。"]] }
 ];
 
 const CREST_PATHS = {
@@ -582,59 +584,59 @@ function upgradeBuilding(id, type) {
 }
 
 const ACTIONS = [
-  { id: "inspect", icon: "路", name: "巡视村庄", desc: "亲自听村民说话，修补一处最不稳定的统治裂缝。", effects: ["民心 +6", "最低稳定 +8"], max: 1,
+  { id: "inspect", icon: "路", name: "巡视村庄", desc: "巡视稳定最低的领地，处理积压纠纷。提高民心和该地稳定度。", effects: ["民心 +6", "最低稳定 +8"], max: 1,
     run(s) {
       s.support = clamp(s.support + 6 + (s.oath === "oath" ? 2 : 0));
       const ids = ownTerritoryIds(s).sort((a, b) => s.territories[a].stability - s.territories[b].stability);
       if (ids[0]) s.territories[ids[0]].stability = clamp(s.territories[ids[0]].stability + 8);
       s.style.oath++;
-      return "你走过泥泞的村道，亲手裁决了三桩积压的纠纷。";
+      return "你巡视了最不稳定的村庄，并当场处理了三起土地纠纷。";
     } },
-  { id: "tax", icon: "税", name: "提前征税", desc: "把未来的收成先变成军费。钱来得快，怨气也来得快。", effects: ["金币增加", "民心 −6", "稳定 −3"], max: 1,
+  { id: "tax", icon: "税", name: "提前征税", desc: "提前征收下一季赋税。立即获得金币，但降低民心和全部领地稳定度。", effects: ["金币增加", "民心 −6", "稳定 −3"], max: 1,
     run(s) {
       const gain = Math.round((14 + ownTerritoryIds(s).length * 6) * (s.oath === "wealth" ? 1.18 : 1));
       s.gold += gain;
       s.support = clamp(s.support - 6);
       ownTerritoryIds(s).forEach(id => s.territories[id].stability = clamp(s.territories[id].stability - 3));
       s.style.wealth++;
-      return `税吏带回${gain}金币。几个村庄的门在他们经过时关得很紧。`;
+      return `税吏带回${gain}金币。两个村庄请求把缴税期限延后。`;
     } },
-  { id: "recruit", icon: "矛", name: "征召长矛兵", desc: "从田地里抽走壮丁，补充承担盾墙与伤亡的主力。", effects: ["金币 −10", "粮食 −6", "长矛兵 +8～12"], max: 1,
+  { id: "recruit", icon: "矛", name: "征召长矛兵", desc: "征召8至12名农民组成长矛队。消耗金币和粮食，并略微降低民心。", effects: ["金币 −10", "粮食 −6", "长矛兵 +8～12"], max: 1,
     canRun: s => s.gold >= UNIT_DEFS.levy.gold && s.grain >= UNIT_DEFS.levy.grain,
     run(s) {
       const gain = recruitAmount(s, "levy");
       s.gold -= UNIT_DEFS.levy.gold; s.grain -= UNIT_DEFS.levy.grain; addUnits(s, "levy", gain); s.support = clamp(s.support - 2); s.style.iron++;
-      return `${gain}名农夫放下锄头拿起长矛。秋收时，田里会少掉同样多的手。`;
+      return `${gain}名农民被编入长矛队，开始接受基础训练。`;
     } },
-  { id: "train", icon: "剑", name: "整训军队", desc: "让征召兵学会在冲锋面前保持队列。训练会逐季衰减。", effects: ["金币 −7", "粮食 −4", "训练 +8"], max: 1,
+  { id: "train", icon: "剑", name: "整训军队", desc: "组织队列和武器训练，提高训练度与军心。训练度会逐季衰减。", effects: ["金币 −7", "粮食 −4", "训练 +8"], max: 1,
     canRun: s => s.gold >= 7 && s.grain >= 4 && armyTotal(s) >= 10,
     run(s) {
       s.gold -= 7; s.grain -= 4; s.training = clamp(s.training + 8); s.morale = clamp(s.morale + 4); s.style.iron++;
-      return "雷纳德让队列在雨里反复转向，直到没有人再分不清自己的位置。";
+      return "雷纳德组织了三天队列训练，军队训练度和军心提高。";
     } },
-  { id: "feast", icon: "杯", name: "设宴封赏", desc: "给功臣席位，给村民面包。能压住一些正在增长的野心。", effects: ["金币 −13", "粮食 −8", "家臣忠诚 +4"], max: 1,
+  { id: "feast", icon: "杯", name: "设宴封赏", desc: "设宴并公开封赏功臣。提高民心、威望和全体家臣忠诚。", effects: ["金币 −13", "粮食 −8", "家臣忠诚 +4"], max: 1,
     canRun: s => s.gold >= 13 && s.grain >= 8,
     run(s) {
       s.gold -= 13; s.grain -= 8; s.support = clamp(s.support + 4); s.renown = clamp(s.renown + 2);
       ownedOfficers(s).filter(o => o.id !== "player").forEach(o => { o.loyalty = clamp(o.loyalty + 4); o.grievance = clamp(o.grievance - 3); });
       s.style.oath++;
-      return "长桌上没有银器，但每个立过功的人都听见了自己的名字。";
+      return "立过功的家臣依次受到封赏，城堡同时向村民发放面包和麦酒。";
     } },
-  { id: "fortify", icon: "盾", name: "加固边防", desc: "把木料和守军送往最薄弱的前线领地。", effects: ["金币 −8", "最低守军 +7", "稳定 +3"], max: 1,
+  { id: "fortify", icon: "盾", name: "加固边防", desc: "加固守军最少的领地，提高当地守军和稳定度。", effects: ["金币 −8", "最低守军 +7", "稳定 +3"], max: 1,
     canRun: s => s.gold >= 8,
     run(s) {
       s.gold -= 8;
       const ids = ownTerritoryIds(s).sort((a, b) => s.territories[a].guard - s.territories[b].guard);
       if (ids[0]) { s.territories[ids[0]].guard += 7; s.territories[ids[0]].stability = clamp(s.territories[ids[0]].stability + 3); }
       s.style.iron++;
-      return `${TERRITORY_DEFS[ids[0]].name}的壕沟被重新挖深，烽火台也换上了干柴。`;
+      return `${TERRITORY_DEFS[ids[0]].name}重新开挖壕沟，并补充了烽火台的燃料。`;
     } },
-  { id: "rest", icon: "营", name: "休整军队", desc: "停止扩张一个季度，让伤兵归队，也让村庄从征发中喘口气。", effects: ["金币 −4", "粮食 −5", "战争疲劳 −18"], max: 1,
+  { id: "rest", icon: "营", name: "休整军队", desc: "暂停远征并休整军队。降低战争疲劳，使受伤家臣更快恢复。", effects: ["金币 −4", "粮食 −5", "战争疲劳 −18"], max: 1,
     canRun: s => s.gold >= 4 && s.grain >= 5 && s.warWeariness > 0,
     run(s) {
       s.gold -= 4; s.grain -= 5; s.warWeariness = clamp(s.warWeariness - 18); s.morale = clamp(s.morale + 3);
       s.officers.forEach(o => { if (o.injured > 0) o.injured--; });
-      return "军旗留在营地，伤员得到照料。人们第一次没有听见下一场远征的集合号。";
+      return "军队停止远征，伤兵得到治疗，本季度战争疲劳下降。";
     } }
 ];
 
@@ -687,7 +689,7 @@ function recruitUnit(type) {
   addUnits(S, type, amount);
   if (type === "levy") S.support = clamp(S.support - 2);
   S.style.iron++;
-  S.lastAction = { name: `征募${unit.name}`, text: `${amount}名${unit.name}加入军队。不同地形会改变他们的实际战力。` };
+  S.lastAction = { name: `征募${unit.name}`, text: `${amount}名${unit.name}加入军队。地形会改变这支部队的预计战力。` };
   log(S, "info", S.lastAction.text);
   playSound("drum");
   saveGame(); renderAll();
@@ -709,7 +711,7 @@ function setTerritoryPolicy(id, policyId) {
   if (policyId === "relief") S.style.oath++;
   if (policyId === "extract") S.style.wealth++;
   if (policyId === "garrison") S.style.iron++;
-  S.lastAction = { name: `${TERRITORY_DEFS[id].name}改行${policy.name}`, text: `${policy.desc}该政策将持续生效，直到再次调整。` };
+  S.lastAction = { name: `${TERRITORY_DEFS[id].name}调整为${policy.name}`, text: `${policy.desc}该政策会持续生效，直到再次调整。` };
   log(S, "info", S.lastAction.text);
   playSound("click");
   saveGame(); renderAll();
@@ -810,10 +812,10 @@ function handleOfficerPolitics(s) {
         s.territories[fiefId].fiefHolder = null;
         s.territories[fiefId].stability = clamp(s.territories[fiefId].stability - 10);
         o.fief = null;
-        log(s, "warn", `${TERRITORY_DEFS[fiefId].name}失去受封领主，重新归于直辖，地方秩序随之动荡。`);
+        log(s, "warn", `${TERRITORY_DEFS[fiefId].name}失去管理者，重新改由你管理，地方稳定下降。`);
       }
       o.side = "gone";
-      log(s, "bad", `${o.name}带着${gone}名追随者离开渡鸦堡。功劳没有换来土地，他不再等了。`);
+      log(s, "bad", `${o.name}因长期没有得到领地管理权，带着${gone}名追随者离开渡鸦堡。`);
     }
   });
 }
@@ -932,6 +934,28 @@ function battleRiskClass(ratio) {
   return "uncertain";
 }
 
+function battlePowerText(ratio) {
+  const percent = Math.round(Math.abs(ratio - 1) * 100);
+  if (percent === 0) return "我军预计与敌军战力相当。";
+  return ratio >= 1 ? `我军预计比敌军强${percent}%。` : `我军预计比敌军弱${percent}%。`;
+}
+
+function battleFatigueText(fatigue) {
+  const percent = Math.round((1 - fatigue) * 100);
+  return percent > 0 ? `战争疲劳使战力降低${percent}%。` : "";
+}
+
+function battleMoraleText(effectiveMorale, morale) {
+  return effectiveMorale !== morale ? `领主出战时，本场军心最低按${Math.round(effectiveMorale)}点计算。` : "";
+}
+
+function battleMomentumText(value) {
+  const momentum = Math.round(value);
+  const label = momentum >= 15 ? "我军明显占优" : momentum >= 5 ? "我军略占优势" : momentum <= -15 ? "敌军明显占优" : momentum <= -5 ? "敌军略占优势" : "双方势均力敌";
+  const signed = momentum > 0 ? `+${momentum}` : `${momentum}`;
+  return `当前战况：${label}（${signed}）`;
+}
+
 function startBattle(s, draft, rng = Math.random) {
   if (s.battleSession || s.ap < CAMPAIGN_AP_COST || s.usedActions.campaign || s.campaignCooldown > 0 || !attackableTerritories(s).includes(draft.targetId)) return null;
   const leaders = draft.leaderIds.map(id => officer(s, id)).filter(o => o?.side === "player" && !o.injured).slice(0, 3);
@@ -973,29 +997,29 @@ function stageOptions(s, session) {
   const charm = averageStat(s, ids, "charm");
   const options = [];
   if (session.stage === 0) {
-    options.push({ id: "ridge", name: "抢下有利地形", by: "通用军令", desc: "稳步推进，在接敌前建立阵线。", mult: 1.05, casualty: .9 });
-    if (scheme >= 64) options.push({ id: "scout", name: "从猎户小径绕过去", by: ids.includes("edmund") ? "埃德蒙" : ids.includes("ysabel") ? "伊莎贝尔" : "谋士提议", desc: "以谋略换取先手，降低接敌伤亡。", mult: 1.1 + scheme / 1200, casualty: .7 });
-    if (ids.includes("renard")) options.push({ id: "forced", name: "趁他们还没列阵", by: "雷纳德", desc: "强行军抢先接敌；若继续冒进，守军会逐步看穿你的节奏。", mult: 1.12, casualty: 1.45, pushed: true });
+    options.push({ id: "ridge", name: "抢下有利地形", by: "通用命令", desc: "先占据有利位置，减少开战时的伤亡。", mult: 1.05, casualty: .9 });
+    if (scheme >= 64) options.push({ id: "scout", name: "从猎户小径绕过去", by: ids.includes("edmund") ? "埃德蒙" : ids.includes("ysabel") ? "伊莎贝尔" : "谋士提议", desc: "从小路绕到敌军侧面，减少第一轮伤亡。", mult: 1.1 + scheme / 1200, casualty: .7 });
+    if (ids.includes("renard")) options.push({ id: "forced", name: "立即冲向敌军", by: "雷纳德", desc: "快速冲向敌军。连续选择强攻会明显增加伤亡。", mult: 1.12, casualty: 1.45, pushed: true });
   } else if (session.stage === 1) {
-    options.push({ id: "shield", name: "稳住盾墙", by: "通用军令", desc: "守住阵线，用耐心消耗对方。", mult: 1, casualty: .75 });
-    if ((session.composition?.archers || 0) >= 4) options.push({ id: "volley", name: "让弓手轮射压住阵脚", by: ids.includes("ysabel") ? "伊莎贝尔" : "弓手队长", desc: "以箭矢消耗敌军，森林和河地尤其有效。", mult: 1.08 + (session.composition.archers / Math.max(10, session.troops)) * .55, casualty: .68 });
-    if ((force >= 68 || ids.includes("renard")) && (session.composition?.knights || 0) >= 2) options.push({ id: "charge", name: "让披甲骑士正面冲阵", by: ids.includes("renard") ? "雷纳德" : "阵中骑士", desc: "高风险冲击；平原威力最大，连续强攻时折损会陡升。", mult: 1.1 + force / 2400, casualty: 1.64, pushed: true });
+    options.push({ id: "shield", name: "稳住盾牌队伍", by: "通用命令", desc: "守住防线，尽量减少伤亡。", mult: 1, casualty: .75 });
+    if ((session.composition?.archers || 0) >= 4) options.push({ id: "volley", name: "让弓手轮流射击", by: ids.includes("ysabel") ? "伊莎贝尔" : "弓手队长", desc: "持续射击压制敌军。在森林和河地效果更好。", mult: 1.08 + (session.composition.archers / Math.max(10, session.troops)) * .55, casualty: .68 });
+    if ((force >= 68 || ids.includes("renard")) && (session.composition?.knights || 0) >= 2) options.push({ id: "charge", name: "让披甲骑士正面冲锋", by: ids.includes("renard") ? "雷纳德" : "随军骑士", desc: "平原威力最大，但连续强攻会明显增加伤亡。", mult: 1.1 + force / 2400, casualty: 1.64, pushed: true });
     if (scheme >= 67) options.push({ id: "feint", name: "故意露出左翼", by: ids.includes("edmund") ? "埃德蒙" : "谋士提议", desc: "诱使敌军离开防线，再切断退路。", mult: 1.14 + scheme / 1600, casualty: .88 });
   } else {
-    options.push({ id: "press", name: "把最后的预备队压上去", by: "通用军令", desc: "争取在天黑前结束战斗；守军会重点反击已经疲惫的突击队。", mult: 1.08, casualty: 1.48, pushed: true });
-    options.push({ id: "hold", name: "收紧阵线，等他们先犯错", by: "通用军令", desc: "不追求大胜，优先保住现有优势。", mult: 1.01, casualty: .72 });
-    if (session.momentum > 10 && charm >= 64) options.push({ id: "surrender", name: "让号手劝他们放下武器", by: ids.includes("edmund") ? "埃德蒙" : "阵中使者", desc: "只有占据优势时，劝降才不是示弱。", mult: .96 + charm / 1900, casualty: .38, surrender: true });
-    options.push({ id: "retreat", name: "鸣金撤退", by: ids.includes("ysabel") ? "伊莎贝尔" : "通用军令", desc: "保住剩余人手，本场不夺地。", retreat: true });
+    options.push({ id: "press", name: "派出剩余部队强攻", by: "通用命令", desc: "争取在天黑前结束战斗，但疲惫的部队会承受更多伤亡。", mult: 1.08, casualty: 1.48, pushed: true });
+    options.push({ id: "hold", name: "停止追击，守住优势", by: "通用命令", desc: "不追求大胜，优先减少伤亡。", mult: 1.01, casualty: .72 });
+    if (session.momentum > 10 && charm >= 64) options.push({ id: "surrender", name: "让号手劝他们放下武器", by: ids.includes("edmund") ? "埃德蒙" : "随军使者", desc: "仅在我军占据优势时可能奏效。", mult: .96 + charm / 1900, casualty: .38, surrender: true });
+    options.push({ id: "retreat", name: "下令撤退", by: ids.includes("ysabel") ? "伊莎贝尔" : "通用命令", desc: "保住剩余士兵，本场无法占领目标。", retreat: true });
   }
   return options.slice(0, 4);
 }
 
 function battleNarrative(session, choice, delta, loss, enemyLoss) {
   const target = TERRITORY_DEFS[session.targetId];
-  const stageNames = ["行军接敌", "两军交锋", "胜负将分"];
-  const direction = delta >= 8 ? "攻势明显向前推进" : delta <= -8 ? "阵线被逼得不断后退" : "双方都没能彻底压住对方";
-  const special = choice.surrender ? "号角停下后，敌阵里开始有人放下长矛。" : choice.id === "scout" ? "斥候从林间带回了一条没有设防的小路。" : choice.id === "charge" ? "披甲骑士撞入盾墙的声音盖过了喊杀。" : choice.id === "volley" ? "三轮箭雨越过盾墙，迫使敌军把阵线缩在一起。" : choice.id === "feint" ? "敌军追进缺口时才发现退路已被切断。" : choice.id === "hold" ? "你没有追逐正在后退的旗帜，而是让每个人守住脚下。" : "军旗在泥水与箭雨中继续向前。";
-  return { name: stageNames[session.stage], title: `${choice.by}：${choice.name}`, text: `${special}${direction}。本段折损${loss}人，敌军约损失${enemyLoss}人。` };
+  const stageNames = ["接近敌军", "正面交战", "最后阶段"];
+  const direction = delta >= 8 ? "我军取得优势" : delta <= -8 ? "我军陷入劣势" : "双方仍在僵持";
+  const special = choice.surrender ? "号手发出劝降信号，部分敌军放下武器。" : choice.id === "scout" ? "斥候发现一条未设防的小路。" : choice.id === "charge" ? "披甲骑士正面冲击敌军盾牌队伍。" : choice.id === "volley" ? "弓手完成三轮齐射，敌军开始后退。" : choice.id === "feint" ? "敌军追入缺口后，退路被我军切断。" : choice.id === "hold" ? "我军停止追击并守住现有位置。" : "我军按命令继续推进。";
+  return { name: stageNames[session.stage], title: `${choice.by}：${choice.name}`, text: `${special}${direction}。本阶段我军损失${loss}人，敌军约损失${enemyLoss}人。` };
 }
 
 function applyBattleChoice(s, choiceId, rng = Math.random) {
@@ -1031,7 +1055,7 @@ function applyBattleChoice(s, choiceId, rng = Math.random) {
   session.lossesByType = allocateLosses(session.composition, session.playerLoss);
   session.enemyLoss = Math.min(defender, session.enemyLoss + enemyLoss);
   const history = battleNarrative(session, choice, delta, loss, enemyLoss);
-  if (counterBlow > 0) history.text += ` 守军已适应连续突击，反扑额外削去约${Math.round(counterBlow)}点战场势头。`;
+  if (counterBlow > 0) history.text += ` 连续强攻被敌军看穿，我军优势下降${Math.round(counterBlow)}点。`;
   session.history.push(history);
   session.stage++;
   if (session.stage >= 3) {
@@ -1083,7 +1107,7 @@ function finishBattle(s, outcome, rng = Math.random) {
     leaders.forEach(o => { o.merit += 7 + (session.flags.demanded ? 2 : 0); o.loyalty = clamp(o.loyalty + 2); });
     s.pendingDecisions.push({ type: "conquest", territoryId: targetId, heroId: leaders.filter(o => o.id !== "player").sort((a, b) => b.merit - a.merit)[0]?.id || "renard" });
     if (["wolf", "river"].includes(oldOwner) && factionTerritories(s, oldOwner).length === 0) s.pendingDecisions.push({ type: "submission", faction: oldOwner });
-    log(s, "good", `${targetName}陷落。此战折损${session.playerLoss}人，敌军约损失${session.enemyLoss}人；另留${garrisoned}名野战军维持占领。`);
+    log(s, "good", `${targetName}被占领。此战我军损失${session.playerLoss}人，敌军约损失${session.enemyLoss}人。另抽调${garrisoned}名士兵驻守新领地。`);
     playSound("victory");
   } else if (outcome === "retreat") {
     const t = s.territories[targetId];
@@ -1094,7 +1118,7 @@ function finishBattle(s, outcome, rng = Math.random) {
     s.renown = clamp(s.renown - 2);
     s.campaignCooldown = 2;
     if (session.flags.pushed && session.momentum > 10 && session.leaderIds.includes("renard")) officer(s, "renard").grievance = clamp(officer(s, "renard").grievance + 8);
-    log(s, "warn", `军队从${targetName}有序撤回，折损${session.playerLoss}人；敌方约有${persistentEnemyLoss}人的战损无法及时补充。`);
+    log(s, "warn", `军队从${targetName}撤回，我军损失${session.playerLoss}人。敌方守军减少${persistentEnemyLoss}人，之后会缓慢补充。`);
   } else {
     const t = s.territories[targetId];
     persistentEnemyLoss = Math.min(Math.max(0, t.guard - 8), Math.round(session.enemyLoss * .72));
@@ -1109,7 +1133,7 @@ function finishBattle(s, outcome, rng = Math.random) {
     s.gold -= lostGold;
     s.grain -= lostGrain;
     leaders.forEach(o => { o.loyalty = clamp(o.loyalty - 2); o.grievance = clamp(o.grievance + 3); });
-    log(s, "bad", `${targetName}进攻失败，${session.playerLoss}人没有回来，辎重丢失${lostGold}金币与${lostGrain}粮食；敌方约有${persistentEnemyLoss}人的战损无法及时补充。`);
+    log(s, "bad", `${targetName}进攻失败，我军损失${session.playerLoss}人。战败时丢失${lostGold}金币和${lostGrain}粮食；敌方守军减少${persistentEnemyLoss}人，之后会缓慢补充。`);
   }
   const report = { targetId, targetName, outcome, losses: session.playerLoss, lossesByType, composition: clone(session.composition), enemyLoss: session.enemyLoss, persistentEnemyLoss, garrisoned, lostGold, lostGrain, history: clone(session.history), momentum: session.momentum, injured };
   s.lastBattle = report;
@@ -1195,11 +1219,11 @@ function decisionView(s, decision) {
     const hero = officer(s, decision.heroId);
     return {
       kicker: "战后处置", title: `${d.name}已经换了旗帜，接下来由谁收税？`, portrait: hero?.portrait || "assets/player.webp",
-      body: `<p>夺城只用了一个季度，真正的统治可能需要几年。当地的旧吏、村长和俘虏都在等你决定。</p><p>亲自统治可保留全部收入；分封能兑现功臣的功劳；地方自治最容易换来民心，却会失去一部分税收。</p>`,
+      body: `<p>${d.name}已经换旗，但原有官员、村长和俘虏仍在等待新的管理安排。</p><p>你可以直接管理这块领地，获得全部收入；也可以交给家臣，只获得七成收入；还可以让当地村镇自己管理，快速提高稳定度。</p>`,
       options: [
-        { name: "纳入直属领地", note: "保留全部收入；稳定 +7，正统 +2，未获封功臣可能不满", effect() { t.fiefHolder = null; t.stability = clamp(t.stability + 7); s.legitimacy = clamp(s.legitimacy + 2); if (hero && hero.merit >= 20) hero.grievance = clamp(hero.grievance + 6); s.style.wealth++; log(s, "info", `${d.name}被纳入领主直辖。`); } },
-        ...(hero && hero.side === "player" && hero.id !== "player" && !hero.fief ? [{ name: `把${d.name}封给${hero.name}`, note: "该家臣忠诚 +14；领地上缴七成收入，稳定 +13", effect() { t.fiefHolder = hero.id; t.stability = clamp(t.stability + 13); hero.fief = decision.territoryId; hero.loyalty = clamp(hero.loyalty + 14); hero.grievance = 0; hero.merit = Math.max(0, hero.merit - 12); s.legitimacy = clamp(s.legitimacy + (hero.id === "edmund" ? -2 : 1)); s.style.oath++; log(s, "good", `${hero.name}跪下接受了${d.name}的封地。`); } }] : []),
-        { name: "允许村镇自治", note: "领地只上缴约八成收入；稳定 +18，民心 +5，正统 −2", effect() { t.fiefHolder = "charter"; t.stability = clamp(t.stability + 18); s.support = clamp(s.support + 5); s.legitimacy = clamp(s.legitimacy - 2); s.style.oath += 2; log(s, "good", `${d.name}获得自治特许状。`); } }
+        { name: "由你直接管理", note: "获得全部收入；稳定 +7，王室认可 +2，高功劳家臣可能不满", effect() { t.fiefHolder = null; t.stability = clamp(t.stability + 7); s.legitimacy = clamp(s.legitimacy + 2); if (hero && hero.merit >= 20) hero.grievance = clamp(hero.grievance + 6); s.style.wealth++; log(s, "info", `${d.name}改由你直接管理。`); } },
+        ...(hero && hero.side === "player" && hero.id !== "player" && !hero.fief ? [{ name: `交给${hero.name}管理`, note: "该家臣忠诚 +14；领地上缴七成收入，稳定 +13", effect() { t.fiefHolder = hero.id; t.stability = clamp(t.stability + 13); hero.fief = decision.territoryId; hero.loyalty = clamp(hero.loyalty + 14); hero.grievance = 0; hero.merit = Math.max(0, hero.merit - 12); s.legitimacy = clamp(s.legitimacy + (hero.id === "edmund" ? -2 : 1)); s.style.oath++; log(s, "good", `${hero.name}开始管理${d.name}。`); } }] : []),
+        { name: "让当地村镇自己管理", note: "领地上缴约八成收入；稳定 +18，民心 +5，王室认可 −2", effect() { t.fiefHolder = "charter"; t.stability = clamp(t.stability + 18); s.support = clamp(s.support + 5); s.legitimacy = clamp(s.legitimacy - 2); s.style.oath += 2; log(s, "good", `${d.name}开始由当地村镇自行管理。`); } }
       ]
     };
   }
@@ -1207,12 +1231,12 @@ function decisionView(s, decision) {
     const leader = officer(s, decision.faction === "wolf" ? "bran" : "aveline");
     const isBran = leader.id === "bran";
     return {
-      kicker: "败者的誓言", title: `${leader.name}把武器放在了你的脚边`, portrait: leader.portrait,
-      body: `<p>${isBran ? "“你拿走了我的渡口和山关。狼牙不会向城墙下跪，但会跟随真正打赢我们的人。”" : "“河望家的旗已经落下。我可以把河地的账册和渡船交给你，也可以带着我的名字离开北境。”"}</p><p>接纳旧领主能迅速稳定新领地，也把一个有野心的人带进了你的大厅。</p>`,
+      kicker: "敌方领主投降", title: `${leader.name}请求成为你的家臣`, portrait: leader.portrait,
+      body: `<p>${isBran ? "“你拿走了我的渡口和山关。狼牙不会向城墙下跪，但会跟随真正打赢我们的人。”" : "“河望家的旗已经落下。我可以把河地的账册和渡船交给你，也可以带着我的名字离开北境。”"}</p><p>接受投降可提高新领地稳定并获得一名家臣。收取赎金或放逐会让该人物永久离开。</p>`,
       options: [
-        { name: "接受效忠，让其保留名号", note: "加入家臣；此前关系会影响初始忠诚；长矛兵 +6，新领地稳定 +8", effect() { const original = OFFICER_DEFS[leader.id].loyalty; const base = s.oath === "oath" ? 67 : s.oath === "iron" ? 58 : 61; const relation = clamp(Math.round((leader.loyalty - original) * .75 - leader.grievance / 4), -12, 12); leader.side = "player"; leader.loyalty = clamp(base + relation); leader.grievance = Math.max(0, Math.round(leader.grievance * .35)); addUnits(s, "levy", 6); factionTerritories(s, "player").forEach(id => { if (TERRITORY_DEFS[id].owner === decision.faction) s.territories[id].stability = clamp(s.territories[id].stability + 8); }); s.style.oath++; log(s, "good", `${leader.name}宣誓成为渡鸦家的家臣。此前的交往决定了这份誓言有多牢固。`); } },
-        { name: "收取赎金，准其离境", note: "金币 +26，威望 +2；该人物永久离场", effect() { leader.side = "gone"; s.gold += 26; s.renown = clamp(s.renown + 2); s.style.wealth += 2; log(s, "info", `${leader.name}以赎金换取了离开北境的道路。`); } },
-        { name: "折断武器，永不准其回来", note: "正统 +3，军心 +4；民心 −3", effect() { leader.side = "gone"; s.legitimacy = clamp(s.legitimacy + 3); s.morale = clamp(s.morale + 4); s.support = clamp(s.support - 3); s.style.iron += 2; log(s, "warn", `${leader.name}被放逐，旧旗帜在城门外烧成灰。`); } }
+        { name: "接受投降，让他成为家臣", note: "加入家臣；之前的事件会影响忠诚；长矛兵 +6，新领地稳定 +8", effect() { const original = OFFICER_DEFS[leader.id].loyalty; const base = s.oath === "oath" ? 67 : s.oath === "iron" ? 58 : 61; const relation = clamp(Math.round((leader.loyalty - original) * .75 - leader.grievance / 4), -12, 12); leader.side = "player"; leader.loyalty = clamp(base + relation); leader.grievance = Math.max(0, Math.round(leader.grievance * .35)); addUnits(s, "levy", 6); factionTerritories(s, "player").forEach(id => { if (TERRITORY_DEFS[id].owner === decision.faction) s.territories[id].stability = clamp(s.territories[id].stability + 8); }); s.style.oath++; log(s, "good", `${leader.name}加入渡鸦家，当前忠诚为${leader.loyalty}。`); } },
+        { name: "收取26金币，放他离开", note: "金币 +26，威望 +2；该人物永久离开", effect() { leader.side = "gone"; s.gold += 26; s.renown = clamp(s.renown + 2); s.style.wealth += 2; log(s, "info", `${leader.name}支付赎金后离开北境。`); } },
+        { name: "放逐他，禁止再次返回", note: "王室认可 +3，军心 +4；民心 −3", effect() { leader.side = "gone"; s.legitimacy = clamp(s.legitimacy + 3); s.morale = clamp(s.morale + 4); s.support = clamp(s.support - 3); s.style.iron += 2; log(s, "warn", `${leader.name}被放逐，旧旗帜在城门外烧成灰。`); } }
       ]
     };
   }
@@ -1221,9 +1245,9 @@ function decisionView(s, decision) {
       kicker: "第一场雪", title: "城门外来了三十户没有粮食的人", portrait: "assets/oswin.webp",
       body: `<p>灰麦原的战乱烧掉了他们的村庄。奥斯温说仓库勉强能接济；伊莎贝尔提醒你，冬天才刚开始。</p><p>大厅里的人都在看你如何对待第一批求助者。</p>`,
       options: [
-        { name: "打开粮仓，让他们进城", note: "粮食 −22，民心 +12，正统 +2；奥斯温忠诚 +5", disabled: s.grain < 22, effect() { s.grain -= 22; s.support = clamp(s.support + 12); s.legitimacy = clamp(s.legitimacy + 2); officer(s, "oswin").loyalty = clamp(officer(s, "oswin").loyalty + 5); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance - 5); s.style.oath += 2; log(s, "good", "渡鸦堡为失去家园的人打开了粮仓。"); } },
-        { name: "给一半口粮，让他们去南边", note: "粮食 −10，民心 +3；奥斯温怨气 +3", disabled: s.grain < 10, effect() { s.grain -= 10; s.support = clamp(s.support + 3); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance + 3); s.style.wealth++; log(s, "info", "难民拿到十袋麦子，被指向了南方的道路。"); } },
-        { name: "关门。城堡先养活自己人", note: "粮食不变，军心 +3，民心 −10；奥斯温忠诚 −7、怨气 +12", effect() { s.morale = clamp(s.morale + 3); s.support = clamp(s.support - 10); officer(s, "oswin").loyalty = clamp(officer(s, "oswin").loyalty - 7); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance + 12); s.style.iron += 2; log(s, "bad", "雪下了一夜，城门始终没有打开。奥斯温把这次警告记进了自己的账。"); } }
+        { name: "打开粮仓，让他们进城", note: "粮食 −22，民心 +12，王室认可 +2；奥斯温忠诚 +5", disabled: s.grain < 22, effect() { s.grain -= 22; s.support = clamp(s.support + 12); s.legitimacy = clamp(s.legitimacy + 2); officer(s, "oswin").loyalty = clamp(officer(s, "oswin").loyalty + 5); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance - 5); s.style.oath += 2; log(s, "good", "渡鸦堡为失去家园的人打开了粮仓。"); } },
+        { name: "给他们10袋粮，让他们去南边", note: "粮食 −10，民心 +3；奥斯温不满 +3", disabled: s.grain < 10, effect() { s.grain -= 10; s.support = clamp(s.support + 3); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance + 3); s.style.wealth++; log(s, "info", "难民拿到十袋麦子，被指向了南方的道路。"); } },
+        { name: "关门。城堡先养活自己人", note: "粮食不变，军心 +3，民心 −10；奥斯温忠诚 −7、不满 +12", effect() { s.morale = clamp(s.morale + 3); s.support = clamp(s.support - 10); officer(s, "oswin").loyalty = clamp(officer(s, "oswin").loyalty - 7); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance + 12); s.style.iron += 2; log(s, "bad", "城门保持关闭，难民继续向南。奥斯温的忠诚下降，不满上升。"); } }
       ]
     };
   }
@@ -1231,33 +1255,33 @@ function decisionView(s, decision) {
     const edmund = officer(s, "edmund");
     return {
       kicker: "家族暗流", title: "埃德蒙希望独自指挥下一次远征", portrait: "assets/edmund.webp",
-      body: `<p>“我不是要你的椅子。我只是想证明，当年没有被写进族谱，并不代表我比任何人差。”</p><p>他的能力毋庸置疑。问题在于，城里已经有人私下称他为“另一只渡鸦”。</p>`,
+      body: `<p>“让我单独领一次兵。”埃德蒙盯着桌上的军旗，“我打得赢，他们自然会闭嘴。”</p><p>已经有几名骑士开始跟随埃德蒙。让他单独领军，会增加他的功劳，也可能让他的野心更大。</p>`,
       options: [
-        { name: "给他军旗，让能力说话", note: "埃德蒙忠诚 +8、功勋 +5；正统 −3", effect() { edmund.loyalty = clamp(edmund.loyalty + 8); edmund.merit += 5; s.legitimacy = clamp(s.legitimacy - 3); s.style.oath++; log(s, "info", "埃德蒙第一次以独立统帅的身份接过军旗。"); } },
-        { name: "让他在大厅里认清自己的位置", note: "正统 +4；埃德蒙忠诚 −10、怨气 +14", effect() { s.legitimacy = clamp(s.legitimacy + 4); edmund.loyalty = clamp(edmund.loyalty - 10); edmund.grievance = clamp(edmund.grievance + 14); s.style.iron += 2; log(s, "warn", "埃德蒙低头退下，但把那句话记住了。"); } },
-        { name: "让他先去整顿商路", note: "金币 +10；埃德蒙忠诚 −3、治政功勋 +3", effect() { s.gold += 10; edmund.loyalty = clamp(edmund.loyalty - 3); edmund.merit += 3; s.style.wealth += 2; log(s, "info", "埃德蒙被派去整顿商路，带回了钱，也带回了沉默。"); } }
+        { name: "同意让他单独领军", note: "埃德蒙忠诚 +8、功劳 +5；王室认可 −3", effect() { edmund.loyalty = clamp(edmund.loyalty + 8); edmund.merit += 5; s.legitimacy = clamp(s.legitimacy - 3); s.style.oath++; log(s, "info", "埃德蒙接过军旗，下一次会议由他汇报商路和军情。"); } },
+        { name: "当众拒绝他的请求", note: "王室认可 +4；埃德蒙忠诚 −10、不满 +14", effect() { s.legitimacy = clamp(s.legitimacy + 4); edmund.loyalty = clamp(edmund.loyalty - 10); edmund.grievance = clamp(edmund.grievance + 14); s.style.iron += 2; log(s, "warn", "埃德蒙交还军旗，忠诚下降，不满上升。"); } },
+        { name: "让他先去保护商路", note: "金币 +10；埃德蒙忠诚 −3、管理功劳 +3", effect() { s.gold += 10; edmund.loyalty = clamp(edmund.loyalty - 3); edmund.merit += 3; s.style.wealth += 2; log(s, "info", "埃德蒙保护商路，带回10金币并增加3点功劳。"); } }
       ]
     };
   }
   if (decision.type === "royal_tax") {
     return {
       kicker: "王室催税", title: "摄政公爵要你补上父亲欠下的四十枚金币", portrait: "assets/ysabel.webp",
-      body: `<p>使者把封蜡完好的命令放在长桌上。按时缴纳能保住名义上的合法地位；拒绝，则等于承认你准备靠军队回答王城。</p>`,
+      body: `<p>使者把王室命令放在长桌上。按时缴纳会提高王室认可；拒绝缴税则会明显降低王室认可，但能提高军心和威望。</p>`,
       options: [
-        { name: "如数缴纳", note: "金币 −40，正统 +12", disabled: s.gold < 40, effect() { s.gold -= 40; s.legitimacy = clamp(s.legitimacy + 12); s.style.oath++; log(s, "info", "王室税金装箱南下，公爵的使者满意离开。"); } },
-        { name: "只付一半，再送一封好信", note: "金币 −20，正统 +3，威望 −2", disabled: s.gold < 20, effect() { s.gold -= 20; s.legitimacy = clamp(s.legitimacy + 3); s.renown = clamp(s.renown - 2); s.style.wealth += 2; log(s, "warn", "你付了一半欠税，把剩下的争议留给措辞优美的信件。"); } },
-        { name: "把催税令扔进火里", note: "威望 +8，军心 +6，正统 −12", effect() { s.renown = clamp(s.renown + 8); s.morale = clamp(s.morale + 6); s.legitimacy = clamp(s.legitimacy - 12); s.style.iron += 2; log(s, "warn", "王室催税令在大厅里烧成灰，北境从此知道你不会再低头。"); } }
+        { name: "支付全部40金币", note: "金币 −40，王室认可 +12", disabled: s.gold < 40, effect() { s.gold -= 40; s.legitimacy = clamp(s.legitimacy + 12); s.style.oath++; log(s, "info", "王室税金装箱南下，公爵的使者满意离开。"); } },
+        { name: "只付20金币并请求延期", note: "金币 −20，王室认可 +3，威望 −2", disabled: s.gold < 20, effect() { s.gold -= 20; s.legitimacy = clamp(s.legitimacy + 3); s.renown = clamp(s.renown - 2); s.style.wealth += 2; log(s, "warn", "使者收下20金币，并把剩余欠税写入回报。"); } },
+        { name: "烧掉命令，拒绝缴税", note: "威望 +8，军心 +6，王室认可 −12", effect() { s.renown = clamp(s.renown + 8); s.morale = clamp(s.morale + 6); s.legitimacy = clamp(s.legitimacy - 12); s.style.iron += 2; log(s, "warn", "使者带着烧毁的封蜡返回王城，渡鸦堡公开拒绝缴税。"); } }
       ]
     };
   }
   if (decision.type === "iron_crown") {
     return {
-      kicker: "终章 · 铁冠", title: "摄政公爵的旗落下了", portrait: "assets/player.webp",
-      body: `<p>七块领地第一次在同一面旗帜下报出收成、税金与兵数。旧王朝留下的铁冠就放在你面前，它并不华丽，甚至还留着一道斧痕。</p><p>家臣们等待你决定，从明天起，人们该怎样称呼这片土地的主人。</p>`,
+      kicker: "终章 · 铁冠", title: "王冠谷已经落入你手中", portrait: "assets/player.webp",
+      body: `<p>王冠谷已经被占领，北境七块领地全部归你统治。家臣把旧王朝的铁冠送进大厅，等待你决定如何完成加冕。</p>`,
       options: [
-        { name: "以守誓者之名戴上铁冠", note: "结局将依据你的实际统治作风评价", effect() { s.style.oath++; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}在众家臣面前戴上铁冠。`); } },
-        { name: "让所有人跪下，再戴上它", note: "铁腕统治 +2", effect() { s.style.iron += 2; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}让大厅安静下来，然后戴上铁冠。`); } },
-        { name: "先封住国库，再举行仪式", note: "富国统治 +2", effect() { s.style.wealth += 2; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}先接过账册，随后才接过铁冠。`); } }
+        { name: "保留各地旧规矩，再戴上铁冠", note: "守信风格 +2", effect() { s.style.oath++; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}保留各地旧规矩，然后戴上铁冠。`); } },
+        { name: "要求所有领主跪下宣誓，再戴上铁冠", note: "强硬风格 +2", effect() { s.style.iron += 2; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}要求所有领主跪下宣誓，然后戴上铁冠。`); } },
+        { name: "先清点国库和税册，再举行加冕", note: "经营风格 +2", effect() { s.style.wealth += 2; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}先清点国库和税册，随后才举行加冕。`); } }
       ]
     };
   }
@@ -1277,7 +1301,7 @@ function pumpDecision() {
   $("modalBody").innerHTML = view.body;
   $("modalPortrait").src = view.portrait;
   $("modalPortrait").alt = view.title;
-  $("modalResources").innerHTML = [["金币", Math.round(S.gold)], ["粮食", Math.round(S.grain)], ["民心", Math.round(S.support)], ["正统", Math.round(S.legitimacy)]].map(([label, value]) => `<span><small>${label}</small><b>${value}</b></span>`).join("");
+  $("modalResources").innerHTML = [["金币", Math.round(S.gold)], ["粮食", Math.round(S.grain)], ["民心", Math.round(S.support)], ["王室认可", Math.round(S.legitimacy)]].map(([label, value]) => `<span><small>${label}</small><b>${value}</b></span>`).join("");
   $("modal").scrollTop = 0;
   playSound("event");
   $("modalOptions").innerHTML = view.options.map((opt, i) => {
@@ -1329,7 +1353,7 @@ function renderTop() {
   });
   $("netGoldText").textContent = `${f.netGold >= 0 ? "+" : ""}${f.netGold} 金`;
   $("forecastList").innerHTML = [
-    ["领地税收", `+${f.gold}`], ["粮食产出", `+${f.grain}`], ["军饷家臣", `−${f.goldCost}`], ["人口军粮", `−${f.grainCost}`], ["仓储损耗", f.spoilage ? `−${f.spoilage}` : "0"]
+    ["领地税收", `+${f.gold}`], ["粮食产出", `+${f.grain}`], ["人员开支", `−${f.goldCost}`], ["粮食消耗", `−${f.grainCost}`], ["仓储损耗", f.spoilage ? `−${f.spoilage}` : "0"]
   ].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
   $("gameNav").querySelectorAll("[data-tab]").forEach(button => button.classList.toggle("active", button.dataset.tab === S.tab));
 }
@@ -1357,9 +1381,9 @@ function renderHall() {
   panel.innerHTML = `
     <section class="hero-panel">
       <span class="eyebrow">THE GREAT HALL</span>
-      <h2>${yearOf(S) === 1 ? "先让渡鸦堡活下来，再谈铁冠" : `第${yearOf(S)}年的账本，比战报更诚实`}</h2>
-      <p>${seasonOf(S).note} 每次行动都在金币、粮食、民心、军队和家臣关系之间留下代价。</p>
-      ${metrics([[subjects(S), "治下人口"], [armyTotal(S), "军队总数"], [`${f.netGrain >= 0 ? "+" : ""}${f.netGrain}`, "本季余粮"], [S.warWeariness, "战争疲劳"]])}
+      <h2>${S.turn === 0 ? "第一年春：先处理领地事务" : `第${yearOf(S)}年${seasonOf(S).name}季议事`}</h2>
+      <p>${seasonOf(S).note} 本季度剩余${S.ap}点行动，可用于征税、征兵、训练、巡视和封赏。</p>
+      ${metrics([[subjects(S), "领地人口"], [armyTotal(S), "军队总数"], [`${f.netGrain >= 0 ? "+" : ""}${f.netGrain}`, "本季余粮"], [S.warWeariness, "战争疲劳"]])}
     </section>
     ${S.lastAction ? `<div class="feedback-banner"><b>${esc(S.lastAction.name)}</b><p>${esc(S.lastAction.text)}</p></div>` : ""}
     <div class="section-head"><h2>本季度议程</h2><span>每类行动每季只能安排一次</span></div>
@@ -1369,28 +1393,28 @@ function renderHall() {
       const disabled = S.ap < 1 || used >= action.max || locked;
       return `<article class="action-card ${used ? "used" : ""}"><div class="action-icon">${action.icon}</div><h3>${action.name}</h3><p>${action.desc}</p><div class="effect-row">${action.effects.map(e => `<span>${e}</span>`).join("")}</div><button data-action="${action.id}" ${disabled ? "disabled" : ""}>${used ? "本季已安排" : S.ap < 1 ? "行动点已用完" : locked ? "资源不足" : "安排 · 1点"}</button></article>`;
     }).join("")}</div>
-    <div class="section-head"><h2>长桌两侧的人</h2><span>忠诚不是固定数值</span></div>
-    <div class="council-row">${council.length ? council.map(o => officerCard(o)).join("") : `<div class="empty-state">长桌两侧已经无人应答。失去的家臣不会再参与议政。</div>`}</div>`;
+    <div class="section-head"><h2>长桌两侧的人</h2><span>多次拒绝家臣或长期不封赏，可能降低忠诚，甚至导致离开</span></div>
+    <div class="council-row">${council.length ? council.map(o => officerCard(o)).join("") : `<div class="empty-state">当前没有可参与议政的家臣。</div>`}</div>`;
   panel.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => applyAction(button.dataset.action)));
 }
 
 function officerCard(o, enemy = false) {
   if (!o) return "";
-  const fief = o.fief ? TERRITORY_DEFS[o.fief]?.name : "无封地";
-  const status = enemy ? FACTIONS[o.side]?.name || "已离场" : o.id === "player" ? "领主本人" : `忠诚 ${Math.round(o.loyalty)}`;
+  const fief = o.fief ? `管理${TERRITORY_DEFS[o.fief]?.name}` : "未管理领地";
+  const status = enemy ? FACTIONS[o.side]?.name || "已经离开" : o.id === "player" ? "领主本人" : `忠诚 ${Math.round(o.loyalty)}`;
   const arcTotal = NPC_ARCS.filter(event => event.officerId === o.id).length;
   const arcDone = NPC_ARCS.filter(event => event.officerId === o.id && S.seenNpcEvents.includes(event.id)).length;
   return `<article class="officer-card ${enemy ? "enemy" : ""} ${o.injured ? "injured" : ""}">
     <img src="${o.portrait}" alt="${esc(o.name)}">
     <div class="card-copy"><div class="role-line"><h3>${esc(o.name)}</h3><span>${esc(o.title)}</span></div><p>${esc(o.trait)} · ${esc(o.traitText)}</p>
-    <div class="stat-chips"><span>武${o.stats.force}</span><span>统${o.stats.command}</span><span>谋${o.stats.scheme}</span><span>治${o.stats.govern}</span><span>魅${o.stats.charm}</span></div>
-    <div class="loyalty-line"><span>${status}</span><b>${o.injured ? `伤${o.injured}季` : enemy ? o.trait : `${fief} · 功${o.merit}`}${arcTotal ? ` · 剧情${arcDone}/${arcTotal}` : ""}</b></div><div class="loyalty-track"><i style="width:${enemy ? 56 : clamp(o.loyalty)}%"></i></div></div>
+    <div class="stat-chips"><span>${STAT_LABELS.force}${o.stats.force}</span><span>${STAT_LABELS.command}${o.stats.command}</span><span>${STAT_LABELS.scheme}${o.stats.scheme}</span><span>${STAT_LABELS.govern}${o.stats.govern}</span><span>${STAT_LABELS.charm}${o.stats.charm}</span></div>
+    <div class="loyalty-line"><span>${status}</span><b>${o.injured ? `休养${o.injured}季` : enemy ? o.trait : `${fief} · 功劳${o.merit}`}${arcTotal ? ` · 剧情${arcDone}/${arcTotal}` : ""}</b></div><div class="loyalty-track"><i style="width:${enemy ? 56 : clamp(o.loyalty)}%"></i></div></div>
   </article>`;
 }
 
 function renderDomain() {
   const panel = $("panel");
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE DEMESNE</span><h2>土地不是地图上的颜色，是下一场冬天的口粮</h2><p>直辖地上缴全部产出；封给家臣后只上缴七成，但能兑现功劳并稳定新领地。每项建设最高三级。</p>${metrics([[ownTerritoryIds(S).length, "治下领地"], [subjects(S), "人口"], [forecast(S).grain, "本季产粮"], [forecast(S).gold, "本季税收"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE DEMESNE</span><h2>渡鸦家的领地</h2><p>查看各地的产粮、税收、守军和稳定度。由你直接管理的领地会上缴全部收入；交给家臣后只上缴七成。新占领的领地需要先提高稳定度。每项建筑最高三级。</p>${metrics([[ownTerritoryIds(S).length, "已有领地"], [subjects(S), "领地人口"], [forecast(S).grain, "本季产粮"], [forecast(S).gold, "本季税收"]])}</section>
     <div class="section-head"><h2>领地与建设</h2><span>建设消耗1点行动</span></div>
     <div class="domain-grid">${ownTerritoryIds(S).map(domainCard).join("")}</div>`;
   panel.querySelectorAll("[data-upgrade]").forEach(button => button.addEventListener("click", () => upgradeBuilding(button.dataset.territory, button.dataset.upgrade)));
@@ -1401,27 +1425,27 @@ function domainCard(id) {
   const d = TERRITORY_DEFS[id];
   const t = S.territories[id];
   const out = territoryOutput(S, id);
-  const holder = t.fiefHolder === "charter" ? "自治特许" : t.fiefHolder ? `${officer(S, t.fiefHolder)?.name || "旧领主"}封地` : "领主直辖";
+  const holder = t.fiefHolder === "charter" ? "村镇自治" : t.fiefHolder ? `由${officer(S, t.fiefHolder)?.name || "旧领主"}管理` : "由你管理";
   const activePolicy = POLICIES[t.policy] || POLICIES.balanced;
   return `<article class="domain-card"><div class="owner-line"><span>${esc(d.terrain)} · ${holder}</span><b>稳定 ${Math.round(t.stability)}</b></div><h3>${d.name}</h3><div class="stat-chips"><span>本季 ${out.gold}金</span><span>${out.grain}粮</span><span>守军 ${t.guard}</span><span>${t.devastated ? `战损${t.devastated}季` : "生产正常"}</span></div>
     <div class="building-grid">${Object.entries(BUILDINGS).map(([type, b]) => {
       const level = t.buildings[type];
       const cost = buildingCost(S, id, type);
       return `<div class="building-card"><b>${glyphSvg(type)}${b.name} · ${level}/3</b><small>${b.desc}</small><button data-territory="${id}" data-upgrade="${type}" ${!canUpgrade(S, id, type) ? "disabled" : ""}>${level >= 3 ? "已达最高级" : `升级 · ${cost}金 · 1点`}</button></div>`;
-    }).join("")}</div><div class="policy-block"><div class="policy-title"><span>持续领地政策</span><b>${activePolicy.name}</b></div><div class="policy-grid">${Object.entries(POLICIES).map(([policyId, policy]) => { const active = t.policy === policyId; return `<button class="policy-btn ${active ? "active" : ""}" data-territory="${id}" data-policy="${policyId}" aria-pressed="${active}" ${!active && (S.ap < 1 || S.usedActions[`policy_${id}`]) ? "disabled" : ""}><b>${policy.name}</b><small>${policyId === "balanced" ? "收支稳定" : policyId === "relief" ? "稳民减税" : policyId === "extract" ? "增金伤稳" : "减产增防"}</small></button>`; }).join("")}</div></div></article>`;
+    }).join("")}</div><div class="policy-block"><div class="policy-title"><span>当前政策</span><b>${activePolicy.name}</b></div><div class="policy-grid">${Object.entries(POLICIES).map(([policyId, policy]) => { const active = t.policy === policyId; return `<button class="policy-btn ${active ? "active" : ""}" data-territory="${id}" data-policy="${policyId}" aria-pressed="${active}" ${!active && (S.ap < 1 || S.usedActions[`policy_${id}`]) ? "disabled" : ""}><b>${policy.name}</b><small>${policyId === "balanced" ? "收入正常，稳定不变" : policyId === "relief" ? "收入降低，稳定上升" : policyId === "extract" ? "金币增加，稳定下降" : "产出降低，守军增加"}</small></button>`; }).join("")}</div></div></article>`;
 }
 
 function renderMap() {
   const panel = $("panel");
   const attackable = attackableTerritories(S);
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE NORTHERN MARCH</span><h2>守军、道路与河流，才是北境真正的边界</h2><p>金边闪烁的据点可以出征，明亮连线是当前战线。王冠谷需统一其余六领，并等到第7年王室威信动摇后开放。</p>${metrics([[ownTerritoryIds(S).length, "已控制"], [attackable.length, "可进攻"], [factionTerritories(S, "wolf").length, "狼牙领地"], [factionTerritories(S, "river").length, "河望领地"]])}</section>
-    <div class="section-head"><h2>北境七领军势图</h2><span>点击据点查看或制定远征</span></div>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE NORTHERN MARCH</span><h2>北境战线</h2><p>金边闪烁的据点可以进攻，明亮连线表示与我方相邻的边界。控制其余六块领地并进入第7年后，才能进攻王冠谷。</p>${metrics([[ownTerritoryIds(S).length, "已控制"], [attackable.length, "可进攻"], [factionTerritories(S, "wolf").length, "狼牙领地"], [factionTerritories(S, "river").length, "河望领地"]])}</section>
+    <div class="section-head"><h2>北境地图</h2><span>点击据点查看或制定远征</span></div>
     <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}</div><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div><div class="map-inspector">${Object.keys(TERRITORY_DEFS).map(id => territorySummary(id)).join("")}</div></div>`;
   panel.querySelectorAll("[data-map-territory]").forEach(button => button.addEventListener("click", () => {
     const id = button.dataset.mapTerritory;
     if (!attackable.includes(id)) {
       const crownLocked = TERRITORY_DEFS[id].final && (ownTerritoryIds(S).length < 6 || S.turn < CROWN_OPEN_TURN);
-      toast(owns(S, id) ? `${TERRITORY_DEFS[id].name}由你控制` : crownLocked ? `统一其余六领并坚持到第7年，才能叩击王冠谷` : "这块领地尚未与我方接壤");
+      toast(owns(S, id) ? `${TERRITORY_DEFS[id].name}由你控制` : crownLocked ? `控制其余六块领地并进入第7年后，才能进攻王冠谷` : "这块领地尚未与我方接壤");
       return;
     }
     battleDraft.targetId = id;
@@ -1461,11 +1485,11 @@ function territorySummary(id) {
 }
 
 function terrainAdvice(targetId, composition) {
-  if (targetId === "ashfield") return composition.knights >= 3 ? "开阔农田让骑士获得完整冲击距离。" : "开阔地缺少遮蔽，没有骑士时突破会更依赖人数。";
+  if (targetId === "ashfield") return composition.knights >= 3 ? "开阔农田适合骑士冲锋。" : "开阔地缺少遮蔽，没有骑士时突破会更依赖人数。";
   if (targetId === "pineford") return composition.archers >= 4 ? "弓手可借密林掩护前进，骑士难以展开。" : "密林会削弱骑士，最好带足弓手或谋略家臣。";
   if (targetId === "highpass") return "山道狭窄，弓手和长矛兵更可靠，骑士战力大幅受限。";
   if (["crossford", "riverwatch"].includes(targetId)) return "河网切碎冲锋路线，弓手能隔水压制守军。";
-  return "王城高墙会削弱远射和骑兵，人数、军心与攻城方略更加重要。";
+  return "王城高墙会削弱远射和骑兵，人数、军心与攻城方式更加重要。";
 }
 
 function armyRosterHtml() {
@@ -1492,17 +1516,17 @@ function renderCampaign() {
   const supply = campaignSupply(S, battleDraft.troops, battleDraft.leaderIds);
   const risk = casualtyForecast(S, battleDraft.targetId, battleDraft.leaderIds, battleDraft.troops, battleDraft.plan);
   const targetLocked = crownWait && battleDraft.targetId === "crownvale";
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>同样四十个人，在密林和平原不是同一支军队</h2><p>兵种、季节、地形、选将与军心共同决定基础胜算。远征消耗2点行动；战后要整补，夺城还必须从野战军中留下驻军。</p>${metrics([[S.army.levy, "长矛兵"], [S.army.archers, "弓箭手"], [S.army.knights, "披甲骑士"], [S.campaignCooldown ? `${S.campaignCooldown}季` : "就绪", "远征整补"]])}</section>
-    <div class="section-head"><h2>军队编成</h2><span>征募每类兵种每季一次</span></div>${armyRosterHtml()}
-    <div class="section-head"><h2>远征计划</h2><span>消耗2点行动；战后需整补</span></div>
-    ${crownWait ? `<div class="campaign-lock-note">六领已服，但摄政公爵仍握着王室名分。王冠谷将在第7年开放；你仍可在此征募、调整编成并准备决战。</div>` : ""}
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>制定作战计划</h2><p>选择目标、出战人物、兵力和作战方式。兵种、地形、军心、训练和战争疲劳都会影响胜算。每次出征消耗2点行动，占领后还要休整并抽调士兵驻守新领地。</p>${metrics([[S.army.levy, "长矛兵"], [S.army.archers, "弓箭手"], [S.army.knights, "披甲骑士"], [S.campaignCooldown ? `${S.campaignCooldown}季` : "就绪", "军队休整"]])}</section>
+    <div class="section-head"><h2>军队配置</h2><span>每类兵种每季度只能招募一次</span></div>${armyRosterHtml()}
+    <div class="section-head"><h2>作战计划</h2><span>消耗2点行动；战后需要休整</span></div>
+    ${crownWait ? `<div class="campaign-lock-note">你已经控制其余六块领地。进入第7年后才能进攻王冠谷。现在可以继续招募和训练军队。</div>` : ""}
     <div class="battle-layout"><div class="battle-targets">${targets.map(id => `<button class="target-row ${id === battleDraft.targetId ? "active" : ""} ${targetLocked && id === "crownvale" ? "locked" : ""}" data-target="${id}"><b>${TERRITORY_DEFS[id].name}</b><span>${targetLocked && id === "crownvale" ? "第7年开放" : `${FACTIONS[S.territories[id].owner].name} · ${TERRITORY_DEFS[id].terrain} · 守军${S.territories[id].guard}`}</span></button>`).join("")}</div>
-    <div class="battle-form"><span class="form-label">行军方略</span><div class="plan-grid">${Object.entries(PLANS).map(([id, p]) => `<button class="plan-btn ${battleDraft.plan === id ? "active" : ""}" data-plan="${id}"><b>${p.name}</b><small>${p.desc}</small></button>`).join("")}</div>
-    <span class="form-label">随军人物（最多3人）</span><div class="leader-checks">${available.map(o => `<div class="leader-check"><input id="lead_${o.id}" type="checkbox" data-leader="${o.id}" ${battleDraft.leaderIds.includes(o.id) ? "checked" : ""}><label for="lead_${o.id}">${esc(o.name)} · ${esc(o.title)}</label></div>`).join("")}</div>
+    <div class="battle-form"><span class="form-label">作战方式</span><div class="plan-grid">${Object.entries(PLANS).map(([id, p]) => `<button class="plan-btn ${battleDraft.plan === id ? "active" : ""}" data-plan="${id}"><b>${p.name}</b><small>${p.desc}</small></button>`).join("")}</div>
+    <span class="form-label">出战人物（最多3人）</span><div class="leader-checks">${available.map(o => `<div class="leader-check"><input id="lead_${o.id}" type="checkbox" data-leader="${o.id}" ${battleDraft.leaderIds.includes(o.id) ? "checked" : ""}><label for="lead_${o.id}">${esc(o.name)} · ${esc(o.title)}</label></div>`).join("")}</div>
     <span class="form-label">参战兵力：<b id="troopValue">${battleDraft.troops}</b> / ${armyTotal(S)}</span><input id="troopRange" class="troop-range" type="range" min="10" max="${Math.max(10, armyTotal(S))}" value="${battleDraft.troops}">
-    <div class="army-summary">本次编成：<b>${compositionText(est.composition)}</b><br>${terrainAdvice(battleDraft.targetId, est.composition)} ${seasonOf(S).id === "winter" ? "严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>
-    <div id="battleEstimate" class="battle-estimate ${battleRiskClass(est.ratio)}">战前判断：<b>${est.label}</b><br>攻守比 ${est.ratio.toFixed(2)} · 预计折损 ${risk.low}—${risk.high} 人 · 携带 ${supply} 粮食 · 疲劳压制 ${Math.round((1 - est.fatigue) * 100)}%。${est.effectiveMorale !== S.morale ? `<br>领主亲征：军心按 ${Math.round(est.effectiveMorale)} 计入。` : ""}</div>
-    <button id="launchBattle" class="launch-btn ${battleRiskClass(est.ratio)}" ${targetLocked || S.ap < CAMPAIGN_AP_COST || S.usedActions.campaign || S.campaignCooldown > 0 || armyTotal(S) < 10 || S.grain < supply || !battleDraft.leaderIds.length ? "disabled" : ""}>${targetLocked ? "王冠谷 · 第7年开放" : S.campaignCooldown > 0 ? `军队整补中 · 还需${S.campaignCooldown}季` : S.usedActions.campaign ? "本季已经出征" : S.ap < CAMPAIGN_AP_COST ? "需要2点行动" : S.grain < supply ? "军粮不足" : `出征 · ${TERRITORY_DEFS[battleDraft.targetId].name}`}</button></div></div>
+    <div class="army-summary">本次出兵：<b>${compositionText(est.composition)}</b><br>${terrainAdvice(battleDraft.targetId, est.composition)} ${seasonOf(S).id === "winter" ? "严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>
+    <div id="battleEstimate" class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测：<b>${est.label}</b><br>${battlePowerText(est.ratio)}预计伤亡${risk.low}—${risk.high}人，需要携带${supply}粮食。${battleFatigueText(est.fatigue)}${battleMoraleText(est.effectiveMorale, S.morale)}</div>
+    <button id="launchBattle" class="launch-btn ${battleRiskClass(est.ratio)}" ${targetLocked || S.ap < CAMPAIGN_AP_COST || S.usedActions.campaign || S.campaignCooldown > 0 || armyTotal(S) < 10 || S.grain < supply || !battleDraft.leaderIds.length ? "disabled" : ""}>${targetLocked ? "王冠谷 · 第7年开放" : S.campaignCooldown > 0 ? `军队休整中 · 还需${S.campaignCooldown}季` : S.usedActions.campaign ? "本季已经出征" : S.ap < CAMPAIGN_AP_COST ? "需要2点行动" : S.grain < supply ? "军粮不足" : `出征 · ${TERRITORY_DEFS[battleDraft.targetId].name}`}</button></div></div>
     ${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
   panel.querySelectorAll("[data-target]").forEach(button => button.addEventListener("click", () => { battleDraft.targetId = button.dataset.target; renderCampaign(); }));
   panel.querySelectorAll("[data-plan]").forEach(button => button.addEventListener("click", () => { battleDraft.plan = button.dataset.plan; renderCampaign(); }));
@@ -1510,7 +1534,7 @@ function renderCampaign() {
   panel.querySelectorAll("[data-leader]").forEach(input => input.addEventListener("change", () => {
     const id = input.dataset.leader;
     if (input.checked) {
-      if (battleDraft.leaderIds.length >= 3) { input.checked = false; toast("最多选择3名随军人物"); return; }
+      if (battleDraft.leaderIds.length >= 3) { input.checked = false; toast("最多选择3名出战人物"); return; }
       battleDraft.leaderIds.push(id);
     } else battleDraft.leaderIds = battleDraft.leaderIds.filter(x => x !== id);
     renderCampaign();
@@ -1522,7 +1546,7 @@ function renderCampaign() {
     const food = campaignSupply(S, battleDraft.troops, battleDraft.leaderIds);
     const nextRisk = casualtyForecast(S, battleDraft.targetId, battleDraft.leaderIds, battleDraft.troops, battleDraft.plan);
     $("battleEstimate").className = `battle-estimate ${battleRiskClass(next.ratio)}`;
-    $("battleEstimate").innerHTML = `战前判断：<b>${next.label}</b><br>攻守比 ${next.ratio.toFixed(2)} · 预计折损 ${nextRisk.low}—${nextRisk.high} 人 · ${compositionText(next.composition)} · 携带 ${food} 粮食 · 疲劳压制 ${Math.round((1 - next.fatigue) * 100)}%。`;
+    $("battleEstimate").innerHTML = `胜算预测：<b>${next.label}</b><br>${battlePowerText(next.ratio)}预计伤亡${nextRisk.low}—${nextRisk.high}人；本次出兵${compositionText(next.composition)}；需要携带${food}粮食。${battleFatigueText(next.fatigue)}`;
   });
   $("launchBattle")?.addEventListener("click", () => {
     if (!startBattle(S, battleDraft)) { toast("现在无法发动这场远征"); return; }
@@ -1538,11 +1562,11 @@ function renderActiveBattle() {
   const enemyCommander = defenderLeader(S, session.targetId);
   const playerLeaders = session.leaderIds.map(id => officer(S, id)).filter(Boolean);
   const options = stageOptions(S, session);
-  const stageName = ["行军接敌", "两军交锋", "胜负将分"][session.stage];
+  const stageName = ["接近敌军", "正面交战", "最后阶段"][session.stage];
   const marker = clamp(50 + session.momentum / 2, 1, 99);
-  panel.innerHTML = `<section class="battle-session"><div class="battle-visual" style="background-image:url('${battleBackground(session.targetId)}')"><div class="battle-unit-row">${Object.entries(UNIT_DEFS).map(([type, unit]) => `<span class="battle-unit-chip">${glyphSvg(type)}<span>${unit.short}</span><b>${session.composition[type] || 0}</b></span>`).join("")}</div><div class="battle-commanders"><div class="commander-side" style="--crest-color:${FACTIONS.player.color}"><span class="crest">${crestSvg("player", FACTIONS.player.name)}</span><div><b>${playerLeaders.map(o => esc(o.name)).join("、")}</b><small>${FACTIONS.player.name} · ${compositionText(session.composition)}</small></div></div><div class="commander-side enemy" style="--crest-color:${FACTIONS[enemyFaction].color}"><span class="crest">${crestSvg(enemyFaction, FACTIONS[enemyFaction].name)}</span><div><b>${esc(enemyCommander?.name || FACTIONS[enemyFaction].name)}</b><small>${target.name} · 守军 ${S.territories[session.targetId].guard}</small></div></div></div></div><div class="battle-session-head"><span class="eyebrow">CAMPAIGN IN PROGRESS · ${esc(target.terrain)}</span><h2>${target.name}之战 · ${stageName}</h2><div class="stat-chips"><span>出征 ${session.troops}</span><span>${compositionText(session.composition)}</span><span>损失 ${compositionText(session.lossesByType || {})}</span><span>${PLANS[session.plan].name}</span></div><div class="momentum-label"><span>我军溃退</span><b>战场势头 ${Math.round(session.momentum) > 0 ? "+" : ""}${Math.round(session.momentum)}</b><span>敌军崩溃</span></div><div class="momentum-track"><i style="left:${marker}%"></i></div></div>
-    <div class="battle-stage-list">${session.history.length ? session.history.map(h => `<article class="battle-stage"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}</h3><p>${esc(h.text)}</p></div></article>`).join("") : `<div class="empty-state">两军尚未接触。随军人物正在等你的第一道命令。</div>`}</div>
-    <div class="battle-choices"><h3>${stageName}：听谁的？</h3><div class="choice-stack">${options.map(o => `<button class="stage-choice" data-stage-choice="${o.id}"><b>${esc(o.name)}</b><small>${esc(o.by)} · ${esc(o.desc)}</small></button>`).join("")}</div></div></section>`;
+  panel.innerHTML = `<section class="battle-session"><div class="battle-visual" style="background-image:url('${battleBackground(session.targetId)}')"><div class="battle-unit-row">${Object.entries(UNIT_DEFS).map(([type, unit]) => `<span class="battle-unit-chip">${glyphSvg(type)}<span>${unit.short}</span><b>${session.composition[type] || 0}</b></span>`).join("")}</div><div class="battle-commanders"><div class="commander-side" style="--crest-color:${FACTIONS.player.color}"><span class="crest">${crestSvg("player", FACTIONS.player.name)}</span><div><b>${playerLeaders.map(o => esc(o.name)).join("、")}</b><small>${FACTIONS.player.name} · ${compositionText(session.composition)}</small></div></div><div class="commander-side enemy" style="--crest-color:${FACTIONS[enemyFaction].color}"><span class="crest">${crestSvg(enemyFaction, FACTIONS[enemyFaction].name)}</span><div><b>${esc(enemyCommander?.name || FACTIONS[enemyFaction].name)}</b><small>${target.name} · 守军 ${S.territories[session.targetId].guard}</small></div></div></div></div><div class="battle-session-head"><span class="eyebrow">CAMPAIGN IN PROGRESS · ${esc(target.terrain)}</span><h2>${target.name}之战 · ${stageName}</h2><div class="stat-chips"><span>出征 ${session.troops}</span><span>${compositionText(session.composition)}</span><span>损失 ${compositionText(session.lossesByType || {})}</span><span>${PLANS[session.plan].name}</span></div><div class="momentum-label"><span>我军劣势</span><b>${battleMomentumText(session.momentum)}</b><span>我军优势</span></div><div class="momentum-track"><i style="left:${marker}%"></i></div></div>
+    <div class="battle-stage-list">${session.history.length ? session.history.map(h => `<article class="battle-stage"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}</h3><p>${esc(h.text)}</p></div></article>`).join("") : `<div class="empty-state">两军尚未接触。请选择第一道军令。</div>`}</div>
+    <div class="battle-choices"><h3>${stageName}：选择军令</h3><div class="choice-stack">${options.map(o => `<button class="stage-choice" data-stage-choice="${o.id}"><b>${esc(o.name)}</b><small>${esc(o.by)} · ${esc(o.desc)}</small></button>`).join("")}</div></div></section>`;
   panel.querySelectorAll("[data-stage-choice]").forEach(button => button.addEventListener("click", () => {
     applyBattleChoice(S, button.dataset.stageChoice);
     saveGame();
@@ -1562,8 +1586,8 @@ function battleBackground(targetId) {
 function renderLastBattle(report) {
   const label = report.outcome === "win" ? "胜利" : report.outcome === "retreat" ? "撤退" : "战败";
   const lossText = report.lossesByType ? `（${compositionText(report.lossesByType)}）` : "";
-  const costText = report.garrisoned ? ` · 留驻${report.garrisoned}人` : report.lostGold || report.lostGrain ? ` · 丢失${report.lostGold || 0}金/${report.lostGrain || 0}粮` : "";
-  return `<div class="section-head"><h2>上一场战报</h2><span>${label}</span></div><div class="battle-session"><div class="battle-result"><span class="eyebrow">AFTER ACTION REPORT</span><strong>${label}</strong><p>${esc(report.targetName)} · 我军折损${report.losses}${lossText} · 敌军约损失${report.enemyLoss}${costText}${report.injured?.length ? ` · ${esc(report.injured.join("、"))}负伤` : ""}</p></div><div class="battle-stage-list">${report.history.map(h => `<article class="battle-stage"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}</h3><p>${esc(h.text)}</p></div></article>`).join("")}</div></div>`;
+  const costText = report.garrisoned ? ` · 抽调${report.garrisoned}人驻守` : report.lostGold || report.lostGrain ? ` · 丢失${report.lostGold || 0}金币和${report.lostGrain || 0}粮食` : "";
+  return `<div class="section-head"><h2>上一场战报</h2><span>${label}</span></div><div class="battle-session"><div class="battle-result"><span class="eyebrow">战斗结果 · AFTER ACTION REPORT</span><strong>${label}</strong><p>${esc(report.targetName)} · 我军损失${report.losses}人${lossText} · 敌军约损失${report.enemyLoss}人${costText}${report.injured?.length ? ` · ${esc(report.injured.join("、"))}负伤` : ""}</p></div><div class="battle-stage-list">${report.history.map(h => `<article class="battle-stage"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}</h3><p>${esc(h.text)}</p></div></article>`).join("")}</div></div>`;
 }
 
 function talkOfficer(id) {
@@ -1577,8 +1601,8 @@ function talkOfficer(id) {
   const gain = 3 + (S.oath === "oath" ? 1 : 0);
   o.loyalty = clamp(o.loyalty + gain);
   o.grievance = clamp(o.grievance - 5);
-  S.lastAction = { name: `召见${o.name}`, text: `花费3金币安排私宴与赏赐。忠诚 +${gain}，怨气 −5。` };
-  log(S, "info", `你在私室召见${o.name}，听完了那些不适合在长桌上说的话。`);
+  S.lastAction = { name: `召见${o.name}`, text: `花费3金币安排私宴与赏赐。忠诚 +${gain}，不满 −5。` };
+  log(S, "info", `你在私室召见${o.name}，听取了他对领地近况的意见。`);
   saveGame(); renderAll();
 }
 
@@ -1587,7 +1611,7 @@ function renderCourt() {
   const own = ownedOfficers(S);
   const others = S.officers.filter(o => !["player", "gone"].includes(o.side));
   const averageLoyalty = own.length > 1 ? Math.round(own.filter(o => o.id !== "player").reduce((sum, o) => sum + o.loyalty, 0) / (own.length - 1)) : 100;
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE LORD'S COURT</span><h2>能替你夺城的人，也有能力夺走你的城</h2><p>忠诚、野心、功勋与封地会持续变化。高功勋家臣长期得不到土地，会积累怨气甚至带兵离开。</p>${metrics([[own.length, "我方人物"], [averageLoyalty, "平均忠诚"], [own.filter(o => o.fief).length, "受封家臣"], [own.reduce((sum, o) => sum + o.merit, 0), "总功勋"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE LORD'S COURT</span><h2>家臣与封赏</h2><p>家臣的忠诚会随着你的选择变化。多次拒绝家臣或长期不封赏，可能降低忠诚，甚至导致离开。</p>${metrics([[own.length, "我方人物"], [averageLoyalty, "平均忠诚"], [own.filter(o => o.fief).length, "管理领地的家臣"], [own.reduce((sum, o) => sum + o.merit, 0), "总功劳"]])}</section>
     <div class="section-head"><h2>渡鸦堡家臣</h2><span>召见消耗1点行动与3金币，每季每人一次</span></div><div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}${o.id !== "player" ? `<button class="secondary-btn" data-talk="${o.id}" ${S.ap < 1 || S.gold < 3 || S.usedActions[`talk_${o.id}`] ? "disabled" : ""}>召见 ${esc(o.name)} · 3金</button>` : ""}</div>`).join("")}</div>
     <div class="section-head"><h2>北境其他领主</h2><span>他们可以成为敌人、俘虏或家臣</span></div><div class="officer-grid">${others.length ? others.map(o => officerCard(o, true)).join("") : `<div class="empty-state">北境已经没有仍举着敌旗的著名领主。</div>`}</div>`;
   panel.querySelectorAll("[data-talk]").forEach(button => button.addEventListener("click", () => talkOfficer(button.dataset.talk)));
@@ -1595,24 +1619,24 @@ function renderCourt() {
 
 function renderChronicle() {
   const panel = $("panel");
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE CHRONICLE</span><h2>编年史会记下胜利，也会记下粮仓为何空了</h2><p>每次建设、征税、封赏、战败、吞并和承诺都留在这里。最终评价依据你真正做过的事，而不是开局选择的名号。</p>${metrics([[S.battles, "远征场次"], [S.wins, "胜场"], [S.casualties, "累计阵亡"], [OATHS[currentStyle(S)].short, "当前作风"]])}</section>
-    <div class="section-head"><h2>渡鸦堡编年史</h2><span>最近120条</span></div><div class="chronicle">${S.log.map(item => `<article class="log-row"><time>第${Math.floor(item.turn / 4) + 1}年 · ${SEASONS[item.turn % 4].name}</time><div><b>${item.kind === "good" ? "得势" : item.kind === "bad" ? "代价" : item.kind === "warn" ? "暗流" : "记事"}</b><p>${esc(item.text)}</p></div></article>`).join("")}</div>`;
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE CHRONICLE</span><h2>领地大事记</h2><p>这里记录建设、征税、封赏、战争和重大事件。本局结局会根据这些选择判断你的统治风格。</p>${metrics([[S.battles, "出征次数"], [S.wins, "胜场"], [S.casualties, "累计伤亡"], [OATHS[currentStyle(S)].short, "当前风格"]])}</section>
+    <div class="section-head"><h2>渡鸦堡编年史</h2><span>最近120条</span></div><div class="chronicle">${S.log.map(item => `<article class="log-row"><time>第${Math.floor(item.turn / 4) + 1}年 · ${SEASONS[item.turn % 4].name}</time><div><b>${item.kind === "good" ? "进展" : item.kind === "bad" ? "损失" : item.kind === "warn" ? "警示" : "记录"}</b><p>${esc(item.text)}</p></div></article>`).join("")}</div>`;
 }
 
 function endingCopy(s) {
   const style = currentStyle(s);
-  if (s.endingReason === "fallen") return { title: "渡鸦落地", text: "祖堡的旗在清晨被扯下。你曾经拥有土地、家臣和一枚印戒，最后却没有足够的人守住那扇门。" };
-  if (s.endingReason === "collapsed") return { title: "空掉的大厅", text: "没有敌军攻破城墙。先离开的是拿不到军饷的士兵，然后是没有粮食的村民，最后连家臣也不再来参加议事。" };
-  if (s.endingReason === "minor_lord") return { title: "守堡之人", text: "十二年过去，渡鸦堡仍在你手里。你没有拿到铁冠，却让这个曾经漏雨的家活了下来。北境不会歌颂你，但会记得你。" };
-  if (s.endingReason === "great_lord") return { title: "无冠之主", text: "期限结束时，你已经控制北境大半土地。王冠谷仍在远处，但任何一道王命都必须先问过你的军队和粮仓。" };
-  if (style === "oath") return { title: "守誓的铁冠", text: "旧领主、村镇代表与渡鸦家的功臣一同站在大厅里。他们服从的不是你的姓，而是这些年没有被你赖掉的承诺。" };
-  if (style === "iron") return { title: "沉默的铁冠", text: "最后一面敌旗落下后，北境安静了很久。所有人都知道你的命令会抵达，也知道违抗命令的人去了哪里。" };
-  return { title: "金库上的铁冠", text: "商路、磨坊和税册第一次被同一套数字连在一起。你把一个破败封地变成了不会停下的统治机器。" };
+  if (s.endingReason === "fallen") return { title: "渡鸦堡陷落", text: "清晨，敌军从东门进入渡鸦堡。城墙上的守军已经不足一队，渡鸦旗在午前被扯下。" };
+  if (s.endingReason === "collapsed") return { title: "领地崩溃", text: "没有敌军攻破城墙。军饷拖欠后，士兵先散去；冬粮见底后，村民开始逃亡。最后一次议事，没有家臣到场。" };
+  if (s.endingReason === "minor_lord") return { title: "守住渡鸦堡", text: "十二年结束时，渡鸦堡仍在你手中。你没有得到铁冠，但城墙得到了修补，四个村庄也熬过了最后一个冬天。" };
+  if (s.endingReason === "great_lord") return { title: "北境大领主", text: "十二年结束时，你已控制北境大半土地。王冠谷仍由摄政公爵占据，但王室的税吏和使者已经不敢绕过渡鸦堡行事。" };
+  if (style === "oath") return { title: "守信领主统一北境", text: "王冠谷陷落后，旧领主、村镇代表和渡鸦家的功臣在大厅宣誓效忠。你曾答应保留的土地、旧规矩和封赏，大多得到了兑现。" };
+  if (style === "iron") return { title: "强硬领主统一北境", text: "最后一面敌旗落下后，各地守军被重新编制，税册和军令统一送往渡鸦堡。北境很少再发生公开反抗，城堡地牢却始终没有空过。" };
+  return { title: "经营领主统一北境", text: "战争结束后，七领使用了同一套税册和度量。商路重新开放，磨坊和集市按季向渡鸦堡纳税，你的金库足以维持一支常备军。" };
 }
 
 function endingVisual(s) {
   if (s.endingReason === "fallen") return { src: "assets/battle-capital.webp", alt: "陷落的渡鸦堡", cls: "ending-fallen" };
-  if (s.endingReason === "collapsed") return { src: "assets/oswin.webp", alt: "空掉的大厅", cls: "ending-collapsed" };
+  if (s.endingReason === "collapsed") return { src: "assets/oswin.webp", alt: "领地崩溃后的大厅", cls: "ending-collapsed" };
   if (s.endingReason === "minor_lord") return { src: "assets/player.webp", alt: "守住渡鸦堡的领主", cls: "ending-minor" };
   if (s.endingReason === "great_lord") return { src: "assets/northern-march-map.webp", alt: "北境领地图", cls: "ending-great" };
   return { src: "assets/player.webp", alt: "戴上铁冠的北境之主", cls: `ending-unified ending-${currentStyle(s)}` };
@@ -1635,7 +1659,7 @@ function showEnding(s) {
   $("endingPortrait").src = visual.src;
   $("endingPortrait").alt = visual.alt;
   const victory = s.endingReason === "unified";
-  $("endingBody").innerHTML = `<span class="eyebrow">${victory ? "THE IRON CROWN" : "THE CHRONICLE CLOSES"}</span><h1>${copy.title}</h1><div class="story-body"><p>${copy.text}</p><p>编年史给你的统治留下了“${OATHS[currentStyle(s)].short}”二字。开局的誓言只是起点，真正决定这两个字的是每一次征税、封赏、拒绝与出兵。</p></div><div class="ending-stats"><div><b>${Math.min(s.turn + 1, MAX_TURNS)}</b><span>经过季度</span></div><div><b>${ownTerritoryIds(s).length}</b><span>最终领地</span></div><div><b>${s.wins}</b><span>胜场</span></div><div><b>${ownedOfficers(s).length}</b><span>最终家臣</span></div></div><button id="endingRestart" class="primary-btn" type="button">重新继承渡鸦堡</button>`;
+  $("endingBody").innerHTML = `<span class="eyebrow">${victory ? "THE IRON CROWN" : "THE CHRONICLE CLOSES"}</span><h1>${copy.title}</h1><div class="story-body"><p>${copy.text}</p><p class="ending-style"><b>本局统治风格：${OATHS[currentStyle(s)].short}</b></p></div><div class="ending-stats"><div><b>${Math.min(s.turn + 1, MAX_TURNS)}</b><span>经过季度</span></div><div><b>${ownTerritoryIds(s).length}</b><span>最终领地</span></div><div><b>${s.wins}</b><span>胜场</span></div><div><b>${ownedOfficers(s).length}</b><span>最终家臣</span></div></div><button id="endingRestart" class="primary-btn" type="button">重新继承渡鸦堡</button>`;
   $("endingRestart").addEventListener("click", () => {
     if (confirm("删除当前存档并重新开始？")) { deleteSave(); S = null; showMenu(); }
   });

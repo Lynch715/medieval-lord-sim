@@ -350,6 +350,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .ending-stats b, .ending-stats span { display: block; }
 .ending-stats b { color: var(--gold-light); font: 24px var(--serif); }
 .ending-stats span { margin-top: 3px; color: #9b9d93; font-size: 11px; }
+.ending-style { padding-top: 12px; border-top: 1px solid var(--line); color: var(--gold-light); }
 .ending-fallen .ending-art img { filter: saturate(.35) contrast(1.12) brightness(.58); }
 .ending-collapsed .ending-art img { filter: grayscale(.7) saturate(.35) brightness(.62); }
 .ending-great .ending-art img { filter: saturate(.65) contrast(1.08) brightness(.72); object-position: center; }

@@ -7,7 +7,7 @@
   <meta name="description" content="继承渡鸦堡，在四季经营、家臣政治与真实战争中夺取铁冠。">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23090a09' d='M4 4h56v56H4z'/%3E%3Cpath fill='none' stroke='%23c8a96a' stroke-width='4' d='M16 10h32v29c0 8-7 13-16 17-9-4-16-9-16-17z'/%3E%3Ctext x='32' y='40' text-anchor='middle' font-size='28' fill='%23ead7a2'%3ER%3C/text%3E%3C/svg%3E">
   <title>模拟中世纪领主 · 铁冠之路</title>
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
   <div class="weather" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -42,17 +42,17 @@
       <div class="field-block">
         <span>你准备靠什么统治</span>
         <div id="oathPicker" class="choice-grid">
-          <button class="choice-card active" data-oath="oath" type="button"><b>守誓</b><small>民心与家臣忠诚更稳</small></button>
-          <button class="choice-card" data-oath="iron" type="button"><b>铁腕</b><small>军队士气与征召更强</small></button>
-          <button class="choice-card" data-oath="wealth" type="button"><b>富国</b><small>领地收入与建设更优</small></button>
+          <button class="choice-card active" data-oath="oath" type="button"><b>守信</b><small>开局民心更高，家臣关系更稳</small></button>
+          <button class="choice-card" data-oath="iron" type="button"><b>强硬</b><small>开局军队和军心更强</small></button>
+          <button class="choice-card" data-oath="wealth" type="button"><b>经营</b><small>开局金币更多，税收更高</small></button>
         </div>
       </div>
       <div class="field-block">
-        <span>北境会怎样对待你</span>
+        <span>选择游戏难度</span>
         <div id="difficultyPicker" class="choice-grid difficulty-grid">
-          <button class="choice-card active" data-difficulty="standard" type="button"><b>领主</b><small>经营与战争压力均衡</small></button>
-          <button class="choice-card" data-difficulty="hard" type="button"><b>乱世</b><small>歉收更多，敌军更积极</small></button>
-          <button class="choice-card" data-difficulty="brutal" type="button"><b>铁与血</b><small>冬季和战败都会致命</small></button>
+          <button class="choice-card active" data-difficulty="standard" type="button"><b>普通</b><small>收入、敌军和冬季压力正常</small></button>
+          <button class="choice-card" data-difficulty="hard" type="button"><b>困难</b><small>收入降低，敌军更容易进攻</small></button>
+          <button class="choice-card" data-difficulty="brutal" type="button"><b>极难</b><small>收入更低，敌军更强，冬季消耗更高</small></button>
         </div>
       </div>
       <button id="startGameBtn" class="primary-btn" type="button">接过领主印戒 <span>→</span></button>
@@ -90,14 +90,14 @@
         <article class="lord-card">
           <img src="assets/player.webp" alt="玩家领主">
           <div class="portrait-fade"></div>
-          <div class="lord-copy"><span id="oathBadge">守誓之人</span><h2 id="playerNameText">罗恩</h2><p>渡鸦堡 · 领主</p></div>
+          <div class="lord-copy"><span id="oathBadge">守信领主</span><h2 id="playerNameText">罗恩</h2><p>渡鸦堡 · 领主</p></div>
         </article>
         <section class="side-panel glass">
           <div class="section-title"><h3>统治根基</h3><span id="territoryCount">1 / 7</span></div>
           <div class="meter-row"><span>民心</span><b id="supportText">54</b></div><div class="meter green"><i id="supportBar"></i></div>
           <div class="meter-row"><span>军心</span><b id="moraleText">58</b></div><div class="meter red"><i id="moraleBar"></i></div>
           <div class="meter-row"><span>威望</span><b id="renownText">12</b></div><div class="meter gold"><i id="renownBar"></i></div>
-          <div class="meter-row"><span>正统</span><b id="legitimacyText">35</b></div><div class="meter blue"><i id="legitimacyBar"></i></div>
+          <div class="meter-row"><span>王室认可</span><b id="legitimacyText">35</b></div><div class="meter blue"><i id="legitimacyBar"></i></div>
           <div class="meter-row"><span>战争疲劳</span><b id="wearinessText">0</b></div><div class="meter purple"><i id="wearinessBar"></i></div>
         </section>
         <section class="side-panel glass">
@@ -134,6 +134,6 @@
   </section>
 
   <div id="toast" class="toast" role="status"></div>
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

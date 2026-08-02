@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const game = require("../app.js");
+const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
 
 function fixed(value) { return () => value; }
 
@@ -31,6 +34,43 @@ assert.ok(game.forecast(fresh).grainCost > 0);
 assert.ok(game.forecast(fresh).storageCap > fresh.grain, "粮仓容量应进入经营预测");
 assert.equal(game.WORLD_EVENTS.length, 18, "应有18个领地动态事件");
 assert.equal(game.NPC_ARCS.length, 12, "六名关键人物应各有两段个人事件");
+assert.equal(game.WORLD_EVENTS.flatMap(event => event.options).length, 54, "18个领地事件应保留54个选择结果");
+assert.equal(game.NPC_ARCS.flatMap(event => event.options).length, 36, "12个人物事件应保留36个选择结果");
+game.NPC_ARCS.forEach(event => assert.ok(event.body.includes("“"), `${event.id}应包含符合人物身份的直接引语`));
+for (const staleCopy of [
+  "土地不是地图上的颜色",
+  "账本，比战报更诚实",
+  "粮仓替天空付了这笔账",
+  "钱袋发完，制度没有留下",
+  "誓言很清楚，沉默也很清楚",
+  "你把一个破败封地变成了不会停下的统治机器",
+  "开局的誓言只是起点",
+  "正统",
+  "功勋",
+  "攻守比",
+  "预计折损",
+  "战场势头",
+  "行军方略",
+  "军屯边防",
+  "轻徭休养",
+  "败者的誓言",
+  "纳入直属领地",
+  "怨气",
+  "忠诚倾向",
+  "军令封蜡",
+  "副印",
+  "氏族战首",
+  "河望伯领",
+  "累计阵亡",
+  "军饷家臣",
+  "人口军粮",
+  "战场优势",
+  "我军战力约为敌军"
+]) assert.ok(!source.includes(staleCopy), `高频作者式旧文案不应回归：${staleCopy}`);
+
+for (const plainLabel of ["武力", "统率", "谋略", "治理", "魅力", "人员开支", "粮食消耗", "当前战况", "休养"]) {
+  assert.ok(source.includes(plainLabel), `界面应保留白话标签：${plainLabel}`);
+}
 
 const beforeFields = game.territoryOutput(fresh, "ravenstone").grain;
 fresh.territories.ravenstone.buildings.fields++;
@@ -60,11 +100,11 @@ assert.equal(Object.values(battleState.lastBattle.lossesByType).reduce((a, b) =>
 assert.ok(battleState.warWeariness > 0, "出征与伤亡应累积战争疲劳");
 assert.ok(battleState.pendingDecisions.some(d => d.type === "conquest"), "夺地后必须处理统治方式");
 assert.ok(battleState.lastBattle.garrisoned > 0, "夺城后必须从野战军抽调驻军");
-assert.equal(battleState.campaignCooldown, 3, "胜利后应进入三个季度整补期");
+assert.equal(battleState.campaignCooldown, 3, "胜利后应进入三个季度休整期");
 const postWinActions = battleState.usedActions;
 battleState.usedActions = {};
 battleState.ap = 3;
-assert.equal(game.startBattle(battleState, { targetId: "pineford", leaderIds: ["player", "renard"], troops: 20, plan: "steady" }, fixed(.8)), null, "整补期内不得连续滚雪球出征");
+assert.equal(game.startBattle(battleState, { targetId: "pineford", leaderIds: ["player", "renard"], troops: 20, plan: "steady" }, fixed(.8)), null, "休整期内不得连续滚雪球出征");
 battleState.usedActions = postWinActions;
 
 const steadyCostState = game.createInitialState("稳攻测试", "iron", "standard");
@@ -72,7 +112,7 @@ game.startBattle(steadyCostState, { targetId: "ashfield", leaderIds: ["player", 
 game.applyBattleChoice(steadyCostState, "ridge", fixed(.9));
 game.applyBattleChoice(steadyCostState, "shield", fixed(.9));
 game.applyBattleChoice(steadyCostState, "hold", fixed(.9));
-assert.ok(battleState.lastBattle.losses >= steadyCostState.lastBattle.losses * 1.6, "连续强攻的折损应显著高于稳攻");
+assert.ok(battleState.lastBattle.losses >= steadyCostState.lastBattle.losses * 1.6, "连续强攻的伤亡应显著高于稳攻");
 
 const defeatCostState = game.createInitialState("败战代价", "wealth", "standard");
 game.startBattle(defeatCostState, { targetId: "pineford", leaderIds: ["player", "ysabel"], troops: 30, plan: "steady" }, fixed(.4));
@@ -82,7 +122,7 @@ defeatCostState.battleSession.lossesByType = game.allocateLosses(defeatCostState
 const goldBeforeDefeat = defeatCostState.gold;
 const grainBeforeDefeat = defeatCostState.grain;
 const defeatReport = game.finishBattle(defeatCostState, "loss", fixed(1)).report;
-assert.ok(defeatReport.lostGold > 0 && defeatCostState.gold < goldBeforeDefeat, "战败应丢失金币辎重");
+assert.ok(defeatReport.lostGold > 0 && defeatCostState.gold < goldBeforeDefeat, "战败应丢失随军金币");
 assert.ok(defeatReport.lostGrain > 0 && defeatCostState.grain < grainBeforeDefeat, "战败应额外丢失军粮");
 
 const retreatState = game.createInitialState("撤退测试", "wealth", "standard");
@@ -178,11 +218,11 @@ const reliefGold = game.territoryOutput(policyState, "ravenstone").gold;
 const reliefStability = policyState.territories.ravenstone.stability;
 const reliefSupport = policyState.support;
 game.settleSeasonEconomy(policyState);
-assert.equal(policyState.territories.ravenstone.stability, reliefStability + 4, "轻徭休养每季应恢复稳定");
-assert.equal(policyState.support, reliefSupport + 1, "轻徭休养每季应恢复民心");
+assert.equal(policyState.territories.ravenstone.stability, reliefStability + 4, "减税休养每季应恢复稳定");
+assert.equal(policyState.support, reliefSupport + 1, "减税休养每季应恢复民心");
 policyState.territories.ravenstone.policy = "extract";
 const extractGold = game.territoryOutput(policyState, "ravenstone").gold;
-assert.ok(extractGold > reliefGold, "加征赋税的金币产出应高于轻徭休养");
+assert.ok(extractGold > reliefGold, "提高税收的金币产出应高于减税休养");
 const extractStability = policyState.territories.ravenstone.stability;
 game.settleSeasonEconomy(policyState);
 assert.equal(policyState.territories.ravenstone.stability, extractStability - 4, "加征赋税每季应损耗稳定");
@@ -259,6 +299,10 @@ game.applyBattleChoice(unlockState, "charge", fixed(.9));
 game.applyBattleChoice(unlockState, "press", fixed(.9));
 assert.equal(unlockState.territories.crownvale.owner, "player", "王冠谷应能通过三阶段战役攻占");
 assert.ok(unlockState.pendingDecisions.some(d => d.type === "iron_crown"), "统一七领后应进入铁冠终章");
+const ironCrownView = game.decisionView(unlockState, { type: "iron_crown" });
+assert.equal(ironCrownView.options.length, 3, "铁冠终章应保留三种加冕选择");
+assert.ok(ironCrownView.body.includes("北境七块领地全部归你统治"), "铁冠终章应直接说明统一结果");
+assert.ok(ironCrownView.options.some(option => option.name.includes("清点国库和税册")), "经营路线应明确写出清点国库和税册");
 
 const famineState = game.createInitialState("饥荒测试", "oath", "standard");
 famineState.grain = 0;
