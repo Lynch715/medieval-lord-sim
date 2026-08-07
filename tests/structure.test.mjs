@@ -34,8 +34,9 @@ assert.equal(hallGrain - hallRecruitState.grain, game.UNIT_DEFS.levy.grain);
 assert.equal(hallRecruitState.army.levy, hallLevy, "征募进入训练队列后不应立即到账");
 assert.equal(hallRecruitState.jobs.length, 1);
 game.processCompletedJobs(hallRecruitState, hallRecruitState.jobs[0].endAt);
-assert.equal(hallRecruitState.army.levy - hallLevy, game.recruitAmount(hallRecruitState, "levy"));
-assert.equal(game.canRecruitUnit(hallRecruitState, "levy"), false, "同季度不得从两个页面重复征募长矛兵");
+assert.equal(hallRecruitState.army.levy, hallLevy, "训练完成不应偷偷改动旧的全局兵池缓存");
+assert.equal(hallRecruitState.territories.ravenstone.garrison.levy, game.recruitAmount(hallRecruitState, "levy"));
+assert.equal(game.canRecruitUnit(hallRecruitState, "levy"), true, "训练完成后只要队列空闲即可继续征募");
 assert.ok(game.forecast(fresh).gold > 0);
 assert.ok(game.forecast(fresh).grainCost > 0);
 assert.ok(game.forecast(fresh).storageCap > fresh.grain, "粮仓容量应进入经营预测");
@@ -94,7 +95,7 @@ const session = game.startBattle(battleState, {
   plan: "assault"
 }, fixed(.8));
 assert.ok(session, "应能向相邻领地开战");
-assert.equal(battleState.usedActions.campaign, 1, "一次远征应标记为本季已出征");
+assert.equal(battleState.pauseState.reason, "battle", "战役期间世界时间应进入软暂停");
 assert.ok(battleState.grain < 125, "远征应消耗军粮");
 assert.ok(game.stageOptions(battleState, session).some(option => option.id === "forced"), "雷纳德应提出抢攻");
 game.applyBattleChoice(battleState, "forced", fixed(.9));
@@ -110,11 +111,11 @@ assert.equal(Object.values(battleState.lastBattle.lossesByType).reduce((a, b) =>
 assert.ok(battleState.warWeariness > 0, "出征与伤亡应累积战争疲劳");
 assert.ok(battleState.pendingDecisions.some(d => d.type === "conquest"), "夺地后必须处理统治方式");
 assert.ok(battleState.lastBattle.garrisoned > 0, "夺城后必须从野战军抽调驻军");
-assert.equal(battleState.campaignCooldown, 3, "胜利后应进入三个季度休整期");
-const postWinActions = battleState.usedActions;
-battleState.usedActions = {};
+assert.equal(battleState.armies[0].status, "recovering", "胜利后应进入军团自己的整补队列");
+assert.ok(battleState.jobs.some(job => job.type === "RECOVER" && job.armyId === "army_1"));
+const recoveryJob = battleState.jobs.find(job => job.type === "RECOVER" && job.armyId === "army_1");
 assert.equal(game.startBattle(battleState, { targetId: "pineford", leaderIds: ["player", "renard"], troops: 20, plan: "steady" }, fixed(.8)), null, "休整期内不得连续滚雪球出征");
-battleState.usedActions = postWinActions;
+game.processCompletedJobs(battleState, recoveryJob.endAt);
 
 const steadyCostState = game.createInitialState("稳攻测试", "iron", "standard");
 game.startBattle(steadyCostState, { targetId: "ashfield", leaderIds: ["player", "renard", "ysabel"], troops: steadyCostState.troops, plan: "steady" }, fixed(.8));
@@ -225,8 +226,25 @@ assert.equal(marchState.armies[0].status, "idle");
 const clockState = game.createInitialState("时钟测试", "oath", "standard");
 const clockStart = clockState.clock.seasonStartedAt;
 clockState.clock.seasonEndsAt = clockStart + 1;
-assert.equal(game.advanceSeasonAuto(clockState, clockStart + 1), 1);
+assert.equal(game.advanceSeasonAuto(clockState, clockStart + 1).seasons, 1);
 assert.equal(clockState.turn, 1);
+
+const timelineState = game.createInitialState("时间轴测试", "oath", "standard");
+const timelineStart = timelineState.clock.seasonStartedAt;
+timelineState.clock.seasonEndsAt = timelineStart + 1000;
+const timelineJob = game.startJob(timelineState, { type: "RESEARCH", startedAt: timelineStart + 100, endAt: timelineStart + 2000, queueKey: "research:global", payload: { branch: "agriculture", techId: "heavy_plow" } });
+assert.equal(game.advanceSeasonAuto(timelineState, timelineStart + 1000).seasons, 1, "换季应在真实换季时间结算");
+assert.equal(timelineState.tech.agriculture.completed.includes("heavy_plow"), false, "换季不能向未来预支并完成研究");
+assert.equal(game.advanceSeasonAuto(timelineState, timelineStart + 2000).jobs, 1, "Job应在自己的endAt结算");
+assert.equal(timelineJob.status, "completed");
+
+const pauseState = game.createInitialState("暂停测试", "oath", "standard");
+const pauseStart = pauseState.clock.seasonStartedAt;
+const pauseEnds = pauseState.clock.seasonEndsAt;
+game.pauseWorld(pauseState, "battle", pauseStart + 100);
+assert.equal(game.advanceSeasonAuto(pauseState, pauseEnds + 5000).seasons, 0, "软暂停期间不能产生换季时间债");
+game.resumeWorld(pauseState, pauseStart + 5000);
+assert.equal(pauseState.clock.seasonEndsAt, pauseEnds + 4900, "恢复时应把暂停时长加回世界时间");
 
 const legacy = game.createInitialState("旧存档", "oath", "standard");
 delete legacy.army;
@@ -236,6 +254,15 @@ assert.equal(game.armyTotal(migrated), 25, "旧存档军队总数迁移后不得
 assert.equal(migrated.territories.ravenstone.policy, "balanced");
 assert.deepEqual(migrated.seenEvents, []);
 assert.deepEqual(migrated.seenNpcEvents, []);
+
+const garrisonState = game.createInitialState("城市驻军", "oath", "standard");
+const garrisonJob = game.queueRecruitment(garrisonState, "levy", "ravenstone", 1000);
+assert.ok(garrisonJob);
+game.processCompletedJobs(garrisonState, garrisonJob.endAt);
+assert.ok(garrisonState.territories.ravenstone.garrison.levy > 0, "征兵完成应进入训练地驻军池");
+assert.equal(garrisonState.armies[0].composition.levy, 30, "征兵完成不能直接进入远方主力军团");
+assert.equal(game.deployGarrison(garrisonState, "ravenstone"), true);
+assert.ok(garrisonState.armies[0].composition.levy > 30, "军团驻扎本地时才能编入驻军");
 
 const staleFiefSave = game.createInitialState("旧封地存档", "oath", "standard");
 staleFiefSave.territories.ashfield.owner = "player";
@@ -247,12 +274,12 @@ assert.equal(repairedFiefSave.territories.ashfield.fiefHolder, null, "旧存档�
 assert.equal(repairedFiefSave.officers.find(o => o.id === "edmund").fief, null);
 
 const terrainState = game.createInitialState("地形测试", "iron", "standard");
-terrainState.army = { levy: 0, archers: 0, knights: 30 };
+terrainState.armies[0].composition = { levy: 0, archers: 0, knights: 30 };
 game.syncTroops(terrainState);
 const knightPlain = game.battleEstimate(terrainState, "ashfield", ["player", "renard"], 30, "assault");
 const knightForest = game.battleEstimate(terrainState, "pineford", ["player", "renard"], 30, "assault");
 assert.ok(knightPlain.unitPower > knightForest.unitPower * 1.4, "披甲骑士在平原应明显强于密林");
-terrainState.army = { levy: 0, archers: 30, knights: 0 };
+terrainState.armies[0].composition = { levy: 0, archers: 30, knights: 0 };
 game.syncTroops(terrainState);
 const bowPlain = game.battleEstimate(terrainState, "ashfield", ["player", "ysabel"], 30, "ambush");
 const bowForest = game.battleEstimate(terrainState, "pineford", ["player", "ysabel"], 30, "ambush");
@@ -260,7 +287,7 @@ assert.ok(bowForest.unitPower > bowPlain.unitPower, "弓箭手在密林应强于
 const pineAssault = game.battleEstimate(terrainState, "pineford", ["player", "edmund", "ysabel"], 30, "assault");
 const pineAmbush = game.battleEstimate(terrainState, "pineford", ["player", "edmund", "ysabel"], 30, "ambush");
 assert.ok(pineAmbush.attack > pineAssault.attack, "高谋略队伍在密林采用伏击应优于正面强攻");
-terrainState.army = { levy: 8, archers: 0, knights: 4 };
+terrainState.armies[0].composition = { levy: 8, archers: 0, knights: 4 };
 assert.ok(game.compositionPower({ levy: 0, archers: 0, knights: 4 }, "ashfield", "assault") > game.compositionPower({ levy: 8, archers: 0, knights: 0 }, "ashfield", "assault"), "平原强攻时一批昂贵骑士应强于一批长矛兵");
 terrainState.turn = 1;
 const summerPower = game.battleEstimate(terrainState, "pineford", ["player", "ysabel"], 30, "steady").attack;
@@ -353,8 +380,9 @@ Object.keys(unlockState.territories).forEach(id => {
 });
 assert.ok(!game.attackableTerritories(unlockState).includes("crownvale"), "即使快速统一六领，王冠谷也不应在第7年前开放");
 unlockState.turn = game.CROWN_OPEN_TURN;
+unlockState.armies[0].locationId = "highpass";
 assert.ok(game.attackableTerritories(unlockState).includes("crownvale"), "统一六领且进入第7年后应开放王冠谷");
-unlockState.army = { levy: 120, archers: 35, knights: 25 };
+unlockState.armies[0].composition = { levy: 120, archers: 35, knights: 25 };
 game.syncTroops(unlockState);
 unlockState.grain = 300;
 unlockState.morale = 95;
