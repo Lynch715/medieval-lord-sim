@@ -130,6 +130,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 .turn-strip > div { display: flex; align-items: center; gap: 9px; }
 .turn-strip b { font-family: var(--serif); }
 .turn-strip span { color: #989b91; font-size: 12px; }
+.turn-strip .clock-live { color: var(--gold-light); letter-spacing: .08em; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
 .end-season-btn { padding: 9px 15px; color: var(--gold-light); border: 1px solid var(--line-strong); background: rgba(200,169,106,.08); cursor: pointer; }
 .end-season-btn:hover { background: rgba(200,169,106,.16); }
@@ -147,6 +148,24 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 .section-head { display: flex; align-items: flex-end; justify-content: space-between; margin: 24px 0 11px; }
 .section-head h2 { margin: 0; font: 21px var(--serif); }
 .section-head span { color: #85877d; font-size: 11px; }
+.research-panel { margin: 24px 0 30px; padding: 18px; border: 1px solid var(--line); background: rgba(16,19,15,.72); }
+.tech-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.tech-branch { display: grid; gap: 8px; }
+.tech-branch-head { display: flex; justify-content: space-between; align-items: baseline; color: var(--gold-light); font: 17px var(--serif); }
+.tech-branch-head small { color: var(--muted); font: 11px var(--sans); }
+.tech-card { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); background: rgba(0,0,0,.18); }
+.tech-card > div { display: grid; gap: 5px; }
+.tech-card b { font: 16px var(--serif); color: #d9d3c2; }
+.tech-card small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.tech-card button { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line-strong); color: var(--gold-light); background: rgba(200,169,106,.08); cursor: pointer; font-size: 12px; }
+.tech-card button:disabled { color: #777a70; border-color: var(--line); background: rgba(255,255,255,.025); cursor: not-allowed; }
+.tech-card.completed { border-color: rgba(108,137,111,.6); }
+.tech-card.completed b { color: #a8c1a2; }
+.tech-card.active { border-color: var(--gold); box-shadow: inset 0 0 0 1px rgba(200,169,106,.16); }
+.army-location { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.army-location b { color: var(--gold-light); font-family: var(--serif); }
+.march-actions { display: flex; flex-wrap: wrap; gap: 7px; width: 100%; }
+.march-actions button { padding: 7px 10px; color: var(--gold-light); border: 1px solid var(--line-strong); background: rgba(200,169,106,.08); cursor: pointer; font-size: 11px; }
 
 .feedback-banner { margin-top: 14px; padding: 14px 16px; border-left: 2px solid var(--gold); background: rgba(200,169,106,.07); }
 .feedback-banner b { color: var(--gold-light); font-family: var(--serif); }
@@ -222,13 +241,6 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .map-node.mine { background: rgba(16,24,17,.9); }
 .map-node.locked { filter: grayscale(.8); opacity: .68; }
 @keyframes borderPulse { 50% { box-shadow: 0 0 0 5px rgba(200,169,106,.06),0 8px 24px rgba(0,0,0,.64); } }
-.map-ravenstone { left: 18%; top: 56%; }
-.map-ashfield { left: 47%; top: 49%; }
-.map-pineford { left: 28%; top: 25%; }
-.map-highpass { left: 53%; top: 15%; }
-.map-crossford { left: 44%; top: 79%; }
-.map-riverwatch { left: 72%; top: 77%; }
-.map-crownvale { left: 81%; top: 42%; }
 .map-inspector { display: grid; grid-template-columns: repeat(7,1fr); gap: 7px; margin-top: 9px; }
 .map-inspector article { min-width: 0; padding: 9px; border: 1px solid var(--line); background: rgba(20,23,19,.9); box-shadow: inset 0 2px var(--owner-color); }
 .map-inspector h3 { margin: 3px 0 5px; font: 15px var(--serif); }
@@ -432,12 +444,15 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .side-column .side-panel:last-child { grid-column: 1 / -1; }
   .metrics { grid-template-columns: repeat(2,1fr); }
   .action-grid, .building-grid { grid-template-columns: 1fr; }
+  .tech-grid { grid-template-columns: 1fr; }
+  .research-panel { padding: 14px; }
   .army-roster { grid-template-columns: 1fr; }
   .policy-grid { grid-template-columns: repeat(2,1fr); }
   .unit-card button, .building-card button, .territory-card button, .action-card button, .leader-check label, .end-season-btn { min-height: 44px; }
   .unit-card button { font-size: 12px; }
   .action-card { min-height: 180px; }
-  .turn-strip span { display: none; }
+  .turn-strip > div > span { display: inline; }
+  .turn-strip .clock-live { display: inline; }
   .end-season-btn { padding: 9px 11px; }
   .hero-panel { padding: 17px 15px; }
   .hero-panel h2 { font-size: 24px; }
@@ -449,11 +464,6 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .map-node svg { width: 19px; height: 24px; }
   .map-node b { font-size: 12px; }
   .map-node small { font-size: 9px; }
-  .map-ravenstone { left: 17%; }
-  .map-pineford { left: 26%; }
-  .map-highpass { left: 51%; }
-  .map-riverwatch { left: 73%; }
-  .map-crownvale { left: 82%; }
   .map-inspector p { font-size: 11px; }
   .plan-grid, .leader-checks, .choice-stack { grid-template-columns: 1fr; }
   .battle-visual { min-height: 240px; padding: 12px; }

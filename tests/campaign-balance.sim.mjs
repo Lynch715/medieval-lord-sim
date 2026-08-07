@@ -37,10 +37,9 @@ function resolveDecisions(state) {
 function recruit(state, type) {
   const def = game.UNIT_DEFS[type];
   const key = `unit_${type}`;
-  if (state.ap < 1 || state.usedActions[key] || state.gold < def.gold || state.grain < def.grain) return false;
+  if (state.usedActions[key] || state.gold < def.gold || state.grain < def.grain) return false;
   state.gold -= def.gold;
   state.grain -= def.grain;
-  state.ap--;
   state.usedActions[key] = 1;
   state.army[type] += game.recruitAmount(state, type);
   game.syncTroops(state);
@@ -90,9 +89,9 @@ function run(seed) {
     while (!state.ended && state.turn < 48) {
       resolveDecisions(state);
       if (state.ended) break;
-      if (state.campaignCooldown === 0 && state.ap >= game.CAMPAIGN_AP_COST) fight(state, random);
+      if (state.campaignCooldown === 0 && !state.usedActions.campaign) fight(state, random);
       if (state.ended) break;
-      if (state.ap > 0 && (game.armyTotal(state) < 72 || state.turn >= 20)) {
+      if (game.armyTotal(state) < 72 || state.turn >= 20) {
         recruit(state, state.turn % 3 === 0 ? "levy" : state.turn % 3 === 1 ? "archers" : "knights");
       }
       game.advanceSeason(state);
@@ -107,7 +106,7 @@ const results = Array.from({ length: 120 }, (_, index) => run(index + 1));
 const unified = results.filter(result => result.ending === "unified").sort((a, b) => a.turn - b.turn);
 const completionTurns = unified.map(result => result.turn);
 const median = completionTurns.length ? completionTurns[Math.floor(completionTurns.length / 2)] : null;
-const collapsed = results.filter(result => ["collapsed", "fallen"].includes(result.ending)).length;
+const collapsed = results.filter(result => ["collapsed", "fallen"].includes(result.ending) || (result.ending === "minor_lord" && result.territories < 5)).length;
 
 assert.ok(unified.every(result => result.turn >= game.CROWN_OPEN_TURN), "任何统一结局都不得早于第7年");
 assert.ok(unified.length >= 50, "审慎策略应让多数局具备完成统一的可能");

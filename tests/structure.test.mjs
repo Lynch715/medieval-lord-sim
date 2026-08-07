@@ -6,11 +6,16 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const game = require("../app.js");
 const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
+const html = readFileSync(fileURLToPath(new URL("../index.html", import.meta.url)), "utf8");
 
 function fixed(value) { return () => value; }
 
 const fresh = game.createInitialState("测试领主", "oath", "standard");
 assert.equal(fresh.playerName, "测试领主");
+assert.equal(Object.keys(game.TERRITORY_DEFS).length, 36, "地图数据应包含36个城镇节点");
+assert.equal(game.playableTerritoryIds().length, 7, "首批可征服区域仍保持7城战役范围");
+assert.equal(fresh.armies.length, 1);
+assert.equal(fresh.armies[0].locationId, "ravenstone");
 assert.equal(game.seasonOf(fresh).id, "spring");
 assert.deepEqual(game.attackableTerritories(fresh).sort(), ["ashfield", "pineford"]);
 assert.equal(game.subjects(fresh), 218);
@@ -23,10 +28,12 @@ const hallRecruit = game.ACTIONS.find(action => action.id === "recruit");
 const hallGold = hallRecruitState.gold;
 const hallGrain = hallRecruitState.grain;
 const hallLevy = hallRecruitState.army.levy;
-hallRecruitState.usedActions.recruit = 1;
-hallRecruit.run(hallRecruitState);
+assert.ok(hallRecruit.run(hallRecruitState));
 assert.equal(hallGold - hallRecruitState.gold, game.UNIT_DEFS.levy.gold, "议事厅与征战页的长矛兵价格应一致");
 assert.equal(hallGrain - hallRecruitState.grain, game.UNIT_DEFS.levy.grain);
+assert.equal(hallRecruitState.army.levy, hallLevy, "征募进入训练队列后不应立即到账");
+assert.equal(hallRecruitState.jobs.length, 1);
+game.processCompletedJobs(hallRecruitState, hallRecruitState.jobs[0].endAt);
 assert.equal(hallRecruitState.army.levy - hallLevy, game.recruitAmount(hallRecruitState, "levy"));
 assert.equal(game.canRecruitUnit(hallRecruitState, "levy"), false, "同季度不得从两个页面重复征募长矛兵");
 assert.ok(game.forecast(fresh).gold > 0);
@@ -71,6 +78,9 @@ for (const staleCopy of [
 for (const plainLabel of ["武力", "统率", "谋略", "治理", "魅力", "人员开支", "粮食消耗", "当前战况", "休养"]) {
   assert.ok(source.includes(plainLabel), `界面应保留白话标签：${plainLabel}`);
 }
+for (const removedCopy of ["CAMPAIGN_AP_COST", "行动点", "结束本季", "apText", "每个季度只有三次重要行动"]) {
+  assert.ok(!source.includes(removedCopy) && !html.includes(removedCopy), `实时版本不应保留旧行动点文案：${removedCopy}`);
+}
 
 const beforeFields = game.territoryOutput(fresh, "ravenstone").grain;
 fresh.territories.ravenstone.buildings.fields++;
@@ -84,7 +94,7 @@ const session = game.startBattle(battleState, {
   plan: "assault"
 }, fixed(.8));
 assert.ok(session, "应能向相邻领地开战");
-assert.equal(battleState.ap, 1, "一次远征应占用本季大部分行动力");
+assert.equal(battleState.usedActions.campaign, 1, "一次远征应标记为本季已出征");
 assert.ok(battleState.grain < 125, "远征应消耗军粮");
 assert.ok(game.stageOptions(battleState, session).some(option => option.id === "forced"), "雷纳德应提出抢攻");
 game.applyBattleChoice(battleState, "forced", fixed(.9));
@@ -103,7 +113,6 @@ assert.ok(battleState.lastBattle.garrisoned > 0, "夺城后必须从野战军抽
 assert.equal(battleState.campaignCooldown, 3, "胜利后应进入三个季度休整期");
 const postWinActions = battleState.usedActions;
 battleState.usedActions = {};
-battleState.ap = 3;
 assert.equal(game.startBattle(battleState, { targetId: "pineford", leaderIds: ["player", "renard"], troops: 20, plan: "steady" }, fixed(.8)), null, "休整期内不得连续滚雪球出征");
 battleState.usedActions = postWinActions;
 
@@ -154,8 +163,70 @@ game.finishBattle(measuredRetreat, "retreat", fixed(1));
 assert.equal(measuredRetreat.officers.find(o => o.id === "renard").grievance, renardGrievance, "未占尽优势时撤退不应触发雷纳德特质惩罚");
 
 const saveRoundTrip = game.hydrateState(JSON.parse(JSON.stringify(battleState)));
-assert.equal(saveRoundTrip.version, 1);
+assert.equal(saveRoundTrip.version, 2);
 assert.equal(saveRoundTrip.territories.ashfield.owner, "player");
+
+const legacyV1 = game.createInitialState("V1迁移", "oath", "standard");
+legacyV1.version = 1;
+legacyV1.ap = 2;
+delete legacyV1.clock;
+delete legacyV1.jobs;
+delete legacyV1.tech;
+delete legacyV1.factions;
+const migratedV1 = game.migrateSave(JSON.parse(JSON.stringify(legacyV1)), 1000);
+assert.equal(migratedV1.version, 2);
+assert.equal("ap" in migratedV1, false, "V1行动点字段应在迁移后移除");
+assert.ok(migratedV1.clock.seasonEndsAt > migratedV1.clock.seasonStartedAt);
+assert.deepEqual(migratedV1.jobs, []);
+assert.ok(migratedV1.tech && migratedV1.factions);
+assert.equal(game.selfCheck(migratedV1).ok, true);
+
+const jobState = game.createInitialState("队列测试", "oath", "standard");
+const job = game.startJob(jobState, { type: "BUILD", queueKey: "build:ravenstone", territoryId: "ravenstone", startedAt: 1000, endAt: 2000 });
+assert.ok(job && jobState.jobs.length === 1);
+assert.equal(game.getQueueUsage(jobState, "build:ravenstone"), 1);
+assert.equal(game.processCompletedJobs(jobState, 1500), 0);
+assert.equal(game.processCompletedJobs(jobState, 2000), 1);
+assert.equal(game.processCompletedJobs(jobState, 3000), 0, "已完成队列不得重复结算");
+
+const buildState = game.createInitialState("建设队列", "oath", "standard");
+const fieldsLevel = buildState.territories.ravenstone.buildings.fields;
+const buildJob = game.startJob(buildState, { type: "BUILD", territoryId: "ravenstone", queueKey: "build:ravenstone", startedAt: 1000, endAt: 2000, payload: { buildingType: "fields" } });
+assert.ok(buildJob);
+assert.equal(buildState.territories.ravenstone.buildings.fields, fieldsLevel);
+assert.equal(game.processCompletedJobs(buildState, 2000), 1);
+assert.equal(buildState.territories.ravenstone.buildings.fields, fieldsLevel + 1);
+assert.equal(game.processCompletedJobs(buildState, 3000), 0, "建设完成也不得重复结算");
+
+const researchState = game.createInitialState("研究队列", "oath", "standard");
+const beforeResearchGrain = game.territoryOutput(researchState, "ravenstone").grain;
+const researchJob = game.queueResearch(researchState, "agriculture", "heavy_plow", 1000);
+assert.ok(researchJob && researchJob.queueKey === "research:global");
+assert.equal(game.canResearch(researchState, "administration", "tax_registry"), false, "全局研究队列只能同时运行一项");
+assert.equal(game.processCompletedJobs(researchState, 2000), 0);
+assert.equal(game.processCompletedJobs(researchState, researchJob.endAt), 1);
+assert.equal(game.techCompleted(researchState, "heavy_plow"), true);
+assert.ok(game.territoryOutput(researchState, "ravenstone").grain > beforeResearchGrain, "农业科技应提高粮食产出");
+
+const marchState = game.createInitialState("行军测试", "oath", "standard");
+const marchJob = game.startMarch(marchState, "army_1", "ashfield", 1000);
+assert.ok(marchJob && marchState.armies[0].status === "marching");
+assert.equal(game.startMarch(marchState, "army_1", "pineford", 1100), null, "行军中的军团不得再次瞬移");
+assert.equal(game.processCompletedJobs(marchState, marchJob.endAt), 1);
+assert.equal(marchState.armies[0].locationId, "ashfield");
+
+const aiState = game.createInitialState("AI测试", "oath", "standard");
+aiState.turn = 2;
+assert.ok(aiState.factions.wolf.armies.length === 1 && aiState.factions.wolf.gold > 0);
+assert.equal(game.runAiTurn(aiState, () => 0), "marching", "敌方AI应从真实军团发起行军");
+assert.ok(aiState.jobs.some(job => job.type === "MARCH" && job.armyId === "wolf_army_1"));
+assert.equal(marchState.armies[0].status, "idle");
+
+const clockState = game.createInitialState("时钟测试", "oath", "standard");
+const clockStart = clockState.clock.seasonStartedAt;
+clockState.clock.seasonEndsAt = clockStart + 1;
+assert.equal(game.advanceSeasonAuto(clockState, clockStart + 1), 1);
+assert.equal(clockState.turn, 1);
 
 const legacy = game.createInitialState("旧存档", "oath", "standard");
 delete legacy.army;
