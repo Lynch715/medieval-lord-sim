@@ -4,6 +4,7 @@ const SAVE_KEY = "iron-crown-lord-save-v1";
 const VERSION = 2;
 const MAX_TURNS = 48;
 const CROWN_OPEN_TURN = 24;
+const MAP_IMAGE = "assets/image2.webp";
 const TIME_CONFIG = {
   seasonDurationMs: 5 * 60 * 1000,
   logicTickMs: 1000,
@@ -122,6 +123,15 @@ Object.entries(EXTRA_TERRITORIES).forEach(([id, [name, region, x, y, tag, adj]])
 });
 
 const playableTerritoryIds = () => Object.keys(TERRITORY_DEFS).filter(id => TERRITORY_DEFS[id].playable !== false);
+
+const CITY_ACTION_DEFS = {
+  scout: { name: "派出斥候", note: "花2金币，记录守军与地形两季。", cost: { gold: 2 } },
+  envoy: { name: "派使者谈判", note: "花8金币，提高城市对渡鸦家的信任。", cost: { gold: 8 } },
+  trade: { name: "设立商站", note: "花12金币，四季内每季带回额外税金。", cost: { gold: 12 } },
+  raid: { name: "断其粮道", note: "花6粮食，削弱敌城守军，但会增加战争疲劳。", cost: { grain: 6 } },
+  charter: { name: "签订城约", note: "中立城市信任足够后，可不经攻城纳入北境联盟。", cost: { gold: 24, grain: 10 } },
+  steward: { name: "派人整顿", note: "花6金币，提高我方城市稳定度与守军。", cost: { gold: 6 } }
+};
 
 const OFFICER_DEFS = {
   player: { name: "罗恩", title: "领主", portrait: "assets/player.webp", side: "player", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "亲临阵前", traitText: "领主出战时，本场军心最低按45点计算；各类选择会累计统治风格。", loyalty: 100, ambition: 55 },
@@ -554,6 +564,97 @@ const officer = (s, id) => s.officers.find(o => o.id === id);
 const ownedOfficers = s => s.officers.filter(o => o.side === "player");
 const ownTerritoryIds = s => Object.keys(s.territories).filter(id => TERRITORY_DEFS[id]?.playable !== false && s.territories[id].owner === "player");
 const owns = (s, id) => s.territories[id]?.owner === "player";
+const cityRelation = (s, id) => {
+  if (owns(s, id)) return 100;
+  const territory = s.territories[id];
+  const base = territory?.owner === "neutral" ? 0 : -18;
+  return clamp(Math.round((s.cityRelations?.[id] ?? base)), -100, 100);
+};
+const cityTradeActive = (s, id) => (s.cityTradeposts?.[id] || -1) >= s.turn;
+const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= s.turn;
+
+function cityActionLockKey(id, action) { return `city_${id}_${action}`; }
+
+function cityActionAvailable(s, id, action) {
+  const d = TERRITORY_DEFS[id];
+  const t = s.territories[id];
+  if (!d || !t || !CITY_ACTION_DEFS[action] || s.battleSession) return false;
+  if ((s.seasonLocks?.[cityActionLockKey(id, action)] || 0) >= 1) return false;
+  if (action === "scout") return !owns(s, id);
+  if (action === "envoy") return !owns(s, id) && !d.final;
+  if (action === "trade") return !d.final && !cityTradeActive(s, id);
+  if (action === "raid") return d.playable !== false && !owns(s, id) && t.owner !== "neutral";
+  if (action === "charter") return d.playable === false && t.owner === "neutral" && cityRelation(s, id) >= 24;
+  if (action === "steward") return owns(s, id);
+  return false;
+}
+
+function cityActionCostMet(s, action) {
+  const cost = CITY_ACTION_DEFS[action]?.cost || {};
+  return (s.gold || 0) >= (cost.gold || 0) && (s.grain || 0) >= (cost.grain || 0);
+}
+
+function cityAction(s, id, action) {
+  if (!cityActionAvailable(s, id, action)) return false;
+  if (!cityActionCostMet(s, action)) return false;
+  const d = TERRITORY_DEFS[id];
+  const t = s.territories[id];
+  const cost = CITY_ACTION_DEFS[action].cost;
+  s.gold -= cost.gold || 0;
+  s.grain -= cost.grain || 0;
+  s.seasonLocks ||= {};
+  s.seasonLocks[cityActionLockKey(id, action)] = 1;
+  s.cityRelations ||= {};
+  s.cityIntel ||= {};
+  s.cityTradeposts ||= {};
+  let text = "";
+  if (action === "scout") {
+    s.cityIntel[id] = s.turn + 2;
+    text = `斥候从${d.name}带回城防、粮道与地形记录。`;
+  } else if (action === "envoy") {
+    s.cityRelations[id] = clamp(cityRelation(s, id) + (t.owner === "neutral" ? 14 : 9), -100, 100);
+    s.renown = clamp(s.renown + 1);
+    text = `${d.name}的议事厅收下了礼物。当地对渡鸦家的信任提高到${cityRelation(s, id)}。`;
+  } else if (action === "trade") {
+    s.cityTradeposts[id] = s.turn + 4;
+    text = `商队在${d.name}挂起渡鸦旗。商站将在四季内带回额外税金。`;
+  } else if (action === "raid") {
+    t.guard = Math.max(4, t.guard - 5);
+    s.warWeariness = clamp(s.warWeariness + 4);
+    s.renown = clamp(s.renown + 1);
+    text = `夜袭烧掉了${d.name}的一批粮车，守军减少5人，但北境开始传唱你的名字。`;
+  } else if (action === "charter") {
+    t.owner = "player";
+    t.guard = Math.max(10, Math.round(t.guard * .55));
+    t.stability = clamp(Math.max(52, t.stability));
+    t.garrison = t.garrison || emptyComposition();
+    t.garrison.levy += 6;
+    s.cityRelations[id] = 100;
+    s.legitimacy = clamp(s.legitimacy + 3);
+    s.renown = clamp(s.renown + 3);
+    text = `${d.name}签下城约，承认渡鸦家保护商路与旧规矩。它成为你的新领地，不必先攻城。`;
+  } else if (action === "steward") {
+    t.stability = clamp(t.stability + 8);
+    t.guard += 5;
+    s.support = clamp(s.support + 1);
+    text = `治理官抵达${d.name}，清点仓库、修补城门，稳定度提高。`;
+  }
+  s.lastAction = { name: `${d.name} · ${CITY_ACTION_DEFS[action].name}`, text };
+  log(s, action === "raid" ? "warn" : "info", text);
+  return true;
+}
+
+function cityActionOptions(s, id) {
+  const d = TERRITORY_DEFS[id];
+  const t = s.territories[id];
+  if (!d || !t) return [];
+  const options = ["scout", "envoy", "trade", "raid", "charter", "steward"].filter(action => cityActionAvailable(s, id, action));
+  return options.map(action => {
+    const def = CITY_ACTION_DEFS[action];
+    const cost = [def.cost.gold ? `${def.cost.gold}金` : "", def.cost.grain ? `${def.cost.grain}粮` : ""].filter(Boolean).join(" · ");
+    return { id: action, name: def.name, note: `${def.note}${cost ? `（${cost}）` : ""}`, disabled: !cityActionCostMet(s, action) };
+  });
+}
 
 function crestSvg(faction, title = "") {
   const path = CREST_PATHS[faction] || CREST_PATHS.player;
@@ -868,6 +969,9 @@ function createInitialState(name, oath, difficulty) {
     factions: {},
     usedActions: {},
     seasonLocks: {},
+    cityRelations: {},
+    cityIntel: {},
+    cityTradeposts: {},
     battles: 0, wins: 0, casualties: 0,
     lastAction: null,
     lastBattle: null,
@@ -926,6 +1030,9 @@ function hydrateV2(raw) {
     raw.tech[branch].level = Math.max(0, Math.round(raw.tech[branch].level || raw.tech[branch].completed.length));
   });
   raw.factions ||= {};
+  raw.cityRelations ||= {};
+  raw.cityIntel ||= {};
+  raw.cityTradeposts ||= {};
   raw.pendingDecisions ||= [];
   raw.seenEvents ||= [];
   raw.seenNpcEvents ||= [];
@@ -1086,6 +1193,8 @@ function forecast(s) {
     acc.grain += out.grain;
     return acc;
   }, { gold: 0, grain: 0 });
+  const activeTradeposts = Object.keys(s.cityTradeposts || {}).filter(id => cityTradeActive(s, id)).length;
+  gross.gold += activeTradeposts * 2;
   const ysabel = ownedOfficers(s).some(o => o.id === "ysabel" && !o.injured);
   const winterExtra = season.id === "winter" ? Math.ceil(subjects(s) / 35 * difficultyOf(s).winter) : 0;
   const seedReserve = season.id === "autumn" ? ownTerritoryIds(s).length * 2 : 0;
@@ -1099,7 +1208,7 @@ function forecast(s) {
   const storageCap = 105 + ownTerritoryIds(s).length * 45 + fieldLevels * 35;
   const projected = s.grain + gross.grain - grainCost;
   const spoilage = Math.max(0, Math.round((projected - storageCap) * .18));
-  return { ...gross, grainCost, goldCost, storageCap, spoilage, netGold: gross.gold - goldCost, netGrain: gross.grain - grainCost - spoilage };
+  return { ...gross, tradeposts: activeTradeposts, grainCost, goldCost, storageCap, spoilage, netGold: gross.gold - goldCost, netGrain: gross.grain - grainCost - spoilage };
 }
 
 function buildingCost(s, id, type) {
@@ -2209,19 +2318,29 @@ function domainCard(id) {
 function renderMap() {
   const panel = $("panel");
   const attackable = attackableTerritories(S, "army_1");
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE NORTHERN MARCH</span><h2>北境战线</h2><p>金边闪烁的据点可以进攻，明亮连线表示与我方相邻的边界。王冠谷不再按年份开放，而是看领地、威望、攻城工程和第一军团规模。</p>${metrics([[ownTerritoryIds(S).length, "已控制"], [attackable.length, "可进攻"], [factionTerritories(S, "wolf").length, "狼牙领地"], [factionTerritories(S, "river").length, "河望领地"]])}</section>
-    <div class="section-head"><h2>北境地图</h2><span>点击据点查看详情；相邻敌城可制定远征</span></div>
-    <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}</div><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div><div class="map-inspector">${territorySummary(S.selectedTerritoryId || "ravenstone")}</div></div>`;
+  const selectedId = S.selectedTerritoryId || "ravenstone";
+  const controlled = ownTerritoryIds(S).length;
+  const activeTradeposts = Object.keys(S.cityTradeposts || {}).filter(id => cityTradeActive(S, id)).length;
+  const trustedCities = Object.keys(S.cityRelations || {}).filter(id => !owns(S, id) && cityRelation(S, id) >= 24).length;
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE NORTHERN MARCH · ONE CROWN</span><h2>统一北境，从一座城开始</h2><p>这里不是一张静态地图。每一座城市都有粮道、城门、商人和自己的记忆。点击城市派使者、设商站、侦察敌情，或把它交给军团。七座主城决定王冠归属，外围城镇决定你能不能守住它。</p>${metrics([[`${controlled} / 7`, "主城控制"], [attackable.length, "相邻战场"], [trustedCities, "可签城约"], [activeTradeposts, "运行商站"]])}</section>
+    <div class="unification-track"><div><b>统一进度</b><span>占领主城、建立商路，并让外围城市承认你的保护</span></div><strong>${Math.round(controlled / 7 * 100)}%</strong><i style="width:${Math.round(controlled / 7 * 100)}%"></i></div>
+    <div class="section-head"><h2>北境地图</h2><span>36座城市 · 金边为可出征目标 · 点击查看城镇操作</span></div>
+    <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}<span class="map-legend-note">商站 ${activeTradeposts} · 信任达24可签城约</span></div><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div><div class="map-inspector">${territorySummary(S, selectedId, attackable)}</div></div>`;
   panel.querySelectorAll("[data-map-territory]").forEach(button => button.addEventListener("click", () => {
     const id = button.dataset.mapTerritory;
     S.selectedTerritoryId = id;
-    if (!attackable.includes(id)) {
-      const crownLocked = TERRITORY_DEFS[id].final && !crownAccessMet(S);
-      saveGame(); renderMap();
-      toast(owns(S, id) ? `${TERRITORY_DEFS[id].name}由你控制` : crownLocked ? crownRequirementText(S) : "这块领地尚未与我方接壤");
-      return;
-    }
-    battleDraft.targetId = id;
+    saveGame(); renderMap();
+    toast(owns(S, id) ? `${TERRITORY_DEFS[id].name}由你控制` : attackable.includes(id) ? `${TERRITORY_DEFS[id].name}已接壤，可以制定远征` : `${TERRITORY_DEFS[id].name}等待你的使者`);
+  }));
+  panel.querySelectorAll("[data-city-action]").forEach(button => button.addEventListener("click", () => {
+    const id = button.dataset.cityId;
+    const action = button.dataset.cityAction;
+    if (!cityAction(S, id, action)) { toast("资源不足，或本季已经安排过这项城市行动"); return; }
+    saveGame(); renderMap();
+    toast(S.lastAction.text);
+  }));
+  panel.querySelectorAll("[data-city-attack]").forEach(button => button.addEventListener("click", () => {
+    battleDraft.targetId = button.dataset.cityAttack;
     S.tab = "campaign";
     saveGame(); renderAll(); resetPageScroll();
   }));
@@ -2247,15 +2366,20 @@ function mapNode(id, attackable) {
   const mine = t.owner === "player";
   const canAttack = attackable.includes(id);
   const locked = d.final && !crownAccessMet(S);
-  const unavailable = d.playable === false;
-  return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${canAttack ? "attackable" : ""} ${locked || unavailable ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%" ${unavailable ? "aria-label=\"地图节点\"" : ""}>${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${unavailable ? "地图节点" : canAttack ? "可出征" : mine ? "我方 · " + t.guard : `守军 ${t.guard}`}</small></span></button>`;
+  const minor = d.playable === false;
+  return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${minor ? "minor" : ""} ${canAttack ? "attackable" : ""} ${locked ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%">${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${canAttack ? "可出征" : mine ? "我方 · " + t.guard : minor ? cityRelation(S, id) >= 24 ? "可签城约" : "可互动" : locked ? "条件未满足" : `守军 ${t.guard}`}</small></span></button>`;
 }
 
-function territorySummary(id) {
+function territorySummary(s, id, attackable = []) {
   const d = TERRITORY_DEFS[id];
-  const t = S.territories[id];
+  const t = s.territories[id];
   const faction = FACTIONS[t.owner];
-  return `<article style="--owner-color:${faction.color}"><small style="color:${faction.color}">${faction.name}</small><h3>${d.name}</h3><p>${d.terrain}<br>守军 ${t.guard} · 稳定 ${Math.round(t.stability)}</p></article>`;
+  const relation = cityRelation(s, id);
+  const actions = cityActionOptions(s, id);
+  const intel = cityIntelActive(s, id) ? "斥候情报有效" : "情报会随季节过时";
+  const actionHtml = actions.length ? `<div class="city-actions">${actions.map(action => `<button data-city-action="${action.id}" data-city-id="${id}" ${action.disabled ? "disabled" : ""}><b>${action.name}</b><small>${action.note}</small></button>`).join("")}</div>` : `<p class="city-empty">本季暂时没有适合的城市行动。${t.owner !== "player" && d.playable !== false ? "先派使者，提高信任后可以签城约。" : ""}</p>`;
+  const attack = attackable.includes(id) ? `<button class="city-attack-btn" data-city-attack="${id}">转到征战页，制定远征</button>` : "";
+  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${d.region}</small><h3>${d.name}</h3></div><b class="city-relation">信任 ${relation}</b></div><p>${d.terrain} · 守军 ${t.guard} · 稳定 ${Math.round(t.stability)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span>${cityTradeActive(s, id) ? " · 商站运行中" : ""}</p>${attack}${actionHtml}</article>`;
 }
 
 function terrainAdvice(targetId, composition) {
@@ -2698,7 +2822,7 @@ if (typeof module !== "undefined" && module.exports) {
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, CROWN_OPEN_TURN, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, armyEntity, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2,
-    migrateSave, selfCheck
+    migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, cityRelation, CITY_ACTION_DEFS, MAP_IMAGE
   };
 }
 
