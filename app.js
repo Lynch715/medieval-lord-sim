@@ -32,7 +32,8 @@ const TECH_DEFS = {
   ],
   military: [
     { id: "refined_iron", name: "精炼铁器", desc: "解锁披甲骑士征募。", cost: { knowledge: 10, gold: 22 }, requires: [] },
-    { id: "longbow", name: "长弓", desc: "弓箭手征募量 +3。", cost: { knowledge: 18, gold: 32 }, requires: ["refined_iron"] }
+    { id: "longbow", name: "长弓", desc: "弓箭手征募量 +3。", cost: { knowledge: 18, gold: 32 }, requires: ["refined_iron"] },
+    { id: "war_engineering", name: "攻城工程", desc: "解锁进军王冠谷的资格；没有攻城器械，王城不会打开城门。", cost: { knowledge: 24, gold: 45 }, requires: ["longbow"] }
   ],
   administration: [
     { id: "tax_registry", name: "税籍", desc: "所有领地金币收入 +8%。", cost: { knowledge: 10, gold: 20 }, requires: [] },
@@ -82,7 +83,7 @@ const TERRITORY_DEFS = {
   highpass: { name: "北境关", region: "wolf_march", x: 53, y: 15, type: "fort", terrain: "山地要塞", terrainTags: ["mountain", "fortified"], owner: "wolf", gold: 6, grain: 13, people: 72, guard: 54, stability: 76, final: false, playable: true, adj: ["pineford", "crownvale"], desc: "扼守山口的石堡。难攻，却能挡住整个北方的袭扰。" },
   crossford: { name: "十字渡", region: "riverlands", x: 44, y: 79, type: "town", terrain: "河谷集市", terrainTags: ["river", "plains"], owner: "river", gold: 15, grain: 18, people: 116, guard: 38, stability: 72, final: false, playable: true, adj: ["ashfield", "riverwatch", "crownvale"], desc: "两条商路在此交汇。这里的税吏比守军更让商人害怕。" },
   riverwatch: { name: "河望城", region: "riverlands", x: 72, y: 77, type: "castle", terrain: "河畔石城", terrainTags: ["river", "fortified"], owner: "river", gold: 14, grain: 24, people: 138, guard: 49, stability: 78, final: false, playable: true, adj: ["crossford", "crownvale"], desc: "艾芙琳伯爵的坚城。城下水网密布，骑兵难以展开。" },
-  crownvale: { name: "王冠谷", region: "royal_crown", x: 81, y: 42, type: "capital", terrain: "公爵王城", terrainTags: ["plains", "fortified", "capital"], owner: "crown", gold: 23, grain: 28, people: 186, guard: 68, stability: 82, final: true, playable: true, adj: ["highpass", "crossford", "riverwatch"], desc: "摄政公爵把铁冠锁在这里。控制其余六块领地后才能进攻。" }
+  crownvale: { name: "王冠谷", region: "royal_crown", x: 81, y: 42, type: "capital", terrain: "公爵王城", terrainTags: ["plains", "fortified", "capital"], owner: "crown", gold: 23, grain: 28, people: 186, guard: 68, stability: 82, final: true, playable: true, adj: ["highpass", "crossford", "riverwatch"], desc: "摄政公爵把铁冠锁在这里。只有准备好攻城器械、威望和足够主力，王城才会打开城门。" }
 };
 
 const EXTRA_TERRITORIES = {
@@ -188,6 +189,30 @@ function canResearch(s, branch, techId) {
   if (!tech || !branchState || branchState.completed.includes(techId) || researchQueueJob(s)) return false;
   if (tech.requires.some(id => !techCompleted(s, id))) return false;
   return s.knowledge >= tech.cost.knowledge && s.gold >= tech.cost.gold;
+}
+
+function crownRequirements(s) {
+  return {
+    territories: ownTerritoryIds(s).length >= 6,
+    renown: (s?.renown || 0) >= 60,
+    siege: techCompleted(s, "war_engineering"),
+    army: armyTotal(s, "army_1") >= 80
+  };
+}
+
+function crownAccessMet(s) {
+  const requirements = crownRequirements(s);
+  return Object.values(requirements).every(Boolean);
+}
+
+function crownRequirementText(s) {
+  const requirements = crownRequirements(s);
+  const missing = [];
+  if (!requirements.territories) missing.push("控制6块领地");
+  if (!requirements.renown) missing.push("威望60");
+  if (!requirements.siege) missing.push("完成攻城工程");
+  if (!requirements.army) missing.push("第一军团80人");
+  return missing.length ? `还需：${missing.join("、")}` : "已满足进军王冠谷的条件";
 }
 
 function primaryTerritoryId(s) {
@@ -604,10 +629,16 @@ function territoryGarrison(s, territoryId) {
 }
 
 function playerComposition(s) {
-  const total = emptyComposition();
-  (s?.armies || []).filter(army => army.owner === "player").forEach(army => Object.keys(total).forEach(type => { total[type] += Math.max(0, Math.round(army.composition?.[type] || 0)); }));
-  ownTerritoryIds(s).forEach(id => Object.keys(total).forEach(type => { total[type] += Math.max(0, Math.round(territoryGarrison(s, id)[type] || 0)); }));
-  return total;
+  const split = playerCompositionSplit(s);
+  return Object.keys(split.mobile).reduce((total, type) => { total[type] = split.mobile[type] + split.garrison[type]; return total; }, emptyComposition());
+}
+
+function playerCompositionSplit(s) {
+  const mobile = emptyComposition();
+  const garrison = emptyComposition();
+  (s?.armies || []).filter(army => army.owner === "player").forEach(army => Object.keys(mobile).forEach(type => { mobile[type] += Math.max(0, Math.round(army.composition?.[type] || 0)); }));
+  ownTerritoryIds(s).forEach(id => Object.keys(garrison).forEach(type => { garrison[type] += Math.max(0, Math.round(territoryGarrison(s, id)[type] || 0)); }));
+  return { mobile, garrison };
 }
 
 function armyTotal(s, armyId = null) {
@@ -1058,10 +1089,12 @@ function forecast(s) {
   const ysabel = ownedOfficers(s).some(o => o.id === "ysabel" && !o.injured);
   const winterExtra = season.id === "winter" ? Math.ceil(subjects(s) / 35 * difficultyOf(s).winter) : 0;
   const seedReserve = season.id === "autumn" ? ownTerritoryIds(s).length * 2 : 0;
-  const army = playerComposition(s);
-  let grainCost = Math.ceil(subjects(s) / 34 + army.levy / 4 + army.archers / 4 + army.knights / 3) + winterExtra + seedReserve;
+  const armySplit = playerCompositionSplit(s);
+  const army = armySplit.mobile;
+  const garrison = armySplit.garrison;
+  let grainCost = Math.ceil(subjects(s) / 34 + army.levy / 4 + army.archers / 4 + army.knights / 3 + garrison.levy / 8 + garrison.archers / 8 + garrison.knights / 6) + winterExtra + seedReserve;
   if (ysabel) grainCost = Math.ceil(grainCost * .92);
-  const goldCost = Math.ceil(army.levy * .12 + army.archers * .23 + army.knights * .55) + ownedOfficers(s).filter(o => o.id !== "player").length;
+  const goldCost = Math.ceil(army.levy * .12 + army.archers * .23 + army.knights * .55 + garrison.levy * .06 + garrison.archers * .12 + garrison.knights * .28) + ownedOfficers(s).filter(o => o.id !== "player").length;
   const fieldLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.fields || 0), 0);
   const storageCap = 105 + ownTerritoryIds(s).length * 45 + fieldLevels * 35;
   const projected = s.grain + gross.grain - grainCost;
@@ -1517,7 +1550,7 @@ function attackableTerritories(s, armyId = "army_1") {
     const d = TERRITORY_DEFS[id];
     if (d.playable === false) return false;
     if (mine.has(id)) return false;
-    if (d.final && (mine.size < 6 || s.turn < CROWN_OPEN_TURN)) return false;
+    if (d.final && !crownAccessMet(s)) return false;
     return origin?.adj?.includes(id) && !mine.has(id);
   });
 }
@@ -2176,16 +2209,16 @@ function domainCard(id) {
 function renderMap() {
   const panel = $("panel");
   const attackable = attackableTerritories(S, "army_1");
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE NORTHERN MARCH</span><h2>北境战线</h2><p>金边闪烁的据点可以进攻，明亮连线表示与我方相邻的边界。控制其余六块领地并进入第7年后，才能进攻王冠谷。</p>${metrics([[ownTerritoryIds(S).length, "已控制"], [attackable.length, "可进攻"], [factionTerritories(S, "wolf").length, "狼牙领地"], [factionTerritories(S, "river").length, "河望领地"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE NORTHERN MARCH</span><h2>北境战线</h2><p>金边闪烁的据点可以进攻，明亮连线表示与我方相邻的边界。王冠谷不再按年份开放，而是看领地、威望、攻城工程和第一军团规模。</p>${metrics([[ownTerritoryIds(S).length, "已控制"], [attackable.length, "可进攻"], [factionTerritories(S, "wolf").length, "狼牙领地"], [factionTerritories(S, "river").length, "河望领地"]])}</section>
     <div class="section-head"><h2>北境地图</h2><span>点击据点查看详情；相邻敌城可制定远征</span></div>
     <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}</div><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div><div class="map-inspector">${territorySummary(S.selectedTerritoryId || "ravenstone")}</div></div>`;
   panel.querySelectorAll("[data-map-territory]").forEach(button => button.addEventListener("click", () => {
     const id = button.dataset.mapTerritory;
     S.selectedTerritoryId = id;
     if (!attackable.includes(id)) {
-      const crownLocked = TERRITORY_DEFS[id].final && (ownTerritoryIds(S).length < 6 || S.turn < CROWN_OPEN_TURN);
+      const crownLocked = TERRITORY_DEFS[id].final && !crownAccessMet(S);
       saveGame(); renderMap();
-      toast(owns(S, id) ? `${TERRITORY_DEFS[id].name}由你控制` : crownLocked ? `控制其余六块领地并进入第7年后，才能进攻王冠谷` : "这块领地尚未与我方接壤");
+      toast(owns(S, id) ? `${TERRITORY_DEFS[id].name}由你控制` : crownLocked ? crownRequirementText(S) : "这块领地尚未与我方接壤");
       return;
     }
     battleDraft.targetId = id;
@@ -2213,7 +2246,7 @@ function mapNode(id, attackable) {
   const faction = FACTIONS[t.owner];
   const mine = t.owner === "player";
   const canAttack = attackable.includes(id);
-  const locked = d.final && (ownTerritoryIds(S).length < 6 || S.turn < CROWN_OPEN_TURN);
+  const locked = d.final && !crownAccessMet(S);
   const unavailable = d.playable === false;
   return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${canAttack ? "attackable" : ""} ${locked || unavailable ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%" ${unavailable ? "aria-label=\"地图节点\"" : ""}>${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${unavailable ? "地图节点" : canAttack ? "可出征" : mine ? "我方 · " + t.guard : `守军 ${t.guard}`}</small></span></button>`;
 }
@@ -2249,7 +2282,7 @@ function renderCampaign() {
   syncTroops(S);
   const panel = $("panel");
   const attackable = attackableTerritories(S);
-  const crownWait = ownTerritoryIds(S).length >= 6 && S.turn < CROWN_OPEN_TURN;
+  const crownWait = ownTerritoryIds(S).length >= 6 && !crownAccessMet(S);
   const targets = crownWait && !attackable.length ? ["crownvale"] : attackable;
   if (!targets.length) {
     const army = armyEntity(S, "army_1");
@@ -2278,14 +2311,14 @@ function renderCampaign() {
   panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>制定作战计划</h2><p>选择目标、出战人物、兵力和作战方式。只有位于目标相邻领地、且已完成整补的军团才能出征。</p>${metrics([[mainComp.levy, "长矛兵"], [mainComp.archers, "弓箭手"], [mainComp.knights, "披甲骑士"], [mainArmy?.status === "recovering" ? "整补中" : mainArmy?.status === "marching" ? "行军中" : "就绪", "第一军团"]])}${armyLocationHtml}</section>
     <div class="section-head"><h2>军队配置</h2><span>训练完成后进入本地驻军，不再直接加入远方军团</span></div>${armyRosterHtml()}
     <div class="section-head"><h2>作战计划</h2><span>战后由军团自己的整补队列决定下一次出征时间</span></div>
-    ${crownWait ? `<div class="campaign-lock-note">你已经控制其余六块领地。进入第7年后才能进攻王冠谷。现在可以继续招募和训练军队。</div>` : ""}
+    ${crownWait ? `<div class="campaign-lock-note">王冠谷仍未开放。${crownRequirementText(S)}。</div>` : ""}
     <div class="battle-layout"><div class="battle-targets">${targets.map(id => `<button class="target-row ${id === battleDraft.targetId ? "active" : ""} ${targetLocked && id === "crownvale" ? "locked" : ""}" data-target="${id}"><b>${TERRITORY_DEFS[id].name}</b><span>${targetLocked && id === "crownvale" ? "第7年开放" : `${FACTIONS[S.territories[id].owner].name} · ${TERRITORY_DEFS[id].terrain} · 守军${S.territories[id].guard}`}</span></button>`).join("")}</div>
     <div class="battle-form"><span class="form-label">作战方式</span><div class="plan-grid">${Object.entries(PLANS).map(([id, p]) => `<button class="plan-btn ${battleDraft.plan === id ? "active" : ""}" data-plan="${id}"><b>${p.name}</b><small>${p.desc}</small></button>`).join("")}</div>
     <span class="form-label">出战人物（最多3人）</span><div class="leader-checks">${available.map(o => `<div class="leader-check"><input id="lead_${o.id}" type="checkbox" data-leader="${o.id}" ${battleDraft.leaderIds.includes(o.id) ? "checked" : ""}><label for="lead_${o.id}">${esc(o.name)} · ${esc(o.title)}</label></div>`).join("")}</div>
     <span class="form-label">参战兵力：<b id="troopValue">${battleDraft.troops}</b> / ${mainArmyTotal}</span><input id="troopRange" class="troop-range" type="range" min="10" max="${Math.max(10, mainArmyTotal)}" value="${battleDraft.troops}">
     <div class="army-summary">本次出兵：<b>${compositionText(est.composition)}</b><br>${terrainAdvice(battleDraft.targetId, est.composition)} ${seasonOf(S).id === "winter" ? "严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>
     <div id="battleEstimate" class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测：<b>${est.label}</b><br>${battlePowerText(est.ratio)}预计伤亡${risk.low}—${risk.high}人，需要携带${supply}粮食。${battleFatigueText(est.fatigue)}${battleMoraleText(est.effectiveMorale, S.morale)}</div>
-    <button id="launchBattle" class="launch-btn ${battleRiskClass(est.ratio)}" ${targetLocked || !attackable.includes(battleDraft.targetId) || mainArmy?.status !== "idle" || mainArmyTotal < 10 || S.grain < supply || !battleDraft.leaderIds.length ? "disabled" : ""}>${targetLocked ? "王冠谷 · 第7年开放" : mainArmy?.status === "recovering" ? "军团整补中" : mainArmy?.status === "marching" ? "军团行军中" : S.grain < supply ? "军粮不足" : `出征 · ${TERRITORY_DEFS[battleDraft.targetId].name}`}</button></div></div>
+    <button id="launchBattle" class="launch-btn ${battleRiskClass(est.ratio)}" ${targetLocked || !attackable.includes(battleDraft.targetId) || mainArmy?.status !== "idle" || mainArmyTotal < 10 || S.grain < supply || !battleDraft.leaderIds.length ? "disabled" : ""}>${targetLocked ? "王冠谷 · 条件未满足" : mainArmy?.status === "recovering" ? "军团整补中" : mainArmy?.status === "marching" ? "军团行军中" : S.grain < supply ? "军粮不足" : `出征 · ${TERRITORY_DEFS[battleDraft.targetId].name}`}</button></div></div>
     ${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
   panel.querySelectorAll("[data-target]").forEach(button => button.addEventListener("click", () => { battleDraft.targetId = button.dataset.target; renderCampaign(); }));
   panel.querySelectorAll("[data-march-target]").forEach(button => button.addEventListener("click", () => {
@@ -2662,7 +2695,7 @@ if (typeof module !== "undefined" && module.exports) {
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, advanceSeason, checkDefeat,
-    enemyGuardCap, battleRiskClass, CROWN_OPEN_TURN, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
+    enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, CROWN_OPEN_TURN, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, armyEntity, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2,
     migrateSave, selfCheck

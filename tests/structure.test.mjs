@@ -381,12 +381,15 @@ Object.keys(unlockState.territories).forEach(id => {
 assert.ok(!game.attackableTerritories(unlockState).includes("crownvale"), "即使快速统一六领，王冠谷也不应在第7年前开放");
 unlockState.turn = game.CROWN_OPEN_TURN;
 unlockState.armies[0].locationId = "highpass";
-assert.ok(game.attackableTerritories(unlockState).includes("crownvale"), "统一六领且进入第7年后应开放王冠谷");
 unlockState.armies[0].composition = { levy: 120, archers: 35, knights: 25 };
 game.syncTroops(unlockState);
 unlockState.grain = 300;
 unlockState.morale = 95;
 unlockState.training = 35;
+unlockState.renown = 60;
+unlockState.tech.military.completed = ["refined_iron", "longbow", "war_engineering"];
+unlockState.tech.military.level = 3;
+assert.ok(game.attackableTerritories(unlockState).includes("crownvale"), "满足领地、威望、攻城工程和主力规模后应开放王冠谷");
 game.startBattle(unlockState, {
   targetId: "crownvale",
   leaderIds: ["player", "renard", "edmund"],
