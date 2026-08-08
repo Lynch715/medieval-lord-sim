@@ -192,7 +192,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 .minor-actions[open] summary::before { content: "−"; }
 .minor-actions summary span { float: right; color: #777a70; font-size: 11px; }
 .minor-actions .action-grid { padding: 0 12px 12px; }
-.action-card, .building-card, .domain-card, .territory-card, .officer-card, .plan-card { border: 1px solid var(--line); background: linear-gradient(145deg,rgba(31,34,28,.93),rgba(15,17,14,.96)); }
+.action-card, .building-card, .domain-card, .territory-card, .officer-card, .plan-card, .knight-card { border: 1px solid var(--line); background: linear-gradient(145deg,rgba(31,34,28,.93),rgba(15,17,14,.96)); }
 .action-card { display: flex; min-height: 205px; flex-direction: column; padding: 17px; }
 .action-icon { color: var(--gold); font: 26px var(--serif); }
 .action-card h3 { margin: 8px 0 7px; font: 18px var(--serif); }
@@ -220,6 +220,13 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .loyalty-track i { display: block; height: 100%; background: var(--green); }
 .officer-card.enemy .loyalty-track i { background: var(--red); }
 .officer-card.injured::after { content: "负伤"; position: absolute; left: 7px; top: 7px; padding: 4px 7px; background: var(--red); font-size: 10px; }
+.knight-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.knight-card { display: grid; grid-template-columns: 48px 1fr; min-height: 126px; }
+.knight-mark { display: grid; place-items: center; margin: 10px; border: 1px solid rgba(200,169,106,.35); color: var(--gold-light); font: 25px var(--serif); background: rgba(200,169,106,.08); }
+.knight-card .card-copy { padding: 12px 12px 12px 3px; }
+.knight-card p { margin: 7px 0 10px; color: #909288; font-size: 11px; line-height: 1.45; }
+.knight-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.knight-actions button { min-height: 31px; padding: 5px 8px; font-size: 11px; }
 
 .domain-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
 .domain-card { padding: 18px; }
@@ -346,6 +353,14 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .battle-unit-chip b { font: 13px var(--serif); }
 .battle-session-head { padding: 18px 20px; border-bottom: 1px solid var(--line); }
 .battle-session-head h2 { margin: 6px 0; font: 27px var(--serif); }
+.battle-timeline { display: flex; gap: 8px; margin: 13px 0 5px; }
+.battle-phase { display: flex; align-items: center; gap: 5px; color: #777b72; font-size: 11px; }
+.battle-phase i { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; font-style: normal; }
+.battle-phase.active { color: var(--gold-light); }
+.battle-phase.active i, .battle-phase.done i { border-color: var(--gold); background: rgba(200,169,106,.15); color: var(--gold-light); }
+.battle-situation { margin: 14px 20px 0; padding: 12px 14px; border: 1px solid rgba(200,169,106,.3); background: rgba(200,169,106,.06); }
+.battle-situation b { color: var(--gold-light); }
+.battle-situation p { margin: 5px 0 0; color: #b7b8ad; font-size: 12px; line-height: 1.55; }
 .momentum-label { display: flex; justify-content: space-between; margin-top: 15px; color: #8f9188; font-size: 10px; }
 .momentum-track { position: relative; height: 9px; margin-top: 6px; background: linear-gradient(90deg,#703b35,#242620 50%,#667b65); }
 .momentum-track::after { content: ""; position: absolute; left: 50%; top: -4px; width: 1px; height: 17px; background: #e2ddcd; }
@@ -363,6 +378,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .stage-choice b, .stage-choice small { display: block; }
 .stage-choice b { color: var(--gold-light); font: 16px var(--serif); }
 .stage-choice small { margin-top: 6px; color: #989a90; font-size: 11px; line-height: 1.5; }
+.stage-choice em { display: block; margin-top: 8px; color: #c8a96a; font-size: 10px; font-style: normal; }
 .battle-result { padding: 24px; text-align: center; }
 .battle-result strong { display: block; color: var(--gold-light); font: 54px var(--serif); }
 .battle-result p { color: #9b9c92; }
@@ -508,6 +524,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .hero-panel h2 { font-size: 24px; }
   .officer-card { grid-template-columns: 108px 1fr; }
   .officer-card .card-copy { padding: 12px; }
+  .knight-grid { grid-template-columns: 1fr; }
   .map-shell { padding: 10px; }
   .realm-map { width: 100%; height: 340px; min-height: 0; aspect-ratio: auto; }
   .map-node { min-width: 82px; padding: 4px 5px; }

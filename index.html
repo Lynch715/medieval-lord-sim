@@ -7,7 +7,7 @@
   <meta name="description" content="继承渡鸦堡，在四季经营、家臣政治与真实战争中夺取铁冠。">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23090a09' d='M4 4h56v56H4z'/%3E%3Cpath fill='none' stroke='%23c8a96a' stroke-width='4' d='M16 10h32v29c0 8-7 13-16 17-9-4-16-9-16-17z'/%3E%3Ctext x='32' y='40' text-anchor='middle' font-size='28' fill='%23ead7a2'%3ER%3C/text%3E%3C/svg%3E">
   <title>模拟中世纪领主 · 铁冠之路</title>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <div class="weather" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -40,9 +40,9 @@
       <h2>从今晚起，渡鸦堡的账都算在你名下</h2>
       <label class="field-block"><span>领主姓名</span><input id="playerName" maxlength="8" value="罗恩" autocomplete="off"></label>
       <div class="field-block">
-        <span>你准备采用哪种主将方略</span>
+        <span>你准备采用哪种领主方略</span>
         <div id="oathPicker" class="choice-grid">
-          <button class="choice-card active" data-oath="oath" type="button"><b>均衡</b><small>民心更高，武将关系更稳</small></button>
+          <button class="choice-card active" data-oath="oath" type="button"><b>均衡</b><small>民心更高，领主关系更稳</small></button>
           <button class="choice-card" data-oath="iron" type="button"><b>军略</b><small>开局军队和军心更强</small></button>
           <button class="choice-card" data-oath="wealth" type="button"><b>经营</b><small>开局金币更多，资源流量更高</small></button>
         </div>
@@ -89,7 +89,7 @@
         <article class="lord-card">
           <img src="assets/player.webp" alt="玩家领主">
           <div class="portrait-fade"></div>
-          <div class="lord-copy"><span id="oathBadge">均衡主将</span><h2 id="playerNameText">罗恩</h2><p>渡鸦堡 · 主将</p></div>
+          <div class="lord-copy"><span id="oathBadge">均衡领主</span><h2 id="playerNameText">罗恩</h2><p>渡鸦堡 · 领主</p></div>
         </article>
         <section class="side-panel glass">
           <div class="section-title"><h3>军政根基</h3><span id="territoryCount">1 / 7</span></div>
@@ -100,7 +100,7 @@
           <div class="meter-row"><span>战争疲劳</span><b id="wearinessText">0</b></div><div class="meter purple"><i id="wearinessBar"></i></div>
         </section>
         <section class="side-panel glass">
-          <div class="section-title"><h3>实时资源</h3><span id="netGoldText">+0.00 金/秒</span></div>
+          <div class="section-title"><h3>实时资源</h3><span id="netGoldText">+1金/分</span></div>
           <div id="forecastList" class="forecast-list"></div>
         </section>
       </aside>
@@ -109,7 +109,7 @@
         <nav id="gameNav" class="game-nav" aria-label="游戏功能">
           <button class="active" data-tab="hall"><span>总</span>总览</button>
           <button data-tab="domain"><span>发</span>发展</button>
-          <button data-tab="court"><span>将</span>武将</button>
+          <button data-tab="court"><span>领</span>领主</button>
           <button data-tab="campaign"><span>军</span>军队</button>
           <button data-tab="map"><span>图</span>地图</button>
           <button data-tab="chronicle"><span>志</span>战报</button>
@@ -133,6 +133,6 @@
   </section>
 
   <div id="toast" class="toast" role="status"></div>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
