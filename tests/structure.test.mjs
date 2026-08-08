@@ -17,6 +17,9 @@ assert.equal(Object.keys(game.TERRITORY_DEFS).length, 36, "地图数据应包含
 assert.equal(game.playableTerritoryIds().length, 7, "首批可征服区域仍保持7城战役范围");
 assert.equal(fresh.armies.length, 1);
 assert.equal(fresh.armies[0].locationId, "ravenstone");
+assert.equal(fresh.officers.filter(o => o.side === "player").length, 1, "开局只能有国王本人一名我方领主");
+assert.equal(fresh.officers.find(o => o.id === "player").title, "北境之王");
+assert.equal(fresh.officers.find(o => o.id === "renard").side, "locked", "未征服前其他立绘领主不应直接加入王庭");
 assert.equal(game.seasonOf(fresh).id, "spring");
 assert.equal(Object.keys(game.BUILDINGS).length, 10, "发展页应提供十类可升级建筑");
 assert.equal(game.BUILDING_MAX_LEVEL, 5, "建筑等级上限应支持五级成长");
@@ -114,6 +117,13 @@ const doctrineMarch = game.createInitialState("军令时间", "oath", "standard"
 doctrineMarch.tech.military.completed = ["field_doctrine"];
 const doctrineMarchJob = game.startMarch(doctrineMarch, "army_1", "ashfield", 1000);
 assert.ok(doctrineMarchJob.endAt < baseMarchJob.endAt, "野战条令应实际缩短行军时间");
+assert.ok(game.territoryDistance("ravenstone", "crownvale") > game.territoryDistance("ravenstone", "ashfield"), "远距离城堡应有更长行军时间");
+const longExpedition = game.createInitialState("地图远征", "oath", "standard");
+const longComposition = { levy: 12, archers: 4, knights: 2, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 };
+const longJob = game.startMarch(longExpedition, "army_1", "crossford", 1000, { battlePlan: { leaderIds: ["player"], composition: longComposition, troops: 18, plan: "steady" } });
+assert.ok(longJob && longJob.endAt > 1000, "地图出征应建立按距离计算的行军队列");
+game.processCompletedJobs(longExpedition, longJob.endAt);
+assert.ok(longExpedition.battleSession && longExpedition.battleSession.targetId === "crossford", "抵达敌城后应自动进入战斗状态");
 assert.equal(game.WORLD_EVENTS.length, 18, "应有18个领地动态事件");
 assert.equal(game.NPC_ARCS.length, 12, "六名关键人物应各有两段个人事件");
 assert.equal(game.WORLD_EVENTS.flatMap(event => event.options).length, 54, "18个领地事件应保留54个选择结果");
@@ -166,6 +176,7 @@ fresh.territories.ravenstone.buildings.fields++;
 assert.ok(game.territoryOutput(fresh, "ravenstone").grain > beforeFields, "农田升级应提高粮食产出");
 
 const battleState = game.createInitialState("战斗测试", "iron", "standard");
+battleState.officers.filter(o => ["renard", "ysabel"].includes(o.id)).forEach(o => { o.side = "player"; });
 const session = game.startBattle(battleState, {
   targetId: "ashfield",
   leaderIds: ["player", "renard", "ysabel"],
@@ -248,8 +259,8 @@ const oldPlayerCopy = game.createInitialState("旧称谓", "oath", "standard");
 oldPlayerCopy.officers.find(item => item.id === "player").title = "领主";
 oldPlayerCopy.officers.find(item => item.id === "player").traitText = "领主出战时，本场军心最低按45点计算";
 const normalizedPlayerCopy = game.hydrateState(JSON.parse(JSON.stringify(oldPlayerCopy)));
-assert.equal(normalizedPlayerCopy.officers.find(item => item.id === "player").title, "渡鸦领主", "旧存档玩家称谓应迁移为领主");
-assert.match(normalizedPlayerCopy.officers.find(item => item.id === "player").traitText, /领主出战/);
+assert.equal(normalizedPlayerCopy.officers.find(item => item.id === "player").title, "北境之王", "旧存档玩家称谓应迁移为国王");
+assert.match(normalizedPlayerCopy.officers.find(item => item.id === "player").traitText, /国王出战/);
 const duplicateOfficerSave = game.createInitialState("重复候选", "oath", "standard");
 duplicateOfficerSave.officers.push(JSON.parse(JSON.stringify(duplicateOfficerSave.officers.find(item => item.id === "maelis"))));
 const normalizedDuplicateSave = game.hydrateState(JSON.parse(JSON.stringify(duplicateOfficerSave)));
@@ -293,8 +304,10 @@ const researchJob = game.queueResearch(researchState, "agriculture", "heavy_plow
 assert.ok(researchJob && researchJob.queueKey === "research:global");
 
 const officerCandidateState = game.createInitialState("武将招募", "oath", "standard");
-const officerCandidate = officerCandidateState.officers.find(item => item.recruitable && item.side === "neutral");
-assert.ok(officerCandidate, "初始存档应提供可招募武将");
+const officerCandidate = officerCandidateState.officers.find(item => item.id === "oswin");
+officerCandidate.side = "neutral";
+officerCandidate.recruitable = true;
+assert.ok(officerCandidate, "征服后应能解锁可招募领主");
 const officerJob = game.startJob(officerCandidateState, { type: "OFFICER_RECRUIT", queueKey: `officer:${officerCandidate.id}`, startedAt: 1000, endAt: 2000, payload: { officerId: officerCandidate.id, startingLoyalty: officerCandidate.loyalty } });
 assert.ok(officerJob);
 assert.equal(game.processCompletedJobs(officerCandidateState, 2000), 1, "武将招募队列应能完成");
@@ -412,6 +425,7 @@ terrainState.morale = 9;
 assert.equal(game.battleEstimate(terrainState, "pineford", ["player", "ysabel"], 30, "steady").effectiveMorale, 45, "领主亲征时军心应至少按45计算");
 
 const governState = game.createInitialState("治政测试", "oath", "standard");
+governState.officers.filter(o => ["ysabel", "oswin"].includes(o.id)).forEach(o => { o.side = "player"; });
 const governedGold = game.territoryOutput(governState, "ravenstone").gold;
 governState.officers.find(o => o.id === "ysabel").injured = 2;
 governState.officers.find(o => o.id === "oswin").injured = 2;
@@ -468,6 +482,7 @@ const departureState = game.createInitialState("封臣出走", "oath", "standard
 departureState.territories.ashfield.owner = "player";
 departureState.territories.ashfield.fiefHolder = "edmund";
 const departingEdmund = departureState.officers.find(o => o.id === "edmund");
+departingEdmund.side = "player";
 departingEdmund.fief = "ashfield";
 departingEdmund.grievance = 80;
 departingEdmund.loyalty = 20;
@@ -483,6 +498,7 @@ game.startBattle(lockState, { targetId: "ashfield", leaderIds: ["player", "renar
 assert.equal(game.interactionLocked(lockState), true, "战役进行中应锁住内政交互");
 
 const unlockState = game.createInitialState("终局测试", "oath", "standard");
+unlockState.officers.filter(o => ["renard", "edmund"].includes(o.id)).forEach(o => { o.side = "player"; });
 Object.keys(unlockState.territories).forEach(id => {
   if (id !== "crownvale") unlockState.territories[id].owner = "player";
 });
