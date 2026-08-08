@@ -255,6 +255,18 @@ assert.equal(game.advanceSeasonAuto(pauseState, pauseEnds + 5000).seasons, 0, "�
 game.resumeWorld(pauseState, pauseStart + 5000);
 assert.equal(pauseState.clock.seasonEndsAt, pauseEnds + 4900, "恢复时应把暂停时长加回世界时间");
 
+const overnightState = game.createInitialState("离线保护", "oath", "standard");
+const overnightStart = overnightState.clock.seasonStartedAt;
+overnightState.clock.seasonEndsAt = overnightStart + 1;
+overnightState.grain = 0;
+overnightState.gold = -40;
+overnightState.crisis = { famine: 2, debt: 2, unrest: 1, checkedTurn: -1 };
+const overnightResult = game.advanceSeasonAuto(overnightState, overnightStart + 8 * 60 * 60 * 1000, { offline: true });
+assert.equal(overnightResult.seasons, 1, "离线一晚最多只结算一季");
+assert.equal(overnightState.ended, false, "离线期间不应直接触发领地崩溃");
+assert.equal(overnightState.jobs.some(job => job.type === "MARCH"), false, "离线期间不应凭空触发敌方行军");
+assert.ok(overnightState.crisis.famine < 2, "离线保护应给饥荒计数留出补救窗口");
+
 const legacy = game.createInitialState("旧存档", "oath", "standard");
 delete legacy.army;
 legacy.troops = 25;

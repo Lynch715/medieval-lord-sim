@@ -9,7 +9,8 @@ const TIME_CONFIG = {
   seasonDurationMs: 5 * 60 * 1000,
   logicTickMs: 1000,
   uiTickMs: 250,
-  maxOfflineSeasonCatchup: 4
+  // 离线只推进一季；长时间离开不应把玩家锁死在连续崩溃判定里。
+  maxOfflineSeasonCatchup: 1
 };
 
 const TECH_DEFAULTS = {
@@ -551,6 +552,7 @@ let audioContext = null;
 let ambientTimer = 0;
 let worldTimer = 0;
 let soundEnabled = true;
+let hiddenAt = 0;
 const AUDIO_KEY = "iron-crown-audio";
 
 const $ = id => typeof document === "undefined" ? null : document.getElementById(id);
@@ -1485,7 +1487,7 @@ function advanceSeason(s, options = {}) {
   if (s.battleSession) { if (s === S) toast("必须先结束当前战役"); return false; }
   const eventAt = Number.isFinite(options.at) ? options.at : Date.now();
   settleSeasonEconomy(s);
-  enemyPressure(s, options.rng || Math.random, eventAt);
+  if (!options.offline) enemyPressure(s, options.rng || Math.random, eventAt);
   s.officers.forEach(o => { if (o.injured > 0) o.injured--; });
   s.training = Math.max(0, s.training - 2);
   s.warWeariness = clamp(s.warWeariness - 9);
@@ -1499,7 +1501,14 @@ function advanceSeason(s, options = {}) {
     s.ended = true;
     s.endingReason = ownTerritoryIds(s).length >= 5 ? "great_lord" : "minor_lord";
   }
-  checkDefeat(s);
+  if (options.offline) {
+    // 离线期间不把饥荒、欠薪和民乱连续累计到结束；回到游戏后再由玩家处理。
+    s.crisis ||= { famine: 0, debt: 0, unrest: 0, checkedTurn: -1 };
+    s.crisis.famine = Math.max(0, s.crisis.famine - 1);
+    s.crisis.debt = Math.max(0, s.crisis.debt - 1);
+    s.crisis.unrest = Math.max(0, s.crisis.unrest - 1);
+    s.crisis.checkedTurn = s.turn;
+  } else checkDefeat(s);
   s.clock ||= makeClock(s.turn, eventAt);
   s.clock.seasonIndex = s.turn;
   s.clock.seasonStartedAt = eventAt;
@@ -1515,7 +1524,7 @@ function advanceSeason(s, options = {}) {
   return true;
 }
 
-function advanceSeasonAuto(s, now = Date.now()) {
+function advanceSeasonAuto(s, now = Date.now(), options = {}) {
   if (!s || s.ended || s.battleSession || s.pauseState) return { seasons: 0, jobs: 0 };
   s.clock ||= makeClock(s.turn, now);
   let seasons = 0;
@@ -1533,7 +1542,7 @@ function advanceSeasonAuto(s, now = Date.now()) {
       continue;
     }
     if (seasons >= TIME_CONFIG.maxOfflineSeasonCatchup) break;
-    if (!advanceSeason(s, { fromClock: true, at: nextSeasonAt, save: false, render: false })) break;
+    if (!advanceSeason(s, { fromClock: true, at: nextSeasonAt, save: false, render: false, offline: !!options.offline })) break;
     seasons++;
   }
   if (seasons >= TIME_CONFIG.maxOfflineSeasonCatchup && s.clock.seasonEndsAt <= now) {
@@ -1557,7 +1566,13 @@ function catchUpOffline(s, now = Date.now()) {
     s.clock.lastProcessedAt = now;
     return 0;
   }
-  const result = advanceSeasonAuto(s, now);
+  const result = advanceSeasonAuto(s, now, { offline: true });
+  if (result.seasons > 0) {
+    const text = `你离开期间结算了${result.seasons}季。离线期间不会发生敌袭，领地崩溃判定留给你回来后的正常经营。`;
+    s.lastAction = { name: "离线结算完成", text };
+    log(s, "info", text);
+    saveGame();
+  }
   return result.seasons;
 }
 
@@ -2763,10 +2778,18 @@ function boot() {
   document.addEventListener("pointerdown", () => { if (soundEnabled) { ensureAudio(); refreshAmbient(); } }, { once: true, passive: true });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      hiddenAt = Date.now();
       if (ambientTimer) clearInterval(ambientTimer);
       ambientTimer = 0;
     } else {
-      updateWorldTime(Date.now());
+      const resumedAt = Date.now();
+      const offlineSeasons = hiddenAt && S ? catchUpOffline(S, resumedAt) : 0;
+      hiddenAt = 0;
+      if (offlineSeasons && S && !S.ended) {
+        renderAll();
+        pumpDecision();
+        playSound("season");
+      } else updateWorldTime(resumedAt);
       refreshAmbient();
     }
   });
