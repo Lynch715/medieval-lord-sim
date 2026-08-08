@@ -299,7 +299,7 @@ function charterTrustThreshold(s) {
 }
 
 function marchDuration(s) {
-  return Math.max(20 * 1000, Math.round(JOB_CONFIG.MARCH.durationMs * (1 - techLevel(s, "field_doctrine") * .08)));
+  return Math.max(20 * 1000, Math.round(JOB_CONFIG.MARCH.durationMs * (1 - techLevel(s, "field_doctrine") * .25)));
 }
 
 function researchQueueJob(s) {
@@ -1403,17 +1403,17 @@ function territoryOutput(s, id, season = seasonOf(s)) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
   const stability = .62 + t.stability / 265;
-  const goldStability = techLevel(s, "law_code") ? Math.max(stability, .75 + techLevel(s, "law_code") * .03) : stability;
+  const goldStability = techLevel(s, "law_code") ? Math.max(stability, .82 + Math.max(0, techLevel(s, "law_code") - 1) * .02) : stability;
   const damage = 1 - Math.min(3, t.devastated) * .13;
-  const share = t.fiefHolder ? (t.fiefHolder === "charter" ? .78 : techLevel(s, "provincial_offices") ? .7 + techLevel(s, "provincial_offices") * .025 : .7) : 1;
+  const share = t.fiefHolder ? (t.fiefHolder === "charter" ? .78 : techLevel(s, "provincial_offices") ? .77 + Math.max(0, techLevel(s, "provincial_offices") - 1) * .015 : .7) : 1;
   const wealth = s.oath === "wealth" ? 1.08 : 1;
   const bestGovernor = ownedOfficers(s).filter(o => !o.injured).sort((a, b) => b.stats.govern - a.stats.govern)[0];
   const admin = 1 + Math.max(0, (bestGovernor?.stats.govern || 55) - 55) / 550;
   const diff = difficultyOf(s).income;
   const policy = POLICIES[t.policy] || POLICIES.balanced;
   const fatigue = 1 - clamp(s.warWeariness || 0, 0, 100) / 400;
-  const grainTech = (1 + techLevel(s, "heavy_plow") * .08) * (1 + techLevel(s, "crop_rotation") * .055) * (1 + techLevel(s, "seed_selection") * .045) * (season.id === "winter" ? 1 + techLevel(s, "winter_storage") * .04 : 1) * (season.id !== "winter" ? 1 + techLevel(s, "irrigation") * .03 : 1);
-  const goldTech = (1 + techLevel(s, "tax_registry") * .055) * (1 + techLevel(s, "coinage") * .055) * (1 + techLevel(s, "trade_guild") * .055);
+  const grainTech = (1 + techLevel(s, "heavy_plow") * .08) * (1 + techLevel(s, "crop_rotation") * .1) * (1 + techLevel(s, "seed_selection") * .08) * (season.id === "winter" ? 1 + techLevel(s, "winter_storage") * .12 : 1) * (season.id !== "winter" ? 1 + techLevel(s, "irrigation") * .06 : 1);
+  const goldTech = (1 + techLevel(s, "tax_registry") * .08) * (1 + techLevel(s, "coinage") * .08) * (1 + techLevel(s, "trade_guild") * .08);
   // 每块领地保留一小段基础余量，确保自动换季结算不是“产出刚好被开支吃完”；
   // 玩家仍需通过政策、建筑和扩张把余量放大，而不是靠反复点击应急征收维持运转。
   const grainBase = (d.grain + t.buildings.fields * 8 + 4) * grainTech;
@@ -1441,7 +1441,7 @@ function forecast(s, season = seasonOf(s)) {
   const garrison = armySplit.garrison;
   let grainCost = Math.ceil(subjects(s) / 34 + army.levy / 4 + army.archers / 4 + army.knights / 3 + garrison.levy / 8 + garrison.archers / 8 + garrison.knights / 6) + winterExtra + seedReserve;
   if (ysabel) grainCost = Math.ceil(grainCost * .92);
-  if (techLevel(s, "census")) grainCost = Math.ceil(grainCost * Math.max(.88, 1 - techLevel(s, "census") * .04));
+  if (techLevel(s, "census")) grainCost = Math.ceil(grainCost * Math.max(.82, 1 - techLevel(s, "census") * .06));
   const armyGoldCost = army.levy * .12 + army.archers * .23 + army.knights * .55 + garrison.levy * .06 + garrison.archers * .12 + garrison.knights * .28;
   const goldCost = Math.ceil(armyGoldCost * Math.max(.64, 1 - techLevel(s, "professional_army") * .18)) + ownedOfficers(s).filter(o => o.id !== "player").length + activeKnights(s).length;
   const fieldLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.fields || 0), 0);
@@ -2011,9 +2011,9 @@ function battleEstimate(s, targetId, leaderIds, troops, planId, armyId = "army_1
   if (leaderIds.includes("aveline") && (d.terrainTags || []).includes("river")) attack *= 1.08;
   const walls = t.buildings?.walls || (d.final ? 2 : 1);
   const watchtower = t.buildings?.watchtower || 0;
-  const wallFactor = techLevel(s, "sappers") ? Math.max(.05, .11 - techLevel(s, "sappers") * .02) : .11;
+  const wallFactor = techLevel(s, "sappers") ? Math.max(.05, .09 - techLevel(s, "sappers") * .01) : .11;
   let defense = t.guard * (1 + walls * wallFactor + watchtower * .025) * difficultyOf(s).enemy;
-  if (techLevel(s, "siege_ladders") && (d.terrainTags || []).includes("fortified")) attack *= 1 + techLevel(s, "siege_ladders") * .025;
+  if (techLevel(s, "siege_ladders") && (d.terrainTags || []).includes("fortified")) attack *= 1 + techLevel(s, "siege_ladders") * .05;
   if (techLevel(s, "trebuchet") && (d.terrainTags || []).some(tag => ["fortified", "capital"].includes(tag))) attack *= 1 + techLevel(s, "trebuchet") * .04;
   const defender = defenderLeader(s, targetId);
   if (defender) defense *= 1 + defender.stats.command / 700;
