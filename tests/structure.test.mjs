@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const game = require("../app.js");
 const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
 const html = readFileSync(fileURLToPath(new URL("../index.html", import.meta.url)), "utf8");
+const css = readFileSync(fileURLToPath(new URL("../style.css", import.meta.url)), "utf8");
 
 function fixed(value) { return () => value; }
 
@@ -123,6 +124,8 @@ for (const removedCopy of ["CAMPAIGN_AP_COST", "行动点", "结束本季", "apT
   assert.ok(!source.includes(removedCopy) && !html.includes(removedCopy), `实时版本不应保留旧行动点文案：${removedCopy}`);
 }
 assert.ok(!source.includes("AudioContext") && !source.includes("soundBtn") && !html.includes("soundBtn"), "游戏不应再包含BGM或环境音入口");
+assert.ok(!/^html[^{}]*touch-action/m.test(css) && !/^body[^{}]*touch-action/m.test(css), "禁止缩放规则不得锁死PC页面滚动");
+assert.ok(css.includes("html, body { touch-action: pan-x pan-y; overscroll-behavior: none; }"), "手机端仍应保留触控防缩放规则");
 assert.ok(game.ACTIONS.every(action => action.durationMs > 0), "议事厅每项主动行动都必须有真实完成时间");
 
 const beforeFields = game.territoryOutput(fresh, "ravenstone").grain;
