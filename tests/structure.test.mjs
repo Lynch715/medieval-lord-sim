@@ -27,6 +27,10 @@ assert.equal(game.cityActionOptions(fresh, "ashfield").length, 1, "城市常规�
 assert.ok(game.UNIT_DEFS.heavy_infantry.counters.includes("knights"));
 assert.ok(game.UNIT_DEFS.light_cavalry.counters.includes("archers"));
 assert.ok(game.counterMultiplier({ levy: 20 }, { knights: 10 }) > 1, "长矛兵应克制骑兵");
+const eventRuntimeText = [...game.WORLD_EVENTS, ...game.NPC_ARCS].map(event => JSON.stringify(event)).join("\n");
+for (const removedEventTerm of ["王室认可", "战争疲劳", "稳定", "功劳", "不满", "野心", "人口", "legitimacy", "warWeariness", "stabilityAll", "stabilityWeak", "grievance", "merit"]) {
+  assert.equal(eventRuntimeText.includes(removedEventTerm), false, `事件运行数据不应残留废弃属性：${removedEventTerm}`);
+}
 
 const equipmentState = game.createInitialState("装备升级", "oath", "standard");
 const baseEquipment = game.unitEquipment(equipmentState, "heavy_infantry");

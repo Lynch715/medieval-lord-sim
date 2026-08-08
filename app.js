@@ -771,6 +771,62 @@ const NPC_ARCS = [
   { id: "bran_wolf_oath", officerId: "bran", minTurn: 17, side: "player", title: "布兰要带狼牙旧部在城外重新宣誓", body: "“狼牙人在火边发誓，不在屋里。”布兰说，“渡鸦旗可以挂最高。你来不来，给我一句话。”", options: [["亲自去接受狼牙人的宣誓", "粮食 −6；布兰忠诚 +12，军心 +5", { grain: -6, loyalty: 12, morale: 5 }, "你在城外围火旁接受狼牙旧部宣誓，渡鸦旗挂在氏族旗上方。"], ["派雷纳德代你前往", "布兰忠诚 +4，威望 +2", { loyalty: 4, renown: 2 }, "雷纳德代表渡鸦家参加宣誓，名单当晚送回城堡。"], ["要求他们进大厅跪下宣誓", "王室认可 +5；布兰忠诚 −10、不满 +13", { legitimacy: 5, loyalty: -10, grievance: 13 }, "布兰跪下得很慢。"]] }
 ];
 
+// 事件统一使用当前版本的六项资源与忠诚；旧存档仍可通过效果迁移继续读取。
+function normalizeEventLanguage(value) {
+  return String(value ?? "")
+    .replace(/王室认可/g, "声望")
+    .replace(/战争疲劳/g, "军心")
+    .replace(/稳定度/g, "民心")
+    .replace(/稳定/g, "民心")
+    .replace(/功劳/g, "声望")
+    .replace(/野心/g, "忠诚")
+    .replace(/不满\s*[+]\s*(\d+)/g, "忠诚 −$1")
+    .replace(/不满\s*[−-]\s*(\d+)/g, "忠诚 +$1")
+    .replace(/不满上升/g, "忠诚下降")
+    .replace(/不满下降/g, "忠诚上升")
+    .replace(/人口/g, "居民");
+}
+
+function collapseEventMetrics(note) {
+  let text = note;
+  ["金币", "粮食", "军心", "民心", "声望", "忠诚"].forEach(label => {
+    const pattern = new RegExp(`${label}\\s*([+−-])\\s*(\\d+)[，,；;]\\s*${label}\\s*([+−-])\\s*(\\d+)`, "g");
+    text = text.replace(pattern, (_, signA, amountA, signB, amountB) => {
+      const total = (signA === "-" || signA === "−" ? -1 : 1) * Number(amountA) + (signB === "-" || signB === "−" ? -1 : 1) * Number(amountB);
+      return `${label} ${total >= 0 ? "+" : "−"}${Math.abs(total)}`;
+    });
+  });
+  return text;
+}
+
+function normalizeEventChanges(changes = {}) {
+  const next = { ...changes };
+  const add = (key, value) => { next[key] = (next[key] || 0) + value; };
+  if (next.legitimacy) { add("renown", next.legitimacy); delete next.legitimacy; }
+  if (next.warWeariness) { add("morale", next.warWeariness); delete next.warWeariness; }
+  if (next.stabilityAll) { add("support", next.stabilityAll); delete next.stabilityAll; }
+  if (next.stabilityWeak) { add("support", next.stabilityWeak); delete next.stabilityWeak; }
+  if (next.grievanceAll) { add("loyaltyAll", -next.grievanceAll); delete next.grievanceAll; }
+  if (next.grievance) { add("loyalty", -next.grievance); delete next.grievance; }
+  if (next.merit) { add("renown", next.merit); delete next.merit; }
+  delete next.ambition;
+  return next;
+}
+
+function normalizeEventDefinitions(events) {
+  events.forEach(event => {
+    event.kicker = normalizeEventLanguage(event.kicker);
+    event.title = normalizeEventLanguage(event.title);
+    event.body = normalizeEventLanguage(event.body);
+    event.options = event.options.map(([name, note, changes, chronicle]) => [
+      normalizeEventLanguage(name), collapseEventMetrics(normalizeEventLanguage(note)), normalizeEventChanges(changes), normalizeEventLanguage(chronicle)
+    ]);
+  });
+}
+
+normalizeEventDefinitions(WORLD_EVENTS);
+normalizeEventDefinitions(NPC_ARCS);
+
 const CREST_PATHS = {
   player: '<path d="M8 3h32v26c0 10-7 17-16 21C15 46 8 39 8 29V3Z"/><path d="M15 30c5-3 7-9 9-17 2 8 4 14 9 17-3 0-5 1-9 5-4-4-6-5-9-5Z"/><path d="m18 18 6-5 6 5-6-2-6 2Z"/>',
   wolf: '<path d="M8 3h32v26c0 10-7 17-16 21C15 46 8 39 8 29V3Z"/><path d="m14 16 5-7 5 6 5-6 5 7-2 16-8 7-8-7-2-16Z"/><path d="m19 24 3 2m7-2-3 2m-5 7h6"/>',
@@ -945,6 +1001,7 @@ function weakestTerritoryId(s, stat = "stability") {
 }
 
 function applyEventEffects(s, changes = {}, officerId = null) {
+  changes = normalizeEventChanges(changes);
   ["gold", "grain", "support", "morale", "renown", "legitimacy", "warWeariness"].forEach(key => {
     if (changes[key] == null) return;
     s[key] = ["support", "morale", "renown", "legitimacy", "warWeariness"].includes(key) ? clamp((s[key] || 0) + changes[key]) : (s[key] || 0) + changes[key];
@@ -2643,12 +2700,16 @@ function metrics(items) {
 function cleanDisplayText(value) {
   return String(value ?? "")
     .replace(/王室认可/g, "声望")
-    .replace(/战争疲劳/g, "")
+    .replace(/战争疲劳/g, "军心")
     .replace(/人口/g, "居民")
     .replace(/稳定/g, "民心")
-    .replace(/不满/g, "")
-    .replace(/功劳/g, "")
-    .replace(/野心/g, "");
+    .replace(/功劳/g, "声望")
+    .replace(/野心/g, "忠诚")
+    .replace(/不满\s*[+]\s*(\d+)/g, "忠诚 −$1")
+    .replace(/不满\s*[−-]\s*(\d+)/g, "忠诚 +$1")
+    .replace(/不满上升/g, "忠诚下降")
+    .replace(/不满下降/g, "忠诚上升")
+    .replace(/不满/g, "忠诚");
 }
 
 function currentStyle(s) {

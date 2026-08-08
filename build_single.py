@@ -34,7 +34,7 @@ def build() -> Path:
     )
     html = re.sub(
         r'<script src="app\.js\?v=\d+"></script>',
-        f"<script>\n{js}\n</script>",
+        lambda _match: f"<script>\n{js}\n</script>",
         html,
         count=1,
     )
