@@ -319,6 +319,32 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .battle-layout { display: grid; grid-template-columns: minmax(180px, .72fr) minmax(0,1.4fr); gap: 12px; }
 .campaign-lock-note { margin: 0 0 12px; padding: 11px 13px; border: 1px solid rgba(200,169,106,.34); border-left: 3px solid var(--gold); color: #c0baa9; background: rgba(200,169,106,.07); font-size: 12px; line-height: 1.6; }
 .army-roster { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; margin-bottom: 12px; }
+.corps-panel { margin-bottom: 16px; }
+.corps-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 12px; }
+.corps-card { padding: 13px; border: 1px solid var(--line); background: linear-gradient(145deg,rgba(31,34,28,.93),rgba(15,17,14,.96)); }
+.corps-card.primary { border-color: rgba(200,169,106,.5); background: linear-gradient(145deg,rgba(55,45,27,.55),rgba(15,17,14,.96)); }
+.corps-card-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.corps-card-head b { font: 17px var(--serif); color: var(--gold-light); }
+.corps-card-head span, .corps-note { color:#888c82; font-size:10px; }
+.corps-card p { min-height: 38px; margin: 8px 0; color:#b0b1a8; font-size:11px; line-height:1.55; }
+.corps-card .stat-chips { margin-bottom: 10px; }
+.corps-card .ghost-btn { width:100%; min-height:34px; }
+.corps-create { padding: 14px; border:1px solid rgba(200,169,106,.28); background:rgba(200,169,106,.05); }
+.corps-create h3 { margin:0 0 4px; font:19px var(--serif); color:var(--gold-light); }
+.corps-create p { margin:0 0 12px; color:#96998f; font-size:11px; line-height:1.55; }
+.corps-create-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.corps-create-grid label, .corps-plan label { display:grid; gap:5px; color:#aeb0a6; font-size:11px; }
+.corps-create-grid input, .corps-create-grid select, .corps-plan input, .corps-plan select { min-height:34px; padding:5px 8px; border:1px solid var(--line-strong); background:#171914; color:var(--gold-light); }
+.corps-unit-picks { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:10px 0; }
+.corps-unit-picks label { display:flex; align-items:center; justify-content:space-between; gap:5px; padding:6px; border:1px solid var(--line); color:#a8aaa0; font-size:10px; }
+.corps-unit-picks input { width:52px; min-height:28px; padding:3px 5px; border:1px solid var(--line-strong); background:#171914; color:var(--gold-light); }
+.expedition-note { margin:8px 0; color:#a7a99f; font-size:11px; line-height:1.55; }
+.expedition-army-list { display:grid; gap:6px; margin:9px 0; }
+.expedition-army-row { display:flex; align-items:flex-start; gap:8px; padding:8px; border:1px solid var(--line); background:rgba(0,0,0,.14); cursor:pointer; }
+.expedition-army-row input { margin-top:3px; accent-color:var(--gold); }
+.expedition-army-row span { display:grid; gap:3px; }
+.expedition-army-row b { color:var(--gold-light); font:15px var(--serif); }
+.expedition-army-row small { color:#999c92; font-size:10px; line-height:1.4; }
 .unit-card { padding: 13px; border: 1px solid var(--line); background: linear-gradient(145deg,rgba(31,34,28,.93),rgba(15,17,14,.96)); }
 .unit-card .unit-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .unit-card .unit-head b { font: 16px var(--serif); }
@@ -529,6 +555,9 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .flow-values b { font-size: 25px; }
   .research-panel { padding: 14px; }
   .army-roster { grid-template-columns: 1fr; }
+  .corps-grid { grid-template-columns: 1fr; }
+  .corps-create-grid { grid-template-columns: 1fr; }
+  .corps-unit-picks { grid-template-columns: repeat(2,1fr); }
   .policy-grid { grid-template-columns: repeat(2,1fr); }
   .unit-card button, .building-card button, .territory-card button, .action-card button, .leader-check label, .end-season-btn { min-height: 44px; }
   .unit-card button { font-size: 12px; }

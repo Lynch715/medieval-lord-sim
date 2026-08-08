@@ -68,6 +68,12 @@ game.processCompletedJobs(knightState, knightState.jobs.at(-1).endAt);
 assert.ok(game.activeKnights(knightState).length >= 1);
 assert.ok(game.knightBattleMultiplier(knightState) > 1);
 
+const corpsState = game.createInitialState("军团编组", "oath", "standard");
+const corpsKnight = corpsState.knights[0]; corpsKnight.side = "player"; corpsKnight.status = "active";
+const corps = game.createArmyFromMain(corpsState, "黑棘骑士团", corpsKnight.id, { levy: 8, archers: 2 });
+assert.ok(corps && corps.commanderId === corpsKnight.id && corpsState.armies.length === 2, "军队页应能从主军组建骑士军团");
+assert.ok(game.disbandArmy(corpsState, corps.id) && corpsState.armies.length === 1, "待命军团应能解散并回收兵力");
+
 const marchState = game.createInitialState("行军时间", "oath", "standard");
 const marchJob = game.startMarch(marchState, "army_1", "crossford", 1000, { battlePlan: { leaderIds: ["player"], composition: { levy: 12, archers: 4, knights: 2, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 }, troops: 18, plan: "steady" } });
 assert.ok(marchJob && marchJob.endAt > 1000);

@@ -108,7 +108,7 @@ const AI_FACTION_DEFS = {
 };
 
 const TERRITORY_DEFS = {
-  ravenstone: { name: "渡鸦堡", region: "raven_march", x: 18, y: 56, type: "castle", terrain: "丘陵城堡", terrainTags: ["hills", "fortified"], owner: "player", gold: 10, grain: 34, people: 218, guard: 46, stability: 66, final: false, playable: true, adj: ["ashfield", "pineford"], desc: "你的祖堡与四个贫穷村庄。城墙还在，屋顶却一直漏雨。" },
+  ravenstone: { name: "渡鸦堡", region: "raven_march", x: 20, y: 56, type: "castle", terrain: "丘陵城堡", terrainTags: ["hills", "fortified"], owner: "player", gold: 10, grain: 34, people: 218, guard: 46, stability: 66, final: false, playable: true, adj: ["blackthorn", "westmarch", "ironhill", "ashfield", "pineford"], desc: "你的祖堡。城墙还在，附近三座附属镇是渡鸦家最后的粮仓、林场和铁作坊。" },
   ashfield: { name: "灰麦原", region: "wolf_march", x: 47, y: 49, type: "town", terrain: "开阔农田", terrainTags: ["plains"], owner: "wolf", gold: 7, grain: 38, people: 142, guard: 34, stability: 61, final: false, playable: true, adj: ["ravenstone", "pineford", "crossford"], desc: "北境最肥沃的麦地。谁占住这里，谁就不怕下一个冬天。" },
   pineford: { name: "松林渡", region: "wolf_march", x: 28, y: 25, type: "town", terrain: "密林河渡", terrainTags: ["forest", "river"], owner: "wolf", gold: 8, grain: 22, people: 96, guard: 39, stability: 69, final: false, playable: true, adj: ["ravenstone", "ashfield", "highpass"], desc: "商道穿过密林与浅滩，狼牙氏族在树后布满哨所。" },
   highpass: { name: "北境关", region: "wolf_march", x: 53, y: 15, type: "fort", terrain: "山地要塞", terrainTags: ["mountain", "fortified"], owner: "wolf", gold: 6, grain: 13, people: 72, guard: 54, stability: 76, final: false, playable: true, adj: ["pineford", "crownvale"], desc: "扼守山口的石堡。难攻，却能挡住整个北方的袭扰。" },
@@ -119,7 +119,7 @@ const TERRITORY_DEFS = {
 
 const EXTRA_TERRITORIES = {
   ravenmere: ["渡鸦湖", "raven_march", 8, 68, "river", ["ravenstone", "ashfield"]],
-  blackthorn: ["黑棘林", "raven_march", 10, 42, "forest", ["ravenstone", "pineford"]],
+  blackthorn: ["黑棘林", "raven_march", 9, 39, "forest", ["ravenstone", "pineford"]],
   oldwatch: ["旧哨塔", "raven_march", 12, 78, "fortified", ["ravenstone", "crossford"]],
   wolfden: ["狼穴", "wolf_march", 37, 10, "mountain", ["pineford", "highpass"]],
   redfen: ["赤泥沼", "wolf_march", 65, 20, "forest", ["highpass", "crownvale"]],
@@ -135,8 +135,8 @@ const EXTRA_TERRITORIES = {
   duchyroad: ["公爵大道", "royal_crown", 70, 37, "plains", ["crownvale", "highpass"]],
   crownfield: ["王冠田", "royal_crown", 91, 38, "plains", ["crownvale"]],
   kingsford: ["王渡", "royal_crown", 92, 84, "river", ["crownvale", "riverwatch"]],
-  ironhill: ["铁岭", "royal_crown", 59, 3, "mountain", ["highpass", "crownvale"]],
-  westmarch: ["西境镇", "neutral_cities", 3, 54, "plains", ["ravenstone"]],
+  ironhill: ["铁溪镇", "raven_march", 39, 58, "mountain", ["ravenstone", "ashfield"]],
+  westmarch: ["麦田镇", "raven_march", 11, 72, "plains", ["ravenstone", "crossford"]],
   eastmarch: ["东境镇", "neutral_cities", 97, 64, "plains", ["crownvale"]],
   tradersrest: ["商旅驿", "neutral_cities", 33, 91, "river", ["crossford"]],
   bellmarket: ["钟市", "neutral_cities", 84, 95, "plains", ["riverwatch"]],
@@ -227,8 +227,34 @@ function knightById(s, id) {
   return (s?.knights || []).find(knight => knight.id === id) || null;
 }
 
+// 军团指挥官只保留两类：玩家王子，或没有立绘的骑士。
+// 旧存档里的领主编制仍然保留作兼容，但新军团不会再把领主当作军团长。
+function commanderById(s, id) {
+  if (id === "player") return officer(s, id);
+  return knightById(s, id) || officer(s, id) || null;
+}
+
+function commanderName(s, id) {
+  return commanderById(s, id)?.name || "未任命指挥官";
+}
+
+function commanderStats(s, id) {
+  const person = commanderById(s, id);
+  if (!person) return { force: 0, command: 0, scheme: 0, govern: 0, charm: 0 };
+  return person.stats || { force: person.force || 0, command: person.command || 0, scheme: person.scheme || 0, govern: 0, charm: 0 };
+}
+
+function armyCommander(s, army) {
+  const id = army?.commanderId || army?.leaders?.[0] || "player";
+  return { id, person: commanderById(s, id), isKnight: !!knightById(s, id) };
+}
+
 function activeKnights(s) {
   return (s?.knights || []).filter(knight => knight.side === "player" && knight.status === "active");
+}
+
+function assignedCommanderIds(s) {
+  return new Set((s?.armies || []).filter(army => army.owner === "player").map(army => army.commanderId || army.leaders?.[0]).filter(Boolean));
 }
 
 function knightBattleMultiplier(s, selectedIds = null) {
@@ -456,8 +482,8 @@ function cancelJob(s, jobId) {
   job.status = "cancelled";
   job.cancelledAt = Date.now();
   if (job.type === "MARCH") {
-    const army = armyEntity(s, job.armyId);
-    if (army) { army.destinationId = null; army.status = "idle"; army.jobId = null; }
+    const groupIds = job.payload?.armyIds || [job.armyId];
+    groupIds.map(id => armyEntity(s, id)).filter(Boolean).forEach(army => { army.destinationId = null; army.status = "idle"; army.jobId = null; });
   }
   return true;
 }
@@ -591,10 +617,14 @@ function applyCompletedJob(s, job) {
     const destinationId = job.payload?.destinationId;
     if (!army || !TERRITORY_DEFS[destinationId]) return false;
     const originId = job.payload?.originId || army.locationId;
-    army.locationId = destinationId;
-    army.destinationId = null;
-    army.status = "idle";
-    army.jobId = null;
+    const groupIds = job.payload?.armyIds || [army.id];
+    const groupArmies = groupIds.map(id => armyEntity(s, id)).filter(Boolean);
+    groupArmies.forEach(item => {
+      item.locationId = destinationId;
+      item.destinationId = null;
+      item.status = "idle";
+      item.jobId = null;
+    });
     if (army.owner !== "player" && s.territories[destinationId]?.owner === "player") {
       const result = resolveAIAttack(s, army, destinationId, Math.random, originId);
       if (result !== "captured") army.locationId = originId;
@@ -602,7 +632,7 @@ function applyCompletedJob(s, job) {
     }
     const battlePlan = job.payload?.battlePlan;
     if (army.owner === "player" && battlePlan && s.territories[destinationId]?.owner !== "player") {
-      startBattle(s, { ...battlePlan, armyId: army.id, originId, targetId: destinationId, arrival: true, supplyAlreadyPaid: true });
+      startBattle(s, { ...battlePlan, armyId: army.id, armyIds: groupIds, armyOrigins: job.payload?.armyOrigins, originId, targetId: destinationId, arrival: true, supplyAlreadyPaid: true });
     }
     const text = `${army.name}抵达${TERRITORY_DEFS[destinationId].name}。`;
     s.lastAction = { name: "行军完成", text };
@@ -1084,18 +1114,87 @@ function armyTotal(s, armyId = null) {
 function defaultArmyEntity(s) {
   return {
     id: "army_1",
-    name: "王国主力",
+    name: "渡鸦第一军团",
     owner: "player",
     locationId: "ravenstone",
     destinationId: null,
     composition: { ...emptyComposition(), ...(s.army || {}) },
-    leaders: ["player", "renard"],
+    leaders: ["player"],
+    commanderId: "player",
     morale: s.morale,
     training: s.training,
     supply: 100,
     status: "idle",
     jobId: null
   };
+}
+
+function playerArmies(s) {
+  return (s?.armies || []).filter(army => army.owner === "player");
+}
+
+function nextArmyId(s) {
+  const used = new Set((s?.armies || []).map(army => army.id));
+  let index = 1;
+  while (used.has(`army_${index}`)) index++;
+  return `army_${index}`;
+}
+
+function armyStatusText(s, army) {
+  if (!army) return "未编成";
+  const job = army.jobId ? (s.jobs || []).find(item => item.id === army.jobId && item.status === "running") : null;
+  if (army.status === "marching") return job ? `行军中 · ${formatDuration(getJobRemainingMs(job))}` : "行军中";
+  if (army.status === "recovering") return job ? `整补中 · ${formatDuration(getJobRemainingMs(job))}` : "整补中";
+  if (army.status === "engaged") return "交战中";
+  if (army.status === "supporting") return "随同出征";
+  return "待命";
+}
+
+function canUseCommander(s, id, ignoreArmyId = null) {
+  if (playerArmies(s).some(army => army.id !== ignoreArmyId && (army.commanderId || army.leaders?.[0]) === id)) return false;
+  if (id === "player") return true;
+  const knight = knightById(s, id);
+  if (!knight || knight.side !== "player" || knight.status !== "active") return false;
+  return true;
+}
+
+function createArmyFromMain(s, name, commanderId, composition) {
+  if (!s || s.battleSession) return false;
+  const main = armyEntity(s, "army_1");
+  const clean = { ...emptyComposition(), ...(composition || {}) };
+  const total = compositionTotal(clean);
+  if (!main || main.status !== "idle" || !canUseCommander(s, commanderId) || !name?.trim() || total < 10) return false;
+  if (Object.keys(UNIT_DEFS).some(type => clean[type] > (main.composition[type] || 0))) return false;
+  if (compositionTotal(main.composition) - total < 10) return false;
+  Object.keys(UNIT_DEFS).forEach(type => { main.composition[type] = Math.max(0, (main.composition[type] || 0) - clean[type]); });
+  const army = {
+    id: nextArmyId(s), name: name.trim().slice(0, 18), owner: "player", locationId: main.locationId,
+    destinationId: null, composition: clean, leaders: [commanderId], commanderId,
+    morale: s.morale, training: s.training, supply: 100, status: "idle", jobId: null
+  };
+  s.armies.push(army);
+  syncTroops(s);
+  s.lastAction = { name: "军团编成", text: `${army.name}在${TERRITORY_DEFS[army.locationId]?.name || "驻地"}组建，由${commanderName(s, commanderId)}带领。` };
+  log(s, "good", s.lastAction.text);
+  return army;
+}
+
+function disbandArmy(s, armyId) {
+  if (!s || s.battleSession || armyId === "army_1") return false;
+  const army = armyEntity(s, armyId);
+  const main = armyEntity(s, "army_1");
+  if (!army || !main || army.owner !== "player" || army.status !== "idle") return false;
+  if (army.locationId === main.locationId && main.status === "idle") {
+    Object.keys(UNIT_DEFS).forEach(type => { main.composition[type] += army.composition[type] || 0; });
+  } else {
+    const garrison = territoryGarrison(s, army.locationId);
+    Object.keys(UNIT_DEFS).forEach(type => { garrison[type] += army.composition[type] || 0; });
+  }
+  s.armies = s.armies.filter(item => item.id !== armyId);
+  syncTroops(s);
+  s.lastAction = { name: "军团解散", text: `${army.name}已解散，兵力${army.locationId === main.locationId ? "编回主军" : "留作当地驻军"}。` };
+  log(s, "info", s.lastAction.text);
+  return true;
 }
 
 function armyEntity(s, id = "army_1") {
@@ -1125,6 +1224,9 @@ function syncArmyEntities(s) {
   if (!s) return;
   s.armies = Array.isArray(s.armies) && s.armies.length ? s.armies : [defaultArmyEntity(s)];
   s.armies.forEach(army => {
+    army.name ||= army.id === "army_1" ? "渡鸦第一军团" : "北境军团";
+    army.commanderId ||= army.leaders?.[0] || "player";
+    army.leaders = [army.commanderId];
     army.composition = { ...emptyComposition(), ...(army.composition || {}) };
     army.morale ??= s.morale;
     army.training ??= s.training;
@@ -1302,7 +1404,7 @@ function createInitialState(name, oath, difficulty) {
   });
   const officers = Object.entries(OFFICER_DEFS).map(([id, d]) => {
     const enemy = ["aveline", "bran"].includes(id);
-    const side = id === "player" ? "player" : enemy ? d.side : "locked";
+    const side = id === "player" ? "player" : enemy ? d.side : d.recruitable ? "neutral" : "locked";
     return {
       id, ...clone(d), side, recruitable: id !== "player" && !enemy,
       recruitCost: d.recruitCost || (18 + Object.keys(OFFICER_DEFS).indexOf(id) * 3),
@@ -1416,6 +1518,8 @@ function hydrateV2(raw) {
   const uniqueOfficers = new Map();
   raw.officers.forEach(o => { if (o?.id && !uniqueOfficers.has(o.id)) uniqueOfficers.set(o.id, o); });
   raw.officers = [...uniqueOfficers.values()];
+  // 旧存档把可招募领主标成 locked；迁移后统一放入中立候选区，避免人物页看不到可招募对象。
+  raw.officers.forEach(o => { if (OFFICER_DEFS[o.id]?.recruitable && o.side === "locked") o.side = "neutral"; });
   const defaultKnights = createKnightRoster();
   raw.knights = Array.isArray(raw.knights) ? raw.knights : [];
   const knightMap = new Map(raw.knights.filter(knight => knight?.id).map(knight => [knight.id, knight]));
@@ -1440,12 +1544,15 @@ raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight
   if (!Array.isArray(raw.armies) || !raw.armies.length) raw.armies = [defaultArmyEntity(raw)];
   raw.armies.forEach((army, index) => {
     army.id ||= `army_${index + 1}`;
+    army.name ||= index === 0 ? "渡鸦第一军团" : `第${index + 1}军团`;
     army.owner ||= "player";
     army.locationId ||= "ravenstone";
     army.destinationId ??= null;
     if (legacyArmyMissing && index === 0) army.composition = clone(raw.army);
     army.composition = { ...emptyComposition(), ...(army.composition || (index === 0 ? raw.army : {})) };
-    army.leaders ||= ["player"];
+    army.leaders = Array.isArray(army.leaders) && army.leaders.length ? army.leaders : ["player"];
+    army.commanderId ||= army.leaders.find(id => id === "player" || knightById(raw, id)?.status === "active") || "player";
+    army.leaders = [army.commanderId];
     army.morale ??= raw.morale;
     army.training ??= raw.training;
     army.supply ??= 100;
@@ -1824,6 +1931,23 @@ function startMarch(s, armyId, destinationId, now = Date.now(), payload = {}) {
   return job;
 }
 
+function startArmyGroupMarch(s, armyIds, destinationId, now = Date.now(), payload = {}) {
+  const ids = [...new Set((armyIds || []).filter(Boolean))];
+  const armies = ids.map(id => armyEntity(s, id));
+  if (!ids.length || armies.some(army => !army || army.owner !== "player" || army.status !== "idle")) return null;
+  if (payload?.battlePlan && !ids.some(id => attackableTerritories(s, id).includes(destinationId))) return null;
+  const lead = armies[0];
+  const armyOrigins = Object.fromEntries(armies.map(army => [army.id, army.locationId]));
+  const job = startMarch(s, lead.id, destinationId, now, { ...payload, armyIds: ids, armyOrigins });
+  if (!job) return null;
+  armies.slice(1).forEach(army => {
+    army.destinationId = destinationId;
+    army.status = "marching";
+    army.jobId = job.id;
+  });
+  return job;
+}
+
 function recruitAmount(s, type, territoryId = recruitmentTerritoryId(s)) {
   const unit = UNIT_DEFS[type];
   if (!unit) return 0;
@@ -2131,9 +2255,9 @@ function defenderLeader(s, targetId) {
 }
 
 function averageStat(s, ids, stat) {
-  const people = ids.map(id => officer(s, id)).filter(Boolean);
+  const people = ids.map(id => commanderStats(s, id)).filter(Boolean);
   if (!people.length) return 0;
-  return people.reduce((sum, o) => sum + o.stats[stat], 0) / people.length;
+  return people.reduce((sum, person) => sum + (person[stat] || 0), 0) / people.length;
 }
 
 function defenderComposition(s, targetId) {
@@ -2238,15 +2362,29 @@ function battleMomentumText(value) {
   return `当前战况：${label}`;
 }
 
+function armyGroupComposition(s, armyIds = []) {
+  const result = emptyComposition();
+  armyIds.map(id => armyEntity(s, id)).filter(Boolean).forEach(army => {
+    Object.keys(UNIT_DEFS).forEach(type => { result[type] += Math.max(0, Math.round(army.composition?.[type] || 0)); });
+  });
+  return result;
+}
+
 function startBattle(s, draft, rng = Math.random) {
   const arrival = draft.arrival === true;
-  if (s.battleSession || (!arrival && !attackableTerritories(s, draft.armyId || "army_1").includes(draft.targetId))) return null;
-  const army = armyEntity(s, draft.armyId || "army_1");
-  if (!army || army.status !== "idle") return null;
-  const leaders = draft.leaderIds.map(id => officer(s, id)).filter(o => o?.side === "player" && !o.injured).slice(0, 3);
-  const availableTroops = armyTotal(s, army.id);
+  const armyIds = [...new Set((draft.armyIds || [draft.armyId || "army_1"]).filter(Boolean))];
+  const armies = armyIds.map(id => armyEntity(s, id)).filter(army => army?.owner === "player");
+  if (s.battleSession || !armies.length || armies.length !== armyIds.length) return null;
+  if (!arrival && !armyIds.some(id => attackableTerritories(s, id).includes(draft.targetId))) return null;
+  if (armies.some(army => !["idle", "marching"].includes(army.status))) return null;
+  const army = armies[0];
+  const defaultLeaderIds = armies.map(item => item.commanderId || item.leaders?.[0] || "player");
+  const leaderIds = [...new Set((draft.leaderIds?.length ? draft.leaderIds : defaultLeaderIds).filter(Boolean))].slice(0, 3);
+  const leaders = leaderIds.map(id => commanderById(s, id)).filter(person => person && (person.id === "player" || person.side === "player" && person.status === "active" || person.side === "player" && person.injured === 0)).slice(0, 3);
+  const availableComposition = armyGroupComposition(s, armyIds);
+  const availableTroops = compositionTotal(availableComposition);
   const requestedComposition = draft.composition ? { ...emptyComposition(), ...draft.composition } : null;
-  const compositionValid = requestedComposition && Object.keys(UNIT_DEFS).every(type => requestedComposition[type] >= 0 && requestedComposition[type] <= (army.composition[type] || 0));
+  const compositionValid = requestedComposition && Object.keys(UNIT_DEFS).every(type => requestedComposition[type] >= 0 && requestedComposition[type] <= (availableComposition[type] || 0));
   if (draft.composition && !compositionValid) return null;
   const troops = requestedComposition ? compositionTotal(requestedComposition) : clamp(Math.round(draft.troops), 10, availableTroops);
   if (!leaders.length || troops > availableTroops) return null;
@@ -2254,12 +2392,15 @@ function startBattle(s, draft, rng = Math.random) {
   const supply = draft.composition ? compositionSupply(s, requestedComposition, leaders.map(o => o.id)) : campaignSupply(s, troops, leaders.map(o => o.id), army.id);
   if (!draft.supplyAlreadyPaid && s.grain < supply) return null;
   const knightIds = (draft.knightIds || draft.commandKnightIds || []).filter(id => activeKnights(s).some(knight => knight.id === id));
-  const est = battleEstimate(s, draft.targetId, leaders.map(o => o.id), troops, draft.plan, army.id, requestedComposition, knightIds.length ? knightIds : null);
+  const estimateComposition = requestedComposition || selectedComposition({ ...s, armies: [{ ...army, composition: availableComposition }] }, troops, army.id);
+  const est = battleEstimate(s, draft.targetId, leaderIds, troops, draft.plan, army.id, estimateComposition, knightIds.length ? knightIds : null);
   if (!draft.supplyAlreadyPaid) s.grain -= supply;
   s.warWeariness = 0;
   s.battles++;
   s.battleSession = {
     armyId: army.id,
+    armyIds,
+    armyOrigins: draft.armyOrigins || Object.fromEntries(armies.map(item => [item.id, item.locationId])),
     originId: draft.originId || army.locationId,
     targetId: draft.targetId,
     leaderIds: leaders.map(o => o.id),
@@ -2277,10 +2418,12 @@ function startBattle(s, draft, rng = Math.random) {
     flags: { demanded: false, pushed: false, aggression: 0 },
     seedMark: Math.round(rng() * 1e9)
   };
-  army.status = "engaged";
-  army.destinationId = draft.targetId;
-  army.jobId = null;
-  army.leaders = leaders.map(o => o.id);
+  armies.forEach(item => {
+    item.status = "engaged";
+    item.destinationId = draft.targetId;
+    item.jobId = null;
+    item.leaders = [item.commanderId || "player"];
+  });
   pauseWorld(s, "battle");
   log(s, "warn", `${leaders.map(o => o.name).join("、")}率${troops}人（${compositionText(est.composition)}）向${TERRITORY_DEFS[draft.targetId].name}进军。`);
   return s.battleSession;
@@ -2381,12 +2524,21 @@ function finishBattle(s, outcome, rng = Math.random) {
   const targetName = TERRITORY_DEFS[targetId].name;
   const oldOwner = s.territories[targetId].owner;
   const lossesByType = session.lossesByType || allocateLosses(session.composition || selectedComposition(s, session.troops), session.playerLoss);
-  const engagedArmy = armyEntity(s, session.armyId || "army_1");
-  if (engagedArmy) Object.keys(UNIT_DEFS).forEach(type => { engagedArmy.composition[type] = Math.max(0, (engagedArmy.composition[type] || 0) - (lossesByType[type] || 0)); });
+  const engagedArmies = (session.armyIds || [session.armyId || "army_1"]).map(id => armyEntity(s, id)).filter(Boolean);
+  const engagedArmy = engagedArmies[0] || null;
+  Object.keys(UNIT_DEFS).forEach(type => {
+    let left = Math.max(0, lossesByType[type] || 0);
+    engagedArmies.forEach(army => {
+      if (left <= 0) return;
+      const take = Math.min(left, army.composition[type] || 0);
+      army.composition[type] = Math.max(0, (army.composition[type] || 0) - take);
+      left -= take;
+    });
+  });
   syncTroops(s);
   s.casualties += session.playerLoss;
   s.warWeariness = 0;
-  const leaders = session.leaderIds.map(id => officer(s, id)).filter(Boolean);
+  const leaders = session.leaderIds.map(id => commanderById(s, id)).filter(Boolean);
   // 领主不再进入受伤计时；战后只结算兵力、军心与领地归属。
   const injured = [];
   let persistentEnemyLoss = 0;
@@ -2410,7 +2562,7 @@ function finishBattle(s, outcome, rng = Math.random) {
     s.renown = clamp(s.renown + 8);
     s.legitimacy = clamp(s.legitimacy + 3);
     s.morale = clamp(s.morale + 7);
-    leaders.forEach(o => { o.merit += 7 + (session.flags.demanded ? 2 : 0); o.loyalty = clamp(o.loyalty + 2); });
+    leaders.forEach(o => { if (o.merit != null) o.merit += 7 + (session.flags.demanded ? 2 : 0); if (o.loyalty != null) o.loyalty = clamp(o.loyalty + 2); });
     const submissive = factionTerritories(s, oldOwner).length === 0 ? officer(s, oldOwner === "wolf" ? "bran" : oldOwner === "river" ? "aveline" : "") : null;
     if (submissive && submissive.side !== "player" && submissive.side !== "gone") {
       submissive.side = "neutral";
@@ -2452,22 +2604,22 @@ function finishBattle(s, outcome, rng = Math.random) {
     lostGrain = Math.min(Math.max(0, s.grain), 6 + Math.ceil(session.playerLoss / 2));
     s.gold -= lostGold;
     s.grain -= lostGrain;
-    leaders.forEach(o => { o.loyalty = clamp(o.loyalty - 2); o.grievance = clamp(o.grievance + 3); });
+    leaders.forEach(o => { if (o.loyalty != null) o.loyalty = clamp(o.loyalty - 2); if (o.grievance != null) o.grievance = clamp(o.grievance + 3); });
     log(s, "bad", `${targetName}进攻失败，我军损失${session.playerLoss}人。战败时丢失${lostGold}金币和${lostGrain}粮食；敌方守军减少${persistentEnemyLoss}人，之后会缓慢补充。`);
   }
   const resumedAt = Date.now();
   resumeWorld(s, resumedAt);
-  if (engagedArmy) {
-    const recoveryAt = resumedAt;
+  const recoveryAt = resumedAt;
+  engagedArmies.forEach(engagedArmy => {
     engagedArmy.destinationId = null;
-    engagedArmy.locationId = outcome === "win" ? targetId : (session.originId || engagedArmy.locationId || "ravenstone");
-    engagedArmy.leaders = session.leaderIds.slice();
+    engagedArmy.locationId = outcome === "win" ? targetId : (session.armyOrigins?.[engagedArmy.id] || engagedArmy.locationId || "ravenstone");
+    engagedArmy.leaders = [engagedArmy.commanderId || session.leaderIds[0] || "player"];
     engagedArmy.morale = s.morale;
     engagedArmy.training = s.training;
     engagedArmy.status = "idle";
     engagedArmy.jobId = null;
     startArmyRecovery(s, engagedArmy, outcome === "win" ? 90 * 1000 : 120 * 1000, recoveryAt);
-  }
+  });
   const report = { targetId, targetName, outcome, losses: session.playerLoss, lossesByType, composition: clone(session.composition), enemyLoss: session.enemyLoss, persistentEnemyLoss, garrisoned, lostGold, lostGrain, history: clone(session.history), momentum: session.momentum, injured };
   s.lastBattle = report;
   s.battleSession = null;
@@ -2783,7 +2935,7 @@ function renderHall() {
   const flow = resourceFlow(S);
   const activeJobs = (S.jobs || []).filter(job => job.status === "running");
   const queueHtml = activeJobs.length ? activeJobs.map(job => {
-    const label = job.type === "BUILD" ? `建设 · ${TERRITORY_DEFS[job.territoryId]?.name || "领地"}` : job.type === "RECRUIT" ? "募集兵力" : job.type === "RESEARCH" ? "科技研究" : job.type === "MARCH" ? "王国主力行军" : job.type === "OFFICER_RECRUIT" ? `招募领主 · ${officer(S, job.payload?.officerId)?.name || "候选人"}` : job.type === "CITY_ACTION" ? `城市行动 · ${TERRITORY_DEFS[job.territoryId]?.name || "城市"}` : "军政指令";
+    const label = job.type === "BUILD" ? `建设 · ${TERRITORY_DEFS[job.territoryId]?.name || "领地"}` : job.type === "RECRUIT" ? "募集兵力" : job.type === "RESEARCH" ? "科技研究" : job.type === "MARCH" ? `${job.payload?.armyIds?.length > 1 ? "合军行军" : "军团行军"} · ${TERRITORY_DEFS[job.payload?.destinationId]?.name || "目标"}` : job.type === "OFFICER_RECRUIT" ? `招募领主 · ${officer(S, job.payload?.officerId)?.name || "候选人"}` : job.type === "CITY_ACTION" ? `城市行动 · ${TERRITORY_DEFS[job.territoryId]?.name || "城市"}` : "军政指令";
     return `<div class="queue-row"><b>${label}</b><span data-job-countdown="${job.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(job))}</span></div>`;
   }).join("") : `<div class="empty-state">当前没有进行中的建设、研究、募兵或行军。</div>`;
   panel.innerHTML = `
@@ -2795,7 +2947,7 @@ function renderHall() {
     </section>
     ${S.lastAction ? `<div class="feedback-banner"><b>${esc(S.lastAction.name)}</b><p>${esc(S.lastAction.text)}</p></div>` : ""}
     <div class="strategy-overview"><article class="flow-card"><div class="section-head"><h3>实时资源流量（按分钟）</h3><span>${seasonOf(S).name}季系数 · 金${formatSeasonCoefficient(seasonOf(S).gold)} / 粮${formatSeasonCoefficient(seasonOf(S).grain)}</span></div><div class="flow-values"><b>${formatResourceRate(flow.goldPerSecond, "金")}</b><b>${formatResourceRate(flow.grainPerSecond, "粮")}</b></div><p>本季预计净额：金币 ${f.netGold >= 0 ? "+" : "−"}${Math.abs(f.netGold)} · 粮食 ${f.netGrain >= 0 ? "+" : "−"}${Math.abs(f.netGrain)}</p></article><article class="queue-card"><div class="section-head"><h3>进行中的军政事务</h3><span>${activeJobs.length} 项</span></div>${queueHtml}</article></div>
-    <div class="quick-actions"><button data-quick-tab="domain"><b>发展领地</b><small>建筑与科技</small></button><button data-quick-tab="court"><b>任命领主</b><small>招募、封地与忠诚</small></button><button data-quick-tab="campaign"><b>募集兵力</b><small>兵种、军心与编制</small></button><button data-quick-tab="map"><b>查看地图</b><small>侦察与收复城镇</small></button></div>`;
+    <div class="quick-actions"><button data-quick-tab="domain"><b>发展领地</b><small>建筑与科技</small></button><button data-quick-tab="court"><b>查看将领</b><small>招募领主、管理骑士</small></button><button data-quick-tab="campaign"><b>编组军队</b><small>兵种与军团</small></button><button data-quick-tab="map"><b>查看地图</b><small>选择军团出征</small></button></div>`;
   panel.querySelectorAll("[data-quick-tab]").forEach(button => button.addEventListener("click", () => { S.tab = button.dataset.quickTab; saveGame(); renderAll(); resetPageScroll(); }));
 }
 
@@ -2845,16 +2997,16 @@ function domainCard(id) {
 
 function renderMap() {
   const panel = $("panel");
-  const attackable = attackableTerritories(S, "army_1");
+  const attackable = [...new Set(playerArmies(S).flatMap(army => attackableTerritories(S, army.id)))];
   const mapArmy = armyEntity(S, "army_1");
   const mapMarchJob = mapArmy?.jobId ? S.jobs.find(job => job.id === mapArmy.jobId && job.status === "running") : null;
-  const mapArmyStatus = mapArmy?.status === "marching" && mapMarchJob ? `<span data-job-countdown="${mapMarchJob.id}" data-job-prefix="王国主力行军中 · ">王国主力行军中 · ${formatDuration(getJobRemainingMs(mapMarchJob))}</span>` : mapArmy?.status === "recovering" ? "王国主力休整中" : `王国主力驻扎于${TERRITORY_DEFS[mapArmy?.locationId || "ravenstone"]?.name || "渡鸦堡"}`;
+  const mapArmyStatus = `${playerArmies(S).length}支军团 · ${playerArmies(S).filter(army => army.status === "idle").length}支待命`;
   const selectedId = S.selectedTerritoryId || "ravenstone";
   const controlled = ownTerritoryIds(S).length;
   const interactiveCount = Object.keys(TERRITORY_DEFS).length;
   panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE RESTORATION MAP</span><h2>把父亲的旧领土夺回来</h2><p>每个城堡和城镇都是复国路线上的一站。点击敌方城堡，查看守军、侦察情报并直接配置远征。<br><b>${mapArmyStatus}</b></p>${metrics([[`${controlled} / ${playableTerritoryIds().length}`, "已收复"], [attackable.length, "邻近目标"], [playableTerritoryIds().length, "可占领地点"], [interactiveCount, "地图地点"]])}</section>
     <div class="unification-track"><div><b>复国进度</b><span>收复父亲留下的旧土，逐步逼近王冠谷</span></div><strong>${Math.round(controlled / playableTerritoryIds().length * 100)}%</strong><i style="width:${Math.round(controlled / playableTerritoryIds().length * 100)}%"></i></div>
-    <div class="section-head"><h2>北境地图</h2><span>36座城市 · 金边为可出征目标 · 点击查看城镇操作</span></div>
+    <div class="section-head"><h2>北境地图</h2><span>城堡统辖附近附属镇 · 金边为军团可达目标 · 点击目标配置远征</span></div>
     <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}<span class="map-legend-note">金边目标可直接配置远征 · 斥候情报按季更新 · 手机左右滑动地图</span></div><div class="map-viewport" tabindex="0" aria-label="可横向浏览的北境地图"><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div></div><div class="map-inspector">${territorySummary(S, selectedId, attackable)}</div></div>`;
   panel.querySelectorAll("[data-map-territory]").forEach(button => button.addEventListener("click", () => {
     const id = button.dataset.mapTerritory;
@@ -2870,9 +3022,8 @@ function renderMap() {
     toast(S.lastAction.text);
   }));
   panel.querySelectorAll("[data-city-attack]").forEach(button => button.addEventListener("click", () => {
-    battleDraft.targetId = button.dataset.cityAttack;
-    S.tab = "campaign";
-    saveGame(); renderAll(); resetPageScroll();
+    S.selectedTerritoryId = button.dataset.cityAttack;
+    saveGame(); renderMap();
   }));
   panel.querySelectorAll("[data-castle-launch]").forEach(button => button.addEventListener("click", () => {
     const targetId = button.dataset.castleLaunch;
@@ -2892,6 +3043,24 @@ function renderMap() {
     const job = startMarch(S, "army_1", targetId, Date.now(), { battlePlan: { leaderIds, knightIds: knight ? [knight] : [], composition, troops: total, plan, suppliedGrain: carried } });
     if (!job) { S.grain += carried; toast("王国主力当前无法长途出征"); return; }
     S.lastAction = { name: "远征出发", text: `王国主力携${compositionText(composition)}和${carried}粮食出发，预计${formatDuration(job.endAt - job.startedAt)}后抵达${TERRITORY_DEFS[targetId].name}。` };
+    log(S, "info", S.lastAction.text);
+    saveGame(); renderAll();
+  }));
+  panel.querySelectorAll("[data-expedition-launch]").forEach(button => button.addEventListener("click", () => {
+    const targetId = button.dataset.expeditionLaunch;
+    const armyIds = [...panel.querySelectorAll("[data-expedition-army]")].filter(input => input.checked).map(input => input.dataset.expeditionArmy);
+    const armies = armyIds.map(id => armyEntity(S, id)).filter(Boolean);
+    const plan = panel.querySelector(`[data-expedition-plan="${targetId}"]`)?.value || "steady";
+    const commanders = armies.map(army => armyCommander(S, army).id);
+    const aggregate = armyGroupComposition(S, armyIds);
+    const minimum = compositionSupply(S, aggregate, commanders);
+    const carried = Math.max(0, Math.round(Number(panel.querySelector(`[data-expedition-grain="${targetId}"]`)?.value) || 0));
+    if (!armyIds.length || armies.some(army => army.status !== "idle") || compositionTotal(aggregate) < 10) { toast("至少选择一支待命军团"); return; }
+    if (carried < minimum || carried > S.grain) { toast(`这支远征至少需要${minimum}粮食`); return; }
+    S.grain -= carried;
+    const job = startArmyGroupMarch(S, armyIds, targetId, Date.now(), { battlePlan: { leaderIds: commanders, composition: aggregate, troops: compositionTotal(aggregate), plan, armyIds }, suppliedGrain: carried });
+    if (!job) { S.grain += carried; toast("所选军团无法从当前位置合军出发"); return; }
+    S.lastAction = { name: "军团远征出发", text: `${armyIds.length > 1 ? "多支军团合军" : armies[0].name}携${carried}粮食前往${TERRITORY_DEFS[targetId].name}，预计${formatDuration(job.endAt - job.startedAt)}后抵达。` };
     log(S, "info", S.lastAction.text);
     saveGame(); renderAll();
   }));
@@ -2918,25 +3087,27 @@ function mapNode(id, attackable) {
   const canAttack = attackable.includes(id);
   const locked = d.final && !crownAccessMet(S);
   const minor = d.playable === false;
-  return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${minor ? "minor" : ""} ${canAttack ? "attackable" : ""} ${locked ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%">${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${canAttack ? "可出征" : mine ? "我方 · " + t.guard : minor ? "可侦察" : locked ? "条件未满足" : `守军 ${t.guard}`}</small></span></button>`;
+  const settlementType = d.type === "castle" || d.type === "capital" ? "城堡" : "附属镇";
+  const status = canAttack ? "可出征" : mine ? `我方${settlementType} · 守军${t.guard}` : minor ? "道路节点 · 可侦察" : locked ? "条件未满足" : `守军 ${t.guard}`;
+  return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${minor ? "minor" : ""} ${canAttack ? "attackable" : ""} ${locked ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%">${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${status}</small></span></button>`;
 }
 
 function castleExpeditionHtml(s, id) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
   if (!d || !t || t.owner === "player" || d.playable === false) return "";
-  const army = armyEntity(s, "army_1");
-  const source = army?.composition || emptyComposition();
-  const preview = selectedComposition(s, Math.min(24, compositionTotal(source)), army?.id || "army_1");
-  const leaders = activeKnights(s);
-  const required = compositionSupply(s, preview, ["player"]);
+  const eligible = playerArmies(s).filter(army => army.status === "idle" && attackableTerritories(s, army.id).includes(id));
+  const previewIds = eligible.length ? [eligible[0].id] : [];
+  const preview = armyGroupComposition(s, previewIds);
+  const leaders = previewIds.map(armyId => armyCommander(s, armyEntity(s, armyId)).id);
+  const required = previewIds.length ? compositionSupply(s, preview, leaders) : 0;
   const locked = d.final && !crownAccessMet(s);
-  const disabled = locked || !army || army.status !== "idle" || compositionTotal(source) < 10 || s.grain < required;
-  return `<section class="castle-plan"><div class="castle-plan-head"><b>出征至${d.name}</b><span>${army?.status === "idle" ? `预计行军${formatDuration(marchDurationForDistance(s, army.locationId, id))}` : "王国主力当前不可出发"}</span></div>
-    <div class="castle-plan-grid"><label>带队骑士<select data-castle-knight="${id}"><option value="">王子亲征</option>${leaders.map(knight => `<option value="${knight.id}">${esc(knight.name)} · 武力${knight.force} · 谋略${knight.scheme}</option>`).join("")}</select></label><label>作战方式<select data-castle-plan="${id}">${Object.entries(PLANS).map(([planId, plan]) => `<option value="${planId}">${plan.name}</option>`).join("")}</select></label></div>
-    <div class="castle-unit-picks"><span class="form-label">选择出征兵种与数量（王国主力 ${compositionTotal(source)} 人）</span>${Object.entries(UNIT_DEFS).map(([type, unit]) => `<label><span>${unit.name} · ${unitDisplayHint(type)}</span><input type="number" min="0" max="${source[type] || 0}" value="${preview[type] || 0}" data-castle-unit="${id}" data-unit-type="${type}"></label>`).join("")}</div>
-    <label class="castle-grain">携带粮食 <input type="number" min="${required}" max="${Math.max(required, Math.floor(s.grain))}" value="${required}" data-castle-grain="${id}"><small>按兵种重量计算，至少需要${required}粮。</small></label>
-    <button class="city-attack-btn" data-castle-launch="${id}" ${disabled ? "disabled" : ""}>${locked ? "王冠谷 · 条件未满足" : army?.status !== "idle" ? "王国主力当前不可出发" : s.grain < required ? "粮食不足" : `出征 · ${d.name}`}</button></section>`;
+  const disabled = locked || !eligible.length || compositionTotal(preview) < 10 || s.grain < required;
+  return `<section class="castle-plan"><div class="castle-plan-head"><b>从这里配置远征</b><span>${eligible.length ? `可用${eligible.length}支军团 · 预计${formatDuration(Math.min(...eligible.map(army => marchDurationForDistance(s, army.locationId, id))))}` : "没有在途或待命军团"}</span></div>
+    <p class="expedition-note">选择一支军团单独出征，或勾选多支军团合军。每支军团会保留自己的兵种和指挥官。</p>
+    <div class="expedition-army-list">${eligible.length ? eligible.map((army, index) => { const commander = armyCommander(s, army); return `<label class="expedition-army-row"><input type="checkbox" data-expedition-army="${army.id}" ${index === 0 ? "checked" : ""}><span><b>${esc(army.name)}</b><small>${esc(commander.person?.name || "未任命")} · ${commander.isKnight ? "骑士" : "王子"} · ${compositionTotal(army.composition)}人 · ${compositionText(army.composition)}</small></span></label>`; }).join("") : `<div class="empty-state">先在军队页组建军团，再回到地图出征。</div>`}</div>
+    <div class="castle-plan-grid"><label>作战方式<select data-expedition-plan="${id}">${Object.entries(PLANS).map(([planId, plan]) => `<option value="${planId}">${plan.name}</option>`).join("")}</select></label><label>携带粮食<input type="number" min="${required}" max="${Math.max(required, Math.floor(s.grain))}" value="${required}" data-expedition-grain="${id}"><small>当前预选至少需要${required}粮。</small></label></div>
+    <button class="city-attack-btn" data-expedition-launch="${id}" ${disabled ? "disabled" : ""}>${locked ? "王冠谷 · 条件未满足" : !eligible.length ? "没有可出征军团" : s.grain < required ? "粮食不足" : `出征 · ${d.name}`}</button></section>`;
 }
 
 function territorySummary(s, id, attackable = []) {
@@ -2949,7 +3120,8 @@ function territorySummary(s, id, attackable = []) {
   const actionHtml = cityJob ? `<div class="city-queue"><b>斥候行动进行中</b><span data-job-countdown="${cityJob.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(cityJob))}</span><small>完成后会记录这座城的基础军情。</small></div>` : actions.length ? `<div class="city-actions">${actions.map(action => `<button data-city-action="${action.id}" data-city-id="${id}" ${action.disabled ? "disabled" : ""}><b>${action.name}</b><small>${action.note}</small></button>`).join("")}</div>` : "";
   const attack = attackable.includes(id) ? `<button class="city-attack-btn" data-city-attack="${id}">打开出征配置</button>` : "";
   const castlePlan = t.owner !== "player" && d.playable !== false ? castleExpeditionHtml(s, id) : "";
-  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${d.region}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : "独立领地"}</b></div><p>${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
+  const settlementType = d.type === "castle" || d.type === "capital" ? "城堡" : "附属镇";
+  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : "独立领地"}</b></div><p>${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
 }
 
 function terrainAdvice(targetId, composition) {
@@ -2983,10 +3155,50 @@ function armyRosterHtml() {
   return `<div class="army-roster"><div class="section-note">王国主力：${compositionText(main)} · ${compositionTotal(main)}人；${place}待编驻军：${compositionText(garrison)}。训练完成后先进入驻军，再由主力驻扎时编入。</div>${deployable ? `<button class="secondary-btn" data-deploy-garrison="${territoryId}">把${place}驻军编入王国主力</button>` : ""}${Object.entries(UNIT_DEFS).map(([type, unit]) => { const queued = recruitJob?.payload?.unitType === type; const label = queued ? `训练中 · ${formatDuration(getJobRemainingMs(recruitJob))}` : recruitJob ? "训练队列占用" : unitUnlockLabel(S, type, territoryId); const count = garrison[type] || 0; const mainCount = main[type] || 0; const equipment = unitEquipment(S, type); return `<article class="unit-card"><div class="unit-head"><b>${glyphSvg(type)}${unit.name}</b><strong>${mainCount}<small>主力 · ${count}待编</small></strong></div><p>${unitDisplayHint(type)}<br>装备等级 ${equipment.level}</p><button data-recruit-unit="${type}" ${!canRecruitUnit(S, type, territoryId) ? "disabled" : ""}>${queued ? `<span data-job-countdown="${recruitJob.id}" data-job-prefix="训练中 · ">${label}</span>` : label}</button></article>`; }).join("")}</div>`;
 }
 
+function armyCorpsHtml() {
+  const armies = playerArmies(S);
+  const main = armyEntity(S, "army_1");
+  const assigned = assignedCommanderIds(S);
+  const commanderOptions = [{ id: "player", name: `${S.playerName} · 王子亲征` }].filter(option => canUseCommander(S, option.id)).concat(activeKnights(S).filter(knight => !assigned.has(knight.id)).map(knight => ({ id: knight.id, name: `${knight.name} · 骑士` })));
+  const canCreate = main?.status === "idle" && compositionTotal(main.composition) >= 20 && commanderOptions.length > 0;
+  return `<section class="corps-panel"><div class="section-head"><h2>军团编制</h2><span>${armies.length}支军团 · 每支由王子或骑士带领</span></div>
+    <div class="corps-grid">${armies.map(army => { const commander = armyCommander(S, army); const canDisband = army.id !== "army_1" && army.status === "idle"; return `<article class="corps-card ${army.id === "army_1" ? "primary" : ""}"><div class="corps-card-head"><b>${esc(army.name)}</b><span>${army.id === "army_1" ? "主军" : "独立军团"}</span></div><p><strong>${esc(commander.person?.name || "未任命")}</strong> · ${commander.isKnight ? "骑士" : "王子"}<br>${TERRITORY_DEFS[army.locationId]?.name || "未知地点"} · ${armyStatusText(S, army)}</p><div class="stat-chips"><span>${compositionTotal(army.composition)}人</span><span>${compositionText(army.composition)}</span></div>${canDisband ? `<button class="ghost-btn" data-disband-army="${army.id}">解散军团</button>` : `<small class="corps-note">${army.id === "army_1" ? "主军不可解散" : "行军或交战中"}</small>`}</article>`; }).join("")}</div>
+    <div class="corps-create"><div><h3>组建新军团</h3><p>从渡鸦第一军团抽调兵力，至少留下10人。组建完成后，地图上可以单独出征或合军。</p></div>
+      <div class="corps-create-grid"><label>军团名称<input id="newArmyName" maxlength="18" value="第二军团" placeholder="例如：黑棘骑士团"></label><label>带队指挥官<select id="newArmyCommander">${commanderOptions.map(option => `<option value="${option.id}">${esc(option.name)}</option>`).join("")}</select></label></div>
+      <div class="corps-unit-picks">${Object.entries(UNIT_DEFS).map(([type, unit]) => `<label><span>${unit.name} · 主军${main?.composition[type] || 0}</span><input type="number" min="0" max="${main?.composition[type] || 0}" value="0" data-new-army-unit="${type}"></label>`).join("")}</div>
+      <button class="secondary-btn" data-create-army ${canCreate ? "" : "disabled"}>${canCreate ? "组建军团" : "主军至少需要20人，且要有空闲骑士"}</button>
+    </div></section>`;
+}
+
+function bindArmyControls(panel) {
+  panel.querySelectorAll("[data-create-army]").forEach(button => button.addEventListener("click", () => {
+    const composition = emptyComposition();
+    panel.querySelectorAll("[data-new-army-unit]").forEach(input => { composition[input.dataset.newArmyUnit] = Math.max(0, Math.round(Number(input.value) || 0)); });
+    const army = createArmyFromMain(S, $("newArmyName")?.value || "第二军团", $("newArmyCommander")?.value || "player", composition);
+    if (!army) { toast("兵力、指挥官或主军状态不符合组建条件"); return; }
+    saveGame(); renderAll();
+  }));
+  panel.querySelectorAll("[data-disband-army]").forEach(button => button.addEventListener("click", () => {
+    if (!disbandArmy(S, button.dataset.disbandArmy)) { toast("军团行军或交战中，暂时不能解散"); return; }
+    saveGame(); renderAll();
+  }));
+}
+
 function renderCampaign() {
   if (S.battleSession) { renderActiveBattle(); return; }
   syncTroops(S);
   const panel = $("panel");
+  const armies = playerArmies(S);
+  const totalMobile = armies.reduce((sum, army) => sum + compositionTotal(army.composition), 0);
+  const activeUnits = new Set(armies.flatMap(army => Object.entries(army.composition).filter(([, count]) => count > 0).map(([type]) => type))).size;
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>军队与军团</h2><p>军队页负责募兵和编制。先把兵卒分成几支由王子或骑士带领的军团，再去地图选择目标出征；地图上可以单独出征，也可以多军团合军。</p>${metrics([[totalMobile, "机动兵力"], [activeUnits, "现役兵种"], [armies.length, "军团数量"], [activeKnights(S).length, "在列骑士"]])}</section>
+    ${armyCorpsHtml()}
+    <div class="section-head"><h2>兵种与补充</h2><span>训练完成后进入本地驻军，再编入渡鸦第一军团</span></div>${armyRosterHtml()}
+    ${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
+  bindArmyControls(panel);
+  panel.querySelectorAll("[data-recruit-unit]").forEach(button => button.addEventListener("click", () => recruitUnit(button.dataset.recruitUnit)));
+  panel.querySelectorAll("[data-deploy-garrison]").forEach(button => button.addEventListener("click", () => { if (!deployGarrison(S, button.dataset.deployGarrison)) toast("第一军团必须驻扎在本地且完成整补"); saveGame(); renderAll(); }));
+  return;
   const attackable = attackableTerritories(S);
   const crownWait = ownTerritoryIds(S).length >= 18 && !crownAccessMet(S);
   const targets = crownWait && !attackable.length ? ["crownvale"] : attackable;
@@ -3067,7 +3279,7 @@ function renderActiveBattle() {
   const target = TERRITORY_DEFS[session.targetId];
   const enemyFaction = S.territories[session.targetId].owner;
   const enemyCommander = defenderLeader(S, session.targetId);
-  const playerLeaders = session.leaderIds.map(id => officer(S, id)).filter(Boolean);
+  const playerLeaders = session.leaderIds.map(id => commanderById(S, id)).filter(Boolean);
   const options = stageOptions(S, session);
   const stageName = ["接近敌军", "正面交战", "最后阶段"][session.stage];
   const marker = clamp(50 + session.momentum / 2, 1, 99);
@@ -3183,8 +3395,8 @@ function renderCourt() {
   const locked = others.filter(o => o.side === "locked");
   const averageLoyalty = own.length > 1 ? Math.round(own.filter(o => o.id !== "player").reduce((sum, o) => sum + o.loyalty, 0) / (own.length - 1)) : 100;
   const knights = S.knights || [];
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE RESTORATION COURT</span><h2>复国王庭</h2><p>有立绘的人物都是领主。战胜或招降他们后，可以任命其管理封地；无立绘骑士负责带兵和战场协同。</p>${metrics([[own.length, "我方领主"], [activeKnights(S).length, "我方骑士"], [averageLoyalty, "平均忠诚"], [own.filter(o => o.fief).length, "已封领地"]])}</section>
-    <div class="section-head"><h2>我方领主</h2><span>只显示统率、治理、忠诚；打下领地后再封给领主</span></div><div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}</div>`).join("")}</div>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">COMMANDERS & KNIGHTS</span><h2>将领与骑士</h2><p>有立绘的人物是领主，负责封地与政务；无立绘人物是骑士，负责带领军团。只有加入你的骑士，才会出现在军队编制里。</p>${metrics([[own.length, "我方领主"], [activeKnights(S).length, "我方骑士"], [averageLoyalty, "平均忠诚"], [own.filter(o => o.fief).length, "已封领地"]])}</section>
+    <div class="section-head"><h2>我方领主</h2><span>治理封地、处理忠诚，不再直接占用军团指挥位</span></div><div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}</div>`).join("")}</div>
     <div class="section-head"><h2>可招募领主</h2><span>金币预扣，招募需要${formatDuration(JOB_CONFIG.OFFICER_RECRUIT.durationMs)}</span></div><div class="officer-grid">${candidates.length ? candidates.map(o => { const job = getRunningJob(S, `officer:${o.id}`); const label = job ? `<span data-job-countdown="${job.id}" data-job-prefix="招募中 · ">招募中 · ${formatDuration(getJobRemainingMs(job))}</span>` : `招募 · ${o.recruitCost}金`; return `<div class="officer-slot">${officerCard(o, true)}<button class="secondary-btn" data-recruit-officer="${o.id}" ${job || S.gold < o.recruitCost ? "disabled" : ""}>${label}</button></div>`; }).join("") : `<div class="empty-state">当前没有可招募的领主。</div>`}</div>
     <div class="section-head"><h2>骑士名册</h2><span>${activeKnights(S).length}名在列 · ${availableKnights(S).length}名可招募 · 俘虏可处置</span></div><div class="knight-grid">${knights.filter(k => !["gone", "executed", "released"].includes(k.status)).map(knightCard).join("") || `<div class="empty-state">暂时没有可处理的骑士。</div>`}</div>
     <div class="section-head"><h2>敌方领主</h2><span>可在战场击败、招降或迫使其离场</span></div><div class="officer-grid">${enemies.length ? enemies.map(o => officerCard(o, true)).join("") : `<div class="empty-state">北境已经没有仍举着敌旗的领主。</div>`}</div>
@@ -3382,7 +3594,7 @@ if (typeof module !== "undefined" && module.exports) {
     applyEventEffects, handleOfficerPolitics, interactionLocked, advanceSeason, checkDefeat,
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, CROWN_OPEN_TURN, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
-    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, knightAction, armyEntity, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2,
+    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2,
     migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, cityRelation, CITY_ACTION_DEFS, MAP_IMAGE, recruitOfficer
   };
 }
