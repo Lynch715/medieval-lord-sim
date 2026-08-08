@@ -40,11 +40,11 @@
       <h2>从今晚起，渡鸦堡的账都算在你名下</h2>
       <label class="field-block"><span>领主姓名</span><input id="playerName" maxlength="8" value="罗恩" autocomplete="off"></label>
       <div class="field-block">
-        <span>你准备靠什么统治</span>
+        <span>你准备采用哪种主将方略</span>
         <div id="oathPicker" class="choice-grid">
-          <button class="choice-card active" data-oath="oath" type="button"><b>守信</b><small>开局民心更高，家臣关系更稳</small></button>
-          <button class="choice-card" data-oath="iron" type="button"><b>强硬</b><small>开局军队和军心更强</small></button>
-          <button class="choice-card" data-oath="wealth" type="button"><b>经营</b><small>开局金币更多，税收更高</small></button>
+          <button class="choice-card active" data-oath="oath" type="button"><b>均衡</b><small>民心更高，武将关系更稳</small></button>
+          <button class="choice-card" data-oath="iron" type="button"><b>军略</b><small>开局军队和军心更强</small></button>
+          <button class="choice-card" data-oath="wealth" type="button"><b>经营</b><small>开局金币更多，资源流量更高</small></button>
         </div>
       </div>
       <div class="field-block">
@@ -79,7 +79,6 @@
         <div><span>粮食</span><b id="grainText">125</b></div>
         <div><span>知识</span><b id="knowledgeText">12</b></div>
         <div><span>军队</span><b id="troopText">42</b></div>
-        <button id="soundBtn" class="icon-btn sound-btn" type="button" aria-label="关闭环境音" aria-pressed="true">声</button>
         <button id="saveBtn" class="icon-btn" type="button" aria-label="保存进度">存</button>
         <button id="restartBtn" class="icon-btn" type="button" aria-label="重新开始">重</button>
       </div>
@@ -90,10 +89,10 @@
         <article class="lord-card">
           <img src="assets/player.webp" alt="玩家领主">
           <div class="portrait-fade"></div>
-          <div class="lord-copy"><span id="oathBadge">守信领主</span><h2 id="playerNameText">罗恩</h2><p>渡鸦堡 · 领主</p></div>
+          <div class="lord-copy"><span id="oathBadge">均衡主将</span><h2 id="playerNameText">罗恩</h2><p>渡鸦堡 · 主将</p></div>
         </article>
         <section class="side-panel glass">
-          <div class="section-title"><h3>统治根基</h3><span id="territoryCount">1 / 7</span></div>
+          <div class="section-title"><h3>军政根基</h3><span id="territoryCount">1 / 7</span></div>
           <div class="meter-row"><span>民心</span><b id="supportText">54</b></div><div class="meter green"><i id="supportBar"></i></div>
           <div class="meter-row"><span>军心</span><b id="moraleText">58</b></div><div class="meter red"><i id="moraleBar"></i></div>
           <div class="meter-row"><span>威望</span><b id="renownText">12</b></div><div class="meter gold"><i id="renownBar"></i></div>
@@ -101,19 +100,19 @@
           <div class="meter-row"><span>战争疲劳</span><b id="wearinessText">0</b></div><div class="meter purple"><i id="wearinessBar"></i></div>
         </section>
         <section class="side-panel glass">
-          <div class="section-title"><h3>下季预计</h3><span id="netGoldText">+0 金</span></div>
+          <div class="section-title"><h3>实时资源</h3><span id="netGoldText">+0.00 金/秒</span></div>
           <div id="forecastList" class="forecast-list"></div>
         </section>
       </aside>
 
       <section class="main-column">
         <nav id="gameNav" class="game-nav" aria-label="游戏功能">
-          <button class="active" data-tab="hall"><span>议</span>议事厅</button>
-          <button data-tab="domain"><span>堡</span>领地</button>
-          <button data-tab="map"><span>图</span>北境地图</button>
-          <button data-tab="campaign"><span>剑</span>征战</button>
-          <button data-tab="court"><span>臣</span>家臣</button>
-          <button data-tab="chronicle"><span>录</span>编年史</button>
+          <button class="active" data-tab="hall"><span>总</span>总览</button>
+          <button data-tab="domain"><span>发</span>发展</button>
+          <button data-tab="court"><span>将</span>武将</button>
+          <button data-tab="campaign"><span>军</span>军队</button>
+          <button data-tab="map"><span>图</span>地图</button>
+          <button data-tab="chronicle"><span>志</span>战报</button>
         </nav>
         <div class="turn-strip"><div><i class="live-dot"></i><b id="phaseText">春耕</b><span id="turnHint">距离换季 5:00</span></div><span class="clock-live">实时推进</span></div>
         <div id="panel" class="content-panel"></div>

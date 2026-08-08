@@ -17,15 +17,23 @@ assert.equal(game.playableTerritoryIds().length, 7, "首批可征服区域仍保
 assert.equal(fresh.armies.length, 1);
 assert.equal(fresh.armies[0].locationId, "ravenstone");
 assert.equal(game.seasonOf(fresh).id, "spring");
+assert.equal(Object.keys(game.BUILDINGS).length, 10, "发展页应提供十类可升级建筑");
+assert.equal(game.BUILDING_MAX_LEVEL, 5, "建筑等级上限应支持五级成长");
+assert.equal(Object.keys(game.TECH_DEFS).length, 5, "科技树应拆分为五条分支");
+assert.ok(Object.values(game.TECH_DEFS).every(branch => branch.length === 5), "每条科技分支应有五项研究");
 assert.deepEqual(game.attackableTerritories(fresh).sort(), ["ashfield", "pineford"]);
 assert.equal(game.cityActionOptions(fresh, "westmarch").length, 3, "外围城市应提供斥候、使者和商站操作");
 assert.equal(game.cityAction(fresh, "westmarch", "envoy"), true, "中立城市应能接受使者");
+assert.equal(fresh.territories.westmarch.owner, "neutral", "城市行动应在完成前保持原状态");
+game.processCompletedJobs(fresh, fresh.jobs[0].endAt);
 assert.equal(game.cityRelation(fresh, "westmarch"), 14, "使者应提高中立城市信任");
 fresh.seasonLocks = {};
+fresh.jobs = fresh.jobs.filter(job => job.status === "running");
 fresh.gold = 100;
 fresh.grain = 100;
 fresh.cityRelations.westmarch = 30;
 assert.equal(game.cityAction(fresh, "westmarch", "charter"), true, "高信任中立城市应能签订城约");
+game.processCompletedJobs(fresh, fresh.jobs.find(job => job.type === "CITY_ACTION").endAt);
 assert.equal(fresh.territories.westmarch.owner, "player");
 assert.equal(game.subjects(fresh), 218);
 assert.equal(game.armyTotal(fresh), fresh.troops);
@@ -49,6 +57,29 @@ assert.equal(game.canRecruitUnit(hallRecruitState, "levy"), true, "训练完成�
 assert.ok(game.forecast(fresh).gold > 0);
 assert.ok(game.forecast(fresh).grainCost > 0);
 assert.ok(game.forecast(fresh).storageCap > fresh.grain, "粮仓容量应进入经营预测");
+const flowState = game.createInitialState("实时产出", "oath", "standard");
+const flowStart = flowState.clock.lastProcessedAt;
+const flowGold = flowState.gold;
+const flowGrain = flowState.grain;
+game.advanceSeasonAuto(flowState, flowStart + 1000);
+assert.ok(flowState.gold > flowGold && flowState.grain > flowGrain, "资源应在没有点击操作时按秒自动产生");
+assert.ok(game.resourceFlow(flowState).goldPerSecond > 0 && game.resourceFlow(flowState).grainPerSecond > 0, "当前季节应展示正向资源流量");
+const techEffectState = game.createInitialState("科技审计", "oath", "standard");
+const baseTechForecast = game.forecast(techEffectState);
+techEffectState.tech.military.completed = ["refined_iron", "longbow", "war_engineering", "field_doctrine", "professional_army"];
+techEffectState.tech.commerce.completed = ["coinage", "caravanserai", "trade_guild", "market_charter", "royal_exchange"];
+techEffectState.tech.administration.completed = ["tax_registry", "relay_roads", "census", "provincial_offices", "law_code"];
+techEffectState.tech.siege.completed = ["siege_ladders", "sappers", "trebuchet", "blockade", "iron_crown_doctrine"];
+const advancedTechForecast = game.forecast(techEffectState);
+assert.ok(advancedTechForecast.goldCost < baseTechForecast.goldCost, "常备军制应实际降低军饷");
+techEffectState.cityRelations.westmarch = 18;
+assert.ok(game.cityActionOptions(techEffectState, "westmarch").some(option => option.id === "charter"), "自由市契约应降低签订城约门槛");
+const baseMarch = game.createInitialState("行军时间", "oath", "standard");
+const baseMarchJob = game.startMarch(baseMarch, "army_1", "ashfield", 1000);
+const doctrineMarch = game.createInitialState("军令时间", "oath", "standard");
+doctrineMarch.tech.military.completed = ["field_doctrine"];
+const doctrineMarchJob = game.startMarch(doctrineMarch, "army_1", "ashfield", 1000);
+assert.ok(doctrineMarchJob.endAt < baseMarchJob.endAt, "野战条令应实际缩短行军时间");
 assert.equal(game.WORLD_EVENTS.length, 18, "应有18个领地动态事件");
 assert.equal(game.NPC_ARCS.length, 12, "六名关键人物应各有两段个人事件");
 assert.equal(game.WORLD_EVENTS.flatMap(event => event.options).length, 54, "18个领地事件应保留54个选择结果");
@@ -91,6 +122,8 @@ for (const plainLabel of ["武力", "统率", "谋略", "治理", "魅力", "人
 for (const removedCopy of ["CAMPAIGN_AP_COST", "行动点", "结束本季", "apText", "每个季度只有三次重要行动"]) {
   assert.ok(!source.includes(removedCopy) && !html.includes(removedCopy), `实时版本不应保留旧行动点文案：${removedCopy}`);
 }
+assert.ok(!source.includes("AudioContext") && !source.includes("soundBtn") && !html.includes("soundBtn"), "游戏不应再包含BGM或环境音入口");
+assert.ok(game.ACTIONS.every(action => action.durationMs > 0), "议事厅每项主动行动都必须有真实完成时间");
 
 const beforeFields = game.territoryOutput(fresh, "ravenstone").grain;
 fresh.territories.ravenstone.buildings.fields++;
@@ -175,6 +208,16 @@ assert.equal(measuredRetreat.officers.find(o => o.id === "renard").grievance, re
 const saveRoundTrip = game.hydrateState(JSON.parse(JSON.stringify(battleState)));
 assert.equal(saveRoundTrip.version, 2);
 assert.equal(saveRoundTrip.territories.ashfield.owner, "player");
+const oldPlayerCopy = game.createInitialState("旧称谓", "oath", "standard");
+oldPlayerCopy.officers.find(item => item.id === "player").title = "领主";
+oldPlayerCopy.officers.find(item => item.id === "player").traitText = "领主出战时，本场军心最低按45点计算";
+const normalizedPlayerCopy = game.hydrateState(JSON.parse(JSON.stringify(oldPlayerCopy)));
+assert.equal(normalizedPlayerCopy.officers.find(item => item.id === "player").title, "主将", "旧存档玩家称谓应迁移为主将");
+assert.match(normalizedPlayerCopy.officers.find(item => item.id === "player").traitText, /主将出战/);
+const duplicateOfficerSave = game.createInitialState("重复候选", "oath", "standard");
+duplicateOfficerSave.officers.push(JSON.parse(JSON.stringify(duplicateOfficerSave.officers.find(item => item.id === "maelis"))));
+const normalizedDuplicateSave = game.hydrateState(JSON.parse(JSON.stringify(duplicateOfficerSave)));
+assert.equal(normalizedDuplicateSave.officers.filter(item => item.id === "maelis").length, 1, "旧存档重复候选武将应自动去重");
 
 const legacyV1 = game.createInitialState("V1迁移", "oath", "standard");
 legacyV1.version = 1;
@@ -212,6 +255,14 @@ const researchState = game.createInitialState("研究队列", "oath", "standard"
 const beforeResearchGrain = game.territoryOutput(researchState, "ravenstone").grain;
 const researchJob = game.queueResearch(researchState, "agriculture", "heavy_plow", 1000);
 assert.ok(researchJob && researchJob.queueKey === "research:global");
+
+const officerCandidateState = game.createInitialState("武将招募", "oath", "standard");
+const officerCandidate = officerCandidateState.officers.find(item => item.recruitable && item.side === "neutral");
+assert.ok(officerCandidate, "初始存档应提供可招募武将");
+const officerJob = game.startJob(officerCandidateState, { type: "OFFICER_RECRUIT", queueKey: `officer:${officerCandidate.id}`, startedAt: 1000, endAt: 2000, payload: { officerId: officerCandidate.id, startingLoyalty: officerCandidate.loyalty } });
+assert.ok(officerJob);
+assert.equal(game.processCompletedJobs(officerCandidateState, 2000), 1, "武将招募队列应能完成");
+assert.equal(officerCandidateState.officers.find(item => item.id === officerCandidate.id).side, "player");
 assert.equal(game.canResearch(researchState, "administration", "tax_registry"), false, "全局研究队列只能同时运行一项");
 assert.equal(game.processCompletedJobs(researchState, 2000), 0);
 assert.equal(game.processCompletedJobs(researchState, researchJob.endAt), 1);
