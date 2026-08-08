@@ -43,11 +43,11 @@ const TECH_DEFS = {
     { id: "winter_storage", name: "冬储法", desc: "冬季粮食产量提高，仓储损耗进一步降低。", cost: { knowledge: 48, gold: 72 }, requires: ["seed_selection"] }
   ],
   military: [
-    { id: "refined_iron", name: "精炼铁器", desc: "解锁披甲骑士征募。", cost: { knowledge: 10, gold: 22 }, requires: [] },
-    { id: "longbow", name: "长弓", desc: "弓箭手征募量 +3。", cost: { knowledge: 18, gold: 32 }, requires: ["refined_iron"] },
-    { id: "war_engineering", name: "攻城工程", desc: "解锁进军王冠谷的资格；没有攻城器械，王城不会打开城门。", cost: { knowledge: 24, gold: 45 }, requires: ["longbow"] },
-    { id: "field_doctrine", name: "野战条令", desc: "训练度衰减减半，军团行军更快。", cost: { knowledge: 34, gold: 52 }, requires: ["war_engineering"] },
-    { id: "professional_army", name: "常备军制", desc: "军队军饷降低，主力军心更稳定。", cost: { knowledge: 46, gold: 70 }, requires: ["field_doctrine"] }
+    { id: "refined_iron", name: "精炼铁器", desc: "解锁披甲骑士、重步兵，并提升重甲兵种的攻击、防御和生命。", cost: { knowledge: 10, gold: 22 }, requires: [] },
+    { id: "longbow", name: "长弓", desc: "解锁弓手装备升级，弓箭手征募量提高。", cost: { knowledge: 18, gold: 32 }, requires: ["refined_iron"] },
+    { id: "war_engineering", name: "攻城工程", desc: "解锁弩手和王冠谷远征资格；攻城装备会提升破甲兵种。", cost: { knowledge: 24, gold: 45 }, requires: ["longbow"] },
+    { id: "field_doctrine", name: "野战条令", desc: "解锁轻骑兵，训练度衰减减半，机动兵种装备升级。", cost: { knowledge: 34, gold: 52 }, requires: ["war_engineering"] },
+    { id: "professional_army", name: "常备军制", desc: "所有兵种获得最后一档装备，军队军饷降低，主力军心更稳定。", cost: { knowledge: 46, gold: 70 }, requires: ["field_doctrine"] }
   ],
   administration: [
     { id: "tax_registry", name: "税籍", desc: "所有领地金币收入 +8%。", cost: { knowledge: 10, gold: 20 }, requires: [] },
@@ -205,6 +205,11 @@ function knightById(s, id) {
 
 function activeKnights(s) {
   return (s?.knights || []).filter(knight => knight.side === "player" && knight.status === "active");
+}
+
+function knightBattleMultiplier(s) {
+  const coefficient = activeKnights(s).reduce((sum, knight) => sum + ((knight.force || 50) + (knight.command || 45)) / 200 * .008, 0);
+  return 1 + Math.min(.24, coefficient);
 }
 
 function availableKnights(s) {
@@ -597,9 +602,12 @@ const PLANS = {
 };
 
 const UNIT_DEFS = {
-  levy: { name: "长矛兵", short: "矛", gold: 10, grain: 6, amount: 8, desc: "招募便宜，适合守城和补充驻军，通常承担最多伤亡。" },
-  archers: { name: "弓箭手", short: "弓", gold: 12, grain: 5, amount: 6, desc: "适合森林、山地和河谷；达到人数要求后可使用箭雨。" },
-  knights: { name: "披甲骑士", short: "骑", gold: 18, grain: 7, amount: 4, desc: "在平原强攻中威力最高，招募和军饷成本也最高。" }
+  levy: { name: "长矛兵", short: "矛", gold: 10, grain: 6, amount: 8, attack: 1, defense: 1.08, hp: 100, supply: 1, role: "前列", counters: ["light_cavalry", "knights"], weakTo: ["archers", "crossbowmen"], equipmentTech: ["refined_iron", "professional_army"], desc: "便宜可靠的前列兵，能挡住骑兵，但怕远程压制。" },
+  archers: { name: "弓箭手", short: "弓", gold: 12, grain: 5, amount: 6, attack: 1.08, defense: .78, hp: 82, supply: 1, role: "远射", counters: ["heavy_infantry", "knights"], weakTo: ["levy", "light_cavalry"], equipmentTech: ["longbow", "professional_army"], desc: "远射压制重甲目标，在森林、山地和河谷更容易发挥。" },
+  knights: { name: "披甲骑士", short: "骑", gold: 18, grain: 7, amount: 4, attack: 1.7, defense: 1.28, hp: 145, supply: 2, role: "重骑", unlockTech: "refined_iron", counters: ["archers", "crossbowmen"], weakTo: ["levy", "heavy_infantry"], equipmentTech: ["refined_iron", "field_doctrine", "professional_army"], desc: "昂贵的重骑兵，平原冲锋强大，但会被长矛和重步兵拖住。" },
+  heavy_infantry: { name: "重步兵", short: "重", gold: 15, grain: 7, amount: 5, attack: 1.25, defense: 1.5, hp: 155, supply: 2, role: "盾墙", unlockTech: "refined_iron", counters: ["levy", "knights"], weakTo: ["archers", "crossbowmen"], equipmentTech: ["refined_iron", "war_engineering", "professional_army"], desc: "披甲盾墙，正面防御最高，适合守城和压住骑兵。" },
+  crossbowmen: { name: "弩手", short: "弩", gold: 16, grain: 6, amount: 5, attack: 1.42, defense: .82, hp: 88, supply: 1, role: "破甲", unlockTech: "war_engineering", counters: ["heavy_infantry", "knights"], weakTo: ["light_cavalry", "levy"], equipmentTech: ["war_engineering", "professional_army"], desc: "装填较慢但破甲力强，专门惩罚重甲兵种。" },
+  light_cavalry: { name: "轻骑兵", short: "轻骑", gold: 14, grain: 6, amount: 5, attack: 1.32, defense: .92, hp: 112, supply: 2, role: "机动", unlockTech: "field_doctrine", counters: ["archers", "crossbowmen"], weakTo: ["levy", "heavy_infantry"], equipmentTech: ["field_doctrine", "professional_army"], desc: "机动迅速，适合绕击远程部队，不宜正面撞盾墙。" }
 };
 
 const POLICIES = {
@@ -719,6 +727,9 @@ const GLYPH_PATHS = {
   levy: '<path d="M10 36 35 7m-5 1 6-2-2 6M8 32l8 8M18 15l11 11M20 37H8l2-12 10 12Z"/>',
   archers: '<path d="M12 7c14 7 14 27 0 34m0-17h25m-6-5 6 5-6 5M12 7c-8 8-8 26 0 34"/>',
   knights: '<path d="M16 38h19l-2-8-6-4 4-10-7-8-9 6-3 15 4 9Zm2-19 8-3m-4-7 1 6"/>',
+  heavy_infantry: '<path d="M12 39V17l12-8 12 8v22M17 22h14M18 29h12M20 39V29h8v10"/>',
+  crossbowmen: '<path d="M8 24h32M24 9v30M13 13l22 22m0-22L13 35M10 19l5 5-5 5m28-10-5 5 5 5"/>',
+  light_cavalry: '<path d="M9 37h28M13 32l6-12 9-4 6 9-8 2-5 8m1-15 5-7 6 3M19 20l-7-4"/>',
   fields: '<path d="M7 38h34M12 38c3-12 2-21-1-30m5 8-5 5m-3 4 5 4m14 9c-2-11-1-19 3-27m-7 8 5 4m5 2-6 5"/>',
   market: '<path d="M8 18h32l-3-10H11L8 18Zm3 0v22h26V18M17 40V27h12v13M9 18c1 7 7 7 9 0 2 7 8 7 10 0 2 7 8 7 10 0"/>',
   barracks: '<path d="M8 40h32M12 40V18l12-9 12 9v22M19 40V28h10v12M8 18h32"/>',
@@ -895,7 +906,7 @@ function applyEventEffects(s, changes = {}, officerId = null) {
     o.loyalty = clamp(o.loyalty + (changes.loyaltyAll || 0));
     o.grievance = clamp(o.grievance + (changes.grievanceAll || 0));
   });
-  ["levy", "archers", "knights"].forEach(type => { if (changes[type]) addUnits(s, type, changes[type]); });
+  Object.keys(UNIT_DEFS).forEach(type => { if (changes[type]) addUnits(s, type, changes[type]); });
   const person = officerId ? officer(s, officerId) : null;
   if (person) {
     if (changes.loyalty) person.loyalty = clamp(person.loyalty + changes.loyalty);
@@ -927,7 +938,7 @@ function compositionTotal(comp = {}) {
 }
 
 function emptyComposition() {
-  return { levy: 0, archers: 0, knights: 0 };
+  return Object.fromEntries(Object.keys(UNIT_DEFS).map(type => [type, 0]));
 }
 
 function territoryGarrison(s, territoryId) {
@@ -964,7 +975,7 @@ function defaultArmyEntity(s) {
     owner: "player",
     locationId: "ravenstone",
     destinationId: null,
-    composition: clone(s.army || { levy: 0, archers: 0, knights: 0 }),
+    composition: { ...emptyComposition(), ...(s.army || {}) },
     leaders: ["player", "renard"],
     morale: s.morale,
     training: s.training,
@@ -990,7 +1001,7 @@ function ensureAIFactions(s) {
     faction.armies = Array.isArray(faction.armies) ? faction.armies : [];
     if (!faction.armies.length) faction.armies.push({
       id: `${id}_army_1`, name: `${FACTIONS[id].name}主力`, owner: id, locationId: def.capital, destinationId: null,
-      composition: { levy: id === "crown" ? 46 : 30, archers: id === "river" ? 15 : 8, knights: id === "crown" ? 10 : 4 },
+      composition: { ...emptyComposition(), levy: id === "crown" ? 46 : 30, archers: id === "river" ? 15 : 8, knights: id === "crown" ? 10 : 4, heavy_infantry: id === "crown" ? 8 : 3, crossbowmen: id === "crown" ? 5 : 2, light_cavalry: id === "wolf" ? 5 : 2 },
       leaders: id === "wolf" ? ["bran"] : id === "river" ? ["aveline"] : [], morale: 62, training: 10, supply: 100, status: "idle", jobId: null
     });
   });
@@ -1001,7 +1012,7 @@ function syncArmyEntities(s) {
   if (!s) return;
   s.armies = Array.isArray(s.armies) && s.armies.length ? s.armies : [defaultArmyEntity(s)];
   s.armies.forEach(army => {
-    army.composition ||= emptyComposition();
+    army.composition = { ...emptyComposition(), ...(army.composition || {}) };
     army.morale ??= s.morale;
     army.training ??= s.training;
     army.supply = Math.max(0, Math.min(100, Number(army.supply ?? 100)));
@@ -1024,8 +1035,8 @@ function addUnits(s, type, amount, territoryId = primaryTerritoryId(s)) {
 
 function removeFromComposition(comp, amount) {
   let left = Math.min(compositionTotal(comp), Math.max(0, Math.round(amount)));
-  const removed = { levy: 0, archers: 0, knights: 0 };
-  for (const type of ["levy", "archers", "knights"]) {
+  const removed = emptyComposition();
+  for (const type of Object.keys(UNIT_DEFS)) {
     const take = Math.min(comp[type] || 0, left);
     comp[type] = Math.max(0, (comp[type] || 0) - take);
     removed[type] += take;
@@ -1071,14 +1082,10 @@ function selectedComposition(s, troops, armyId = "army_1") {
   const total = Math.max(1, compositionTotal(source));
   const selected = clamp(Math.round(troops), 0, total);
   const ratio = selected / total;
-  const result = {
-    knights: Math.min(source.knights || 0, Math.floor((source.knights || 0) * ratio)),
-    archers: Math.min(source.archers || 0, Math.floor((source.archers || 0) * ratio)),
-    levy: 0
-  };
-  result.levy = Math.min(source.levy || 0, selected - result.knights - result.archers);
-  let missing = selected - result.levy - result.archers - result.knights;
-  for (const type of ["levy", "archers", "knights"]) {
+  const result = emptyComposition();
+  Object.keys(UNIT_DEFS).forEach(type => { result[type] = Math.min(source[type] || 0, Math.floor((source[type] || 0) * ratio)); });
+  let missing = selected - compositionTotal(result);
+  for (const type of Object.keys(UNIT_DEFS)) {
     if (missing <= 0) break;
     const room = Math.max(0, (source[type] || 0) - result[type]);
     const add = Math.min(room, missing);
@@ -1089,26 +1096,58 @@ function selectedComposition(s, troops, armyId = "army_1") {
 }
 
 function compositionText(comp) {
-  return `矛${comp.levy || 0} · 弓${comp.archers || 0} · 骑${comp.knights || 0}`;
+  return Object.entries(UNIT_DEFS).filter(([type]) => (comp[type] || 0) > 0).map(([type, unit]) => `${unit.short}${Math.round(comp[type] || 0)}`).join(" · ") || "无兵力";
 }
 
-function compositionPower(comp, targetId, planId, seasonId) {
+function unitTerrainMultiplier(type, tags = []) {
+  if (tags.includes("plains")) return { levy: .92, archers: 1.05, knights: 2.02, heavy_infantry: 1.18, crossbowmen: 1.08, light_cavalry: 1.65 }[type] || 1;
+  if (tags.includes("forest")) return { levy: .98, archers: 1.34, knights: 1.2, heavy_infantry: 1.08, crossbowmen: 1.2, light_cavalry: .86 }[type] || 1;
+  if (tags.includes("mountain")) return { levy: 1.02, archers: 1.28, knights: 1.18, heavy_infantry: 1.22, crossbowmen: 1.18, light_cavalry: .82 }[type] || 1;
+  if (tags.includes("river")) return { levy: .98, archers: 1.24, knights: 1.28, heavy_infantry: 1.08, crossbowmen: 1.18, light_cavalry: .9 }[type] || 1;
+  if (tags.includes("capital")) return { levy: 1, archers: 1.02, knights: 1.34, heavy_infantry: 1.2, crossbowmen: 1.18, light_cavalry: .9 }[type] || 1;
+  return { levy: .92, archers: 1.1, knights: 1.7, heavy_infantry: 1.15, crossbowmen: 1.12, light_cavalry: 1.25 }[type] || 1;
+}
+
+function unitLevel(s, type) {
+  const unit = UNIT_DEFS[type];
+  if (!unit) return 1;
+  const tech = (unit.equipmentTech || []).reduce((sum, id) => sum + techLevel(s, id), 0);
+  const barracks = ownTerritoryIds(s).reduce((max, id) => Math.max(max, s.territories[id].buildings?.barracks || 0), 0);
+  return Math.max(1, Math.min(5, 1 + Math.floor(tech / 2) + Math.floor(barracks / 3)));
+}
+
+function unitEquipment(s, type) {
+  const unit = UNIT_DEFS[type] || UNIT_DEFS.levy;
+  const level = unitLevel(s, type);
+  return { level, attack: Math.round(unit.attack * (1 + (level - 1) * .1) * 100), defense: Math.round(unit.defense * (1 + (level - 1) * .09) * 100), hp: Math.round(unit.hp * (1 + (level - 1) * .12)) };
+}
+
+function counterMultiplier(attacker, defender) {
+  const attackTotal = Math.max(1, compositionTotal(attacker));
+  const defendTotal = Math.max(1, compositionTotal(defender));
+  let advantage = 0;
+  Object.entries(attacker).forEach(([a, count]) => Object.entries(defender).forEach(([d, enemyCount]) => {
+    if (!count || !enemyCount) return;
+    const unit = UNIT_DEFS[a];
+    if (unit?.counters?.includes(d)) advantage += count * enemyCount;
+    if (unit?.weakTo?.includes(d)) advantage -= count * enemyCount;
+  }));
+  return Math.max(.74, Math.min(1.3, 1 + advantage / Math.max(1, attackTotal * defendTotal) * .55));
+}
+
+function compositionPower(comp, targetId, planId, seasonId, s = null) {
   const tags = TERRITORY_DEFS[targetId]?.terrainTags || [];
-  let weights = { levy: .92, archers: 1.1, knights: 1.7 };
-  if (tags.includes("plains")) weights = { levy: .92, archers: 1.05, knights: 2.02 };
-  if (tags.includes("forest")) weights = { levy: .98, archers: 1.34, knights: 1.2 };
-  if (tags.includes("mountain")) weights = { levy: 1.02, archers: 1.28, knights: 1.18 };
-  if (tags.includes("river")) weights = { levy: .98, archers: 1.24, knights: 1.28 };
-  if (tags.includes("capital")) weights = { levy: 1, archers: 1.02, knights: 1.34 };
-  if (planId === "ambush") { weights.archers *= 1.12; weights.knights *= .93; }
-  if (planId === "assault") { weights.knights *= 1.08; weights.archers *= .94; }
-  const seasonMult = seasonId === "winter" ? { levy: .9, archers: .9, knights: .76 } : seasonId === "spring" ? { levy: .96, archers: .94, knights: .9 } : seasonId === "summer" ? { levy: 1.03, archers: 1.04, knights: 1.08 } : { levy: 1, archers: 1, knights: 1 };
-  return Object.keys(UNIT_DEFS).reduce((sum, type) => sum + (comp[type] || 0) * weights[type] * seasonMult[type], 0);
+  const seasonMult = seasonId === "winter" ? .88 : seasonId === "spring" ? .94 : seasonId === "summer" ? 1.04 : 1;
+  return Object.keys(UNIT_DEFS).reduce((sum, type) => {
+    const equipment = s ? unitEquipment(s, type) : { attack: Math.round(UNIT_DEFS[type].attack * 100) };
+    let planMult = planId === "ambush" && ["archers", "crossbowmen"].includes(type) ? 1.12 : planId === "assault" && ["knights", "light_cavalry"].includes(type) ? 1.08 : 1;
+    return sum + (comp[type] || 0) * (equipment.attack / 100) * unitTerrainMultiplier(type, tags) * seasonMult * planMult;
+  }, 0);
 }
 
 function campaignSupply(s, troops, leaderIds = [], armyId = "army_1") {
   const comp = selectedComposition(s, troops, armyId);
-  let amount = Math.ceil((comp.levy + comp.archers) / 8 + comp.knights / 2.5);
+  let amount = Math.ceil(Object.entries(comp).reduce((sum, [type, count]) => sum + count * (UNIT_DEFS[type]?.supply || 1), 0) / 8);
   if (seasonOf(s).id === "winter") amount = Math.ceil(amount * 1.35);
   if (leaderIds.includes("ysabel")) amount = Math.ceil(amount * .84);
   return Math.max(1, amount);
@@ -1116,8 +1155,8 @@ function campaignSupply(s, troops, leaderIds = [], armyId = "army_1") {
 
 function allocateLosses(comp, totalLoss) {
   const remaining = clone(comp);
-  const result = { levy: 0, archers: 0, knights: 0 };
-  const risks = { levy: 1, archers: .72, knights: .48 };
+  const result = emptyComposition();
+  const risks = Object.fromEntries(Object.entries(UNIT_DEFS).map(([type, unit]) => [type, type === "heavy_infantry" || type === "knights" ? .48 : type === "archers" || type === "crossbowmen" ? .72 : 1]));
   let left = Math.min(Math.round(totalLoss), Object.values(comp).reduce((a, b) => a + b, 0));
   while (left > 0) {
     const candidates = Object.keys(UNIT_DEFS).filter(type => remaining[type] > 0).sort((a, b) => remaining[b] * risks[b] - remaining[a] * risks[a]);
@@ -1158,7 +1197,7 @@ function createInitialState(name, oath, difficulty) {
     gold: oath === "wealth" ? 68 : 58,
     grain: 125,
     knowledge: 12,
-    army: oath === "iron" ? { levy: 34, archers: 9, knights: 5 } : { levy: 30, archers: 8, knights: 4 },
+    army: oath === "iron" ? { levy: 34, archers: 9, knights: 5, heavy_infantry: 2, crossbowmen: 0, light_cavalry: 1 } : { levy: 30, archers: 8, knights: 4, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 },
     troops: oath === "iron" ? 48 : 42,
     armies: [],
     support: oath === "oath" ? 61 : 54,
@@ -1273,7 +1312,7 @@ function hydrateV2(raw) {
     const total = Math.max(0, Math.round(raw.troops || 0));
     const knights = Math.min(4, Math.floor(total / 8));
     const archers = Math.min(8, Math.floor(total / 4));
-    raw.army = { levy: Math.max(0, total - knights - archers), archers, knights };
+    raw.army = { ...emptyComposition(), levy: Math.max(0, total - knights - archers), archers, knights };
   }
   if (!Array.isArray(raw.armies) || !raw.armies.length) raw.armies = [defaultArmyEntity(raw)];
   raw.armies.forEach((army, index) => {
@@ -1282,7 +1321,7 @@ function hydrateV2(raw) {
     army.locationId ||= "ravenstone";
     army.destinationId ??= null;
     if (legacyArmyMissing && index === 0) army.composition = clone(raw.army);
-    army.composition ||= index === 0 ? clone(raw.army) : { levy: 0, archers: 0, knights: 0 };
+    army.composition = { ...emptyComposition(), ...(army.composition || (index === 0 ? raw.army : {})) };
     army.leaders ||= ["player"];
     army.morale ??= raw.morale;
     army.training ??= raw.training;
@@ -1317,7 +1356,7 @@ function hydrateV2(raw) {
   syncTroops(raw);
   if (raw.battleSession && !raw.battleSession.composition) {
     raw.battleSession.composition = selectedComposition(raw, raw.battleSession.troops);
-    raw.battleSession.lossesByType = { levy: 0, archers: 0, knights: 0 };
+    raw.battleSession.lossesByType = emptyComposition();
   }
   if (raw.battleSession) {
     raw.battleSession.flags ||= { demanded: false, pushed: false, aggression: 0 };
@@ -1609,9 +1648,10 @@ function canRecruitUnit(s, type, territoryId = recruitmentTerritoryId(s)) {
   const unit = UNIT_DEFS[type];
   const territory = s?.territories?.[territoryId];
   if (!unit || !territory || territory.owner !== "player" || getRunningJob(s, `recruit:${territoryId}`) || s.gold < unit.gold || s.grain < unit.grain) return false;
-  if (type === "knights") {
+  if (unit.unlockTech && !techCompleted(s, unit.unlockTech)) return false;
+  if (["knights", "heavy_infantry", "light_cavalry"].includes(type)) {
     const barracks = territory.buildings.barracks || 0;
-    if (!techCompleted(s, "refined_iron") || (s.renown < 15 && barracks < 2)) return false;
+    if (s.renown < 15 && barracks < 2) return false;
   }
   return true;
 }
@@ -1672,8 +1712,8 @@ function recruitAmount(s, type, territoryId = recruitmentTerritoryId(s)) {
   if (!unit) return 0;
   const barracks = s.territories[territoryId]?.buildings?.barracks || 0;
   const workshop = s.territories[territoryId]?.buildings?.workshop || 0;
-  const bonus = type === "levy" ? Math.min(5, barracks) + Math.floor(workshop / 2) : type === "archers" ? Math.floor(Math.min(5, barracks) / 2) + (techCompleted(s, "longbow") ? 3 : 0) + Math.floor(workshop / 3) : 0;
-  return unit.amount + bonus + (s.oath === "iron" && type !== "knights" ? 1 : 0);
+  const trainingBonus = type === "levy" ? Math.min(5, barracks) + Math.floor(workshop / 2) : ["archers", "crossbowmen"].includes(type) ? Math.floor(Math.min(5, barracks) / 2) + Math.floor(workshop / 3) : Math.floor(barracks / 2);
+  return unit.amount + trainingBonus + (s.oath === "iron" && type !== "knights" ? 1 : 0);
 }
 
 function recruitUnit(type) {
@@ -1987,6 +2027,18 @@ function averageStat(s, ids, stat) {
   return people.reduce((sum, o) => sum + o.stats[stat], 0) / people.length;
 }
 
+function defenderComposition(s, targetId) {
+  const t = s.territories[targetId];
+  const guard = Math.max(1, Math.round(t?.guard || 1));
+  const owner = t?.owner;
+  const tags = TERRITORY_DEFS[targetId]?.terrainTags || [];
+  const share = owner === "crown" ? { levy: .35, archers: .2, knights: .12, heavy_infantry: .15, crossbowmen: .12, light_cavalry: .06 } : owner === "river" ? { levy: .4, archers: .28, knights: .08, heavy_infantry: .08, crossbowmen: .1, light_cavalry: .06 } : owner === "wolf" ? { levy: .5, archers: .18, knights: .12, heavy_infantry: .05, crossbowmen: .03, light_cavalry: .12 } : tags.includes("fortified") ? { levy: .4, archers: .2, knights: .08, heavy_infantry: .16, crossbowmen: .12, light_cavalry: .04 } : { levy: .5, archers: .22, knights: .1, heavy_infantry: .06, crossbowmen: .06, light_cavalry: .06 };
+  const result = emptyComposition();
+  Object.keys(UNIT_DEFS).forEach(type => { result[type] = Math.round(guard * (share[type] || 0)); });
+  result.levy = Math.max(0, result.levy + guard - compositionTotal(result));
+  return result;
+}
+
 function battleEstimate(s, targetId, leaderIds, troops, planId, armyId = "army_1") {
   const t = s.territories[targetId];
   const d = TERRITORY_DEFS[targetId];
@@ -2001,18 +2053,24 @@ function battleEstimate(s, targetId, leaderIds, troops, planId, armyId = "army_1
   }
   if (planId === "assault" && leaderIds.includes("renard")) planMult += .06;
   const composition = selectedComposition(s, troops, armyId);
-  const unitPower = compositionPower(composition, targetId, planId, seasonOf(s).id);
+  const enemyComposition = defenderComposition(s, targetId);
+  const unitPower = compositionPower(composition, targetId, planId, seasonOf(s).id, s);
+  const counter = counterMultiplier(composition, enemyComposition);
   const fatigue = 1 - clamp(s.warWeariness || 0, 0, 100) / 300;
   const effectiveMorale = leaderIds.includes("player") ? Math.max(45, s.morale) : s.morale;
-  let attack = unitPower * (.62 + command / 190 + force / 330) * (.72 + effectiveMorale / 190) * (1 + s.training / 190) * planMult * fatigue;
+  let attack = unitPower * (.62 + command / 190 + force / 330) * (.72 + effectiveMorale / 190) * (1 + s.training / 190) * planMult * fatigue * counter;
   if (leaderIds.includes("player")) attack *= 1.03;
-  attack *= 1 + Math.min(.15, activeKnights(s).length * .006);
+  const knightMultiplier = knightBattleMultiplier(s);
+  attack *= knightMultiplier;
   if (leaderIds.includes("bran") && (d.terrainTags || []).some(tag => ["forest", "mountain"].includes(tag))) attack *= 1.08;
   if (leaderIds.includes("aveline") && (d.terrainTags || []).includes("river")) attack *= 1.08;
   const walls = t.buildings?.walls || (d.final ? 2 : 1);
   const watchtower = t.buildings?.watchtower || 0;
   const wallFactor = techLevel(s, "sappers") ? Math.max(.05, .09 - techLevel(s, "sappers") * .01) : .11;
-  let defense = t.guard * (1 + walls * wallFactor + watchtower * .025) * difficultyOf(s).enemy;
+  const enemyPower = compositionPower(enemyComposition, targetId, "steady", seasonOf(s).id);
+  const enemyCounter = counterMultiplier(enemyComposition, composition);
+  const enemyEquipmentFactor = Math.max(.92, Math.min(1.12, enemyPower / Math.max(1, t.guard)));
+  let defense = t.guard * (1 + walls * wallFactor + watchtower * .025) * difficultyOf(s).enemy * (1 + (enemyCounter - 1) * .55) * enemyEquipmentFactor;
   if (techLevel(s, "siege_ladders") && (d.terrainTags || []).includes("fortified")) attack *= 1 + techLevel(s, "siege_ladders") * .05;
   if (techLevel(s, "trebuchet") && (d.terrainTags || []).some(tag => ["fortified", "capital"].includes(tag))) attack *= 1 + techLevel(s, "trebuchet") * .04;
   const defender = defenderLeader(s, targetId);
@@ -2025,7 +2083,7 @@ function battleEstimate(s, targetId, leaderIds, troops, planId, armyId = "army_1
   else if (ratio >= 1.08) label = "略占上风";
   else if (ratio < .78) label = "近乎送死";
   else if (ratio < .94) label = "处于下风";
-  return { attack, defense, ratio, label, planMult, composition, unitPower, fatigue, effectiveMorale };
+  return { attack, defense, ratio, label, planMult, composition, defenderComposition: enemyComposition, unitPower, counter, knightMultiplier, fatigue, effectiveMorale };
 }
 
 function casualtyForecast(s, targetId, leaderIds, troops, planId, armyId = "army_1") {
@@ -2048,6 +2106,13 @@ function battlePowerText(ratio) {
   const percent = Math.round(Math.abs(ratio - 1) * 100);
   if (percent === 0) return "我军预计与敌军战力相当。";
   return ratio >= 1 ? `我军预计比敌军强${percent}%。` : `我军预计比敌军弱${percent}%。`;
+}
+
+function battleBreakdownText(est) {
+  const counter = Math.round((est.counter - 1) * 100);
+  const knight = Math.round((est.knightMultiplier - 1) * 100);
+  const counterText = counter >= 0 ? `兵种克制预计贡献 +${counter}%` : `兵种相克预计造成 ${Math.abs(counter)}% 劣势`;
+  return `${counterText}；在列骑士协同 +${knight}%`;
 }
 
 function battleFatigueText(fatigue) {
@@ -2088,7 +2153,7 @@ function startBattle(s, draft, rng = Math.random) {
     troops,
     plan: draft.plan,
     composition: est.composition,
-    lossesByType: { levy: 0, archers: 0, knights: 0 },
+    lossesByType: emptyComposition(),
     ratio: est.ratio,
     stage: 0,
     momentum: clamp((est.ratio - 1) * 42, -42, 42),
@@ -2723,11 +2788,24 @@ function territorySummary(s, id, attackable = []) {
 
 function terrainAdvice(targetId, composition) {
   const tags = TERRITORY_DEFS[targetId]?.terrainTags || [];
-  if (tags.includes("plains")) return composition.knights >= 3 ? "开阔地适合骑士冲锋。" : "开阔地缺少遮蔽，没有骑士时突破会更依赖人数。";
-  if (tags.includes("forest")) return composition.archers >= 4 ? "弓手可借密林掩护前进，骑士难以展开。" : "密林会削弱骑士，最好带足弓手或谋略家臣。";
+  if (tags.includes("plains")) return (composition.knights || 0) + (composition.light_cavalry || 0) >= 3 ? "开阔地适合骑士冲锋。" : "开阔地缺少遮蔽，没有骑兵时突破会更依赖人数。";
+  if (tags.includes("forest")) return (composition.archers || 0) + (composition.crossbowmen || 0) >= 4 ? "远射兵可借密林掩护前进，骑士难以展开。" : "密林会削弱骑兵，最好带足远射兵或谋略家臣。";
   if (tags.includes("mountain")) return "山道狭窄，弓手和长矛兵更可靠，骑士战力大幅受限。";
   if (tags.includes("river")) return "河网切碎冲锋路线，弓手能隔水压制守军。";
   return "这里的地形会影响远射和骑兵，人数、军心与作战方式更加重要。";
+}
+
+function unitUnlockLabel(s, type, territoryId) {
+  const unit = UNIT_DEFS[type];
+  if (unit.unlockTech && !techCompleted(s, unit.unlockTech)) return `完成${techDefinition("military", unit.unlockTech)?.name || "军事科技"}`;
+  if (["knights", "heavy_infantry", "light_cavalry"].includes(type) && s.renown < 15 && (s.territories[territoryId].buildings.barracks || 0) < 2) return "需要15威望或2级兵营";
+  return `征募 +${recruitAmount(s, type, territoryId)} · ${unit.gold}金/${unit.grain}粮`;
+}
+
+function unitMatchupText(type) {
+  const unit = UNIT_DEFS[type];
+  const names = ids => (ids || []).map(id => UNIT_DEFS[id]?.name).filter(Boolean).join("、");
+  return `克制：${names(unit.counters) || "无"} · 惧怕：${names(unit.weakTo) || "无"}`;
 }
 
 function armyRosterHtml() {
@@ -2737,7 +2815,7 @@ function armyRosterHtml() {
   const place = TERRITORY_DEFS[territoryId]?.name || "本领地";
   const army = armyEntity(S, "army_1");
   const deployable = army?.status === "idle" && army.locationId === territoryId && compositionTotal(garrison) > 0;
-  return `<div class="army-roster"><div class="section-note">训练地点：${place} · 完成后进入当地驻军；军团抵达此地且完成整补后，可把驻军编入主力。</div>${deployable ? `<button class="secondary-btn" data-deploy-garrison="${territoryId}">把${place}驻军编入第一军团</button>` : ""}${Object.entries(UNIT_DEFS).map(([type, unit]) => { const queued = recruitJob?.payload?.unitType === type; const label = queued ? `训练中 · ${formatDuration(getJobRemainingMs(recruitJob))}` : recruitJob ? "训练队列占用" : type === "knights" && S.renown < 15 && (S.territories[territoryId].buildings.barracks || 0) < 2 ? "需要15威望或2级兵营" : `征募 +${recruitAmount(S, type, territoryId)} · ${unit.gold}金/${unit.grain}粮`; const count = garrison[type] || 0; return `<article class="unit-card"><div class="unit-head"><b>${glyphSvg(type)}${unit.name}</b><strong>${count}</strong></div><p>${unit.desc}</p><button data-recruit-unit="${type}" ${!canRecruitUnit(S, type, territoryId) ? "disabled" : ""}>${queued ? `<span data-job-countdown="${recruitJob.id}" data-job-prefix="训练中 · ">${label}</span>` : label}</button></article>`; }).join("")}</div>`;
+  return `<div class="army-roster"><div class="section-note">训练地点：${place} · 完成后进入当地驻军；军团抵达此地且完成整补后，可把驻军编入主力。</div>${deployable ? `<button class="secondary-btn" data-deploy-garrison="${territoryId}">把${place}驻军编入第一军团</button>` : ""}${Object.entries(UNIT_DEFS).map(([type, unit]) => { const queued = recruitJob?.payload?.unitType === type; const label = queued ? `训练中 · ${formatDuration(getJobRemainingMs(recruitJob))}` : recruitJob ? "训练队列占用" : unitUnlockLabel(S, type, territoryId); const count = garrison[type] || 0; const equipment = unitEquipment(S, type); return `<article class="unit-card"><div class="unit-head"><b>${glyphSvg(type)}${unit.name}</b><strong>${count}</strong></div><p>等级${equipment.level} · 攻${equipment.attack} 防${equipment.defense} 血${equipment.hp}<br>${unit.desc}<br><span class="unit-matchup">${unitMatchupText(type)}</span></p><button data-recruit-unit="${type}" ${!canRecruitUnit(S, type, territoryId) ? "disabled" : ""}>${queued ? `<span data-job-countdown="${recruitJob.id}" data-job-prefix="训练中 · ">${label}</span>` : label}</button></article>`; }).join("")}</div>`;
 }
 
 function renderCampaign() {
@@ -2771,7 +2849,8 @@ function renderCampaign() {
   const armyLocationHtml = mainArmy ? `<div class="army-location"><b>${esc(mainArmy.name)}</b><span>${mainArmy.status === "marching" && marchJob ? `<span data-job-countdown="${marchJob.id}" data-job-prefix="行军前往${TERRITORY_DEFS[mainArmy.destinationId]?.name || "未知地点"} · ">行军前往${TERRITORY_DEFS[mainArmy.destinationId]?.name || "未知地点"} · ${formatDuration(getJobRemainingMs(marchJob))}</span>` : mainArmy.status === "recovering" && mainArmy.jobId ? (() => { const job = S.jobs.find(item => item.id === mainArmy.jobId && item.status === "running"); return job ? `<span data-job-countdown="${job.id}" data-job-prefix="整补中 · ">整补中 · ${formatDuration(getJobRemainingMs(job))}</span>` : "整补中"; })() : `当前位置：${TERRITORY_DEFS[mainArmy.locationId]?.name || "渡鸦堡"}`}</span>${marchTargets.length && mainArmy.status === "idle" ? `<div class="march-actions">${marchTargets.map(id => `<button data-march-target="${id}">行军至${TERRITORY_DEFS[id].name}</button>`).join("")}</div>` : ""}</div>` : "";
   const targetLocked = crownWait && battleDraft.targetId === "crownvale";
   const mainComp = mainArmy?.composition || emptyComposition();
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>制定作战计划</h2><p>选择目标、出战人物、兵力和作战方式。只有位于目标相邻领地、且已完成整补的军团才能出征。</p>${metrics([[mainComp.levy, "长矛兵"], [mainComp.archers, "弓箭手"], [mainComp.knights, "披甲骑士"], [mainArmy?.status === "recovering" ? "整补中" : mainArmy?.status === "marching" ? "行军中" : "就绪", "第一军团"]])}${armyLocationHtml}</section>
+  const activeUnitCount = Object.values(mainComp).filter(value => value > 0).length;
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>制定作战计划</h2><p>选择目标、出战人物、兵力和作战方式。每种兵种都有克制关系，军事科技会提升装备和等级，骑士会以系数强化全军。</p>${metrics([[mainArmyTotal, "主力兵力"], [activeUnitCount, "现役兵种"], [activeKnights(S).length, "在列骑士"], [mainArmy?.status === "recovering" ? "整补中" : mainArmy?.status === "marching" ? "行军中" : "就绪", "第一军团"]])}${armyLocationHtml}</section>
     <div class="section-head"><h2>军队配置</h2><span>训练完成后进入本地驻军，不再直接加入远方军团</span></div>${armyRosterHtml()}
     <div class="section-head"><h2>作战计划</h2><span>战后由军团自己的整补队列决定下一次出征时间</span></div>
     ${crownWait ? `<div class="campaign-lock-note">王冠谷仍未开放。${crownRequirementText(S)}。</div>` : ""}
@@ -2780,7 +2859,7 @@ function renderCampaign() {
     <span class="form-label">出战人物（最多3人）</span><div class="leader-checks">${available.map(o => `<div class="leader-check"><input id="lead_${o.id}" type="checkbox" data-leader="${o.id}" ${battleDraft.leaderIds.includes(o.id) ? "checked" : ""}><label for="lead_${o.id}">${esc(o.name)} · ${esc(o.title)}</label></div>`).join("")}</div>
     <span class="form-label">参战兵力：<b id="troopValue">${battleDraft.troops}</b> / ${mainArmyTotal}</span><input id="troopRange" class="troop-range" type="range" min="10" max="${Math.max(10, mainArmyTotal)}" value="${battleDraft.troops}">
     <div class="army-summary">本次出兵：<b>${compositionText(est.composition)}</b><br>${terrainAdvice(battleDraft.targetId, est.composition)} ${seasonOf(S).id === "winter" ? "严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>
-    <div id="battleEstimate" class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测：<b>${est.label}</b><br>${battlePowerText(est.ratio)}预计伤亡${risk.low}—${risk.high}人，需要携带${supply}粮食。${battleFatigueText(est.fatigue)}${battleMoraleText(est.effectiveMorale, S.morale)}</div>
+    <div id="battleEstimate" class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测：<b>${est.label}</b><br>${battlePowerText(est.ratio)}${battleBreakdownText(est)}。预计伤亡${risk.low}—${risk.high}人，需要携带${supply}粮食。${battleFatigueText(est.fatigue)}${battleMoraleText(est.effectiveMorale, S.morale)}</div>
     <button id="launchBattle" class="launch-btn ${battleRiskClass(est.ratio)}" ${targetLocked || !attackable.includes(battleDraft.targetId) || mainArmy?.status !== "idle" || mainArmyTotal < 10 || S.grain < supply || !battleDraft.leaderIds.length ? "disabled" : ""}>${targetLocked ? "王冠谷 · 条件未满足" : mainArmy?.status === "recovering" ? "军团整补中" : mainArmy?.status === "marching" ? "军团行军中" : S.grain < supply ? "军粮不足" : `出征 · ${TERRITORY_DEFS[battleDraft.targetId].name}`}</button></div></div>
     ${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
   panel.querySelectorAll("[data-target]").forEach(button => button.addEventListener("click", () => { battleDraft.targetId = button.dataset.target; renderCampaign(); }));
@@ -2809,7 +2888,7 @@ function renderCampaign() {
     const food = campaignSupply(S, battleDraft.troops, battleDraft.leaderIds, mainArmy?.id);
     const nextRisk = casualtyForecast(S, battleDraft.targetId, battleDraft.leaderIds, battleDraft.troops, battleDraft.plan, mainArmy?.id);
     $("battleEstimate").className = `battle-estimate ${battleRiskClass(next.ratio)}`;
-    $("battleEstimate").innerHTML = `胜算预测：<b>${next.label}</b><br>${battlePowerText(next.ratio)}预计伤亡${nextRisk.low}—${nextRisk.high}人；本次出兵${compositionText(next.composition)}；需要携带${food}粮食。${battleFatigueText(next.fatigue)}`;
+    $("battleEstimate").innerHTML = `胜算预测：<b>${next.label}</b><br>${battlePowerText(next.ratio)}${battleBreakdownText(next)}。预计伤亡${nextRisk.low}—${nextRisk.high}人；本次出兵${compositionText(next.composition)}；需要携带${food}粮食。${battleFatigueText(next.fatigue)}`;
   });
   $("launchBattle")?.addEventListener("click", () => {
     if (!startBattle(S, battleDraft)) { toast("现在无法发动这场远征"); return; }
@@ -3132,7 +3211,7 @@ if (typeof module !== "undefined" && module.exports) {
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
     finishBattle, enemyPressure, runAiTurn, startMarch, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, OFFICER_DEFS,
     SEASONS, PLANS, ACTIONS, UNIT_DEFS, POLICIES, clamp, armyTotal, syncTroops,
-    selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit,
+    selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, advanceSeason, checkDefeat,
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, CROWN_OPEN_TURN, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,

@@ -38,7 +38,19 @@ game.processCompletedJobs(fresh, fresh.jobs.find(job => job.type === "CITY_ACTIO
 assert.equal(fresh.territories.westmarch.owner, "player");
 assert.equal(game.subjects(fresh), 218);
 assert.equal(game.armyTotal(fresh), fresh.troops);
-assert.deepEqual(fresh.army, { levy: 30, archers: 8, knights: 4 });
+assert.deepEqual(fresh.army, { levy: 30, archers: 8, knights: 4, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 });
+assert.ok(Object.keys(game.UNIT_DEFS).length >= 6, "兵种应扩充到六种以上");
+assert.ok(game.UNIT_DEFS.heavy_infantry.counters.includes("knights"), "重步兵应克制骑士");
+assert.ok(game.UNIT_DEFS.light_cavalry.counters.includes("archers"), "轻骑兵应克制远射兵");
+assert.ok(game.counterMultiplier({ levy: 20, archers: 0, knights: 0, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 }, { levy: 0, archers: 0, knights: 10, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 }) > 1, "长矛兵对骑士应获得克制系数");
+const equipmentState = game.createInitialState("装备升级", "iron", "standard");
+const baseEquipment = game.unitEquipment(equipmentState, "heavy_infantry");
+equipmentState.tech.military.completed = ["refined_iron", "professional_army"];
+equipmentState.tech.military.levels = { refined_iron: 3, professional_army: 3 };
+const upgradedEquipment = game.unitEquipment(equipmentState, "heavy_infantry");
+assert.ok(upgradedEquipment.level > baseEquipment.level && upgradedEquipment.attack > baseEquipment.attack && upgradedEquipment.defense > baseEquipment.defense && upgradedEquipment.hp > baseEquipment.hp, "军事科技应提升兵种等级、攻击、防御和生命");
+equipmentState.renown = 20;
+assert.equal(game.canRecruitUnit(equipmentState, "heavy_infantry"), true, "精炼铁器后应能征募重步兵");
 assert.equal(game.recruitAmount(fresh, "levy"), 9, "守誓开局兵营应形成小规模增援，而非一次补满伤亡");
 assert.equal(game.recruitAmount(fresh, "archers"), 6);
 const hallRecruitState = game.createInitialState("征募一致性", "oath", "standard");
@@ -95,6 +107,7 @@ const recruitKnight = multiTech.knights.find(knight => knight.side === "neutral"
 assert.ok(game.knightAction(recruitKnight.id, "recruit", multiTech));
 game.processCompletedJobs(multiTech, multiTech.jobs.at(-1).endAt);
 assert.equal(game.activeKnights(multiTech).length, 1, "骑士招募完成后应加入在列骑士");
+assert.ok(game.knightBattleMultiplier(multiTech) > 1, "在列骑士应以系数提升兵种战力");
 const baseMarch = game.createInitialState("行军时间", "oath", "standard");
 const baseMarchJob = game.startMarch(baseMarch, "army_1", "ashfield", 1000);
 const doctrineMarch = game.createInitialState("军令时间", "oath", "standard");
