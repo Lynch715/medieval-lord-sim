@@ -14,7 +14,7 @@
 
   <section id="menu" class="screen menu-screen">
     <div class="menu-art">
-      <img src="assets/player.webp" alt="北境新王">
+      <img src="assets/player.webp" alt="渡鸦家的王子">
       <div class="portrait-fade"></div>
       <div class="house-mark" aria-hidden="true"><span>R</span><small>渡鸦家</small></div>
     </div>
@@ -22,7 +22,7 @@
       <span class="eyebrow">A LORDSHIP SIMULATION</span>
       <h1>模拟中世纪领主</h1>
       <div class="title-rule"><i></i><b>铁冠之路</b><i></i></div>
-      <p class="subtitle">你继承的是北境王冠，以及一座仍在漏雨、只有一城听命的王国。</p>
+      <p class="subtitle">你继承的不是王冠，而是四块残破的旧土，以及一个必须复国的名字。</p>
       <button id="continueBtn" class="primary-btn hidden" type="button"></button>
       <button id="newGameBtn" class="secondary-btn" type="button">继承渡鸦堡</button>
       <p class="fine-print">原创架空世界 · 本地自动存档 · 无数据上传</p>
@@ -36,17 +36,9 @@
       <blockquote><span>老管家 · 奥斯温</span>“村民记得每一袋被拿走的麦子，家臣也记得每一块没分到的土地。”</blockquote>
     </div>
     <div class="creator-card glass">
-      <span class="eyebrow">序章 · 铁冠继承</span>
-      <h2>从今晚起，你要为整个北境收税、募兵与出征</h2>
-      <label class="field-block"><span>国王姓名</span><input id="playerName" maxlength="8" value="罗恩" autocomplete="off"></label>
-      <div class="field-block">
-        <span>你准备采用哪种王国方略</span>
-        <div id="oathPicker" class="choice-grid">
-          <button class="choice-card active" data-oath="oath" type="button"><b>均衡</b><small>民心更高，领主关系更稳</small></button>
-          <button class="choice-card" data-oath="iron" type="button"><b>军略</b><small>开局军队和军心更强</small></button>
-          <button class="choice-card" data-oath="wealth" type="button"><b>经营</b><small>开局金币更多，资源流量更高</small></button>
-        </div>
-      </div>
+      <span class="eyebrow">序章 · 王国分裂</span>
+      <h2>你是渡鸦家最后的合法继承人</h2>
+      <label class="field-block"><span>王子姓名</span><input id="playerName" maxlength="8" value="罗恩" autocomplete="off"></label>
       <div class="field-block">
         <span>选择游戏难度</span>
         <div id="difficultyPicker" class="choice-grid difficulty-grid">
@@ -55,7 +47,7 @@
           <button class="choice-card" data-difficulty="brutal" type="button"><b>极难</b><small>收入更低，敌军更强，冬季消耗更高</small></button>
         </div>
       </div>
-      <button id="startGameBtn" class="primary-btn" type="button">接过王冠与国玺 <span>→</span></button>
+      <button id="startGameBtn" class="primary-btn" type="button">开始复国 <span>→</span></button>
     </div>
   </section>
 
@@ -72,12 +64,11 @@
 
   <div id="game" class="game-shell hidden">
     <header class="topbar">
-      <div class="brand-lockup"><span class="brand-seal">R</span><div><h1>北境王国</h1><p id="chapterText">第一年 · 春</p></div></div>
+      <div class="brand-lockup"><span class="brand-seal">R</span><div><h1>渡鸦复国记</h1><p id="chapterText">第一年 · 春</p></div></div>
       <div class="top-resources">
         <div><span>季度</span><b id="turnText">1 / 48</b></div>
         <div><span>金币</span><b id="goldText">58</b></div>
         <div><span>粮食</span><b id="grainText">125</b></div>
-        <div><span>知识</span><b id="knowledgeText">12</b></div>
         <div><span>军队</span><b id="troopText">42</b></div>
         <button id="saveBtn" class="icon-btn" type="button" aria-label="保存进度">存</button>
         <button id="restartBtn" class="icon-btn" type="button" aria-label="重新开始">重</button>
@@ -89,15 +80,16 @@
         <article class="lord-card">
           <img src="assets/player.webp" alt="玩家领主">
           <div class="portrait-fade"></div>
-          <div class="lord-copy"><span id="oathBadge">均衡王策</span><h2 id="playerNameText">罗恩</h2><p>北境之王 · 渡鸦堡</p></div>
+          <div class="lord-copy"><span id="oathBadge">合法继承人</span><h2 id="playerNameText">罗恩</h2><p>渡鸦家的王子 · 渡鸦堡</p></div>
         </article>
         <section class="side-panel glass">
           <div class="section-title"><h3>军政根基</h3><span id="territoryCount">1 / 7</span></div>
-          <div class="meter-row"><span>民心</span><b id="supportText">54</b></div><div class="meter green"><i id="supportBar"></i></div>
-          <div class="meter-row"><span>军心</span><b id="moraleText">58</b></div><div class="meter red"><i id="moraleBar"></i></div>
-          <div class="meter-row"><span>威望</span><b id="renownText">12</b></div><div class="meter gold"><i id="renownBar"></i></div>
-          <div class="meter-row"><span>王室认可</span><b id="legitimacyText">35</b></div><div class="meter blue"><i id="legitimacyBar"></i></div>
-          <div class="meter-row"><span>战争疲劳</span><b id="wearinessText">0</b></div><div class="meter purple"><i id="wearinessBar"></i></div>
+          <div class="meter-row"><span>金币</span><b id="goldSideText">58</b></div><div class="meter gold"><i id="goldBar"></i></div>
+          <div class="meter-row"><span>粮食</span><b id="grainSideText">125</b></div><div class="meter green"><i id="grainBar"></i></div>
+          <div class="meter-row"><span>军队</span><b id="armySideText">42</b></div><div class="meter red"><i id="armyBar"></i></div>
+          <div class="meter-row"><span>民心</span><b id="supportText">52</b></div><div class="meter green"><i id="supportBar"></i></div>
+          <div class="meter-row"><span>军心</span><b id="moraleText">55</b></div><div class="meter red"><i id="moraleBar"></i></div>
+          <div class="meter-row"><span>声望</span><b id="renownText">8</b></div><div class="meter gold"><i id="renownBar"></i></div>
         </section>
         <section class="side-panel glass">
           <div class="section-title"><h3>实时资源</h3><span id="netGoldText">+60金/时</span></div>

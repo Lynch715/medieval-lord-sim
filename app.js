@@ -152,6 +152,29 @@ Object.entries(EXTRA_TERRITORIES).forEach(([id, [name, region, x, y, tag, adj]])
   TERRITORY_DEFS[id] = { name, region, x, y, type: tag === "fortified" ? "fort" : "town", terrain: tag === "forest" ? "密林" : tag === "mountain" ? "山地" : tag === "river" ? "河谷" : tag === "hills" ? "丘陵" : "平原", terrainTags: [tag], owner: "neutral", gold: 5, grain: 12, people: 60, guard: 20, stability: 55, final: false, playable: false, adj, desc: `${name}是北境地图上的一处战略节点。` };
 });
 
+// 复国版地图：四块开局领地，25 个可夺取节点，其余节点作为侦察与道路上的互动地点。
+const RESTORATION_OWNERS = {
+  ravenstone: "player", blackthorn: "player", westmarch: "player", ironhill: "player",
+  ashfield: "wolf", pineford: "wolf", highpass: "wolf", wolfden: "wolf", redfen: "wolf", stonejaw: "wolf",
+  crossford: "river", riverwatch: "river", reedbank: "river", saltbridge: "river", millrun: "river",
+  crownvale: "crown", duchyroad: "crown", crownfield: "crown", kingsford: "crown",
+  ashgate: "neutral", frostfield: "neutral", crowstep: "neutral", greywood: "neutral", tradersrest: "neutral"
+};
+Object.entries(RESTORATION_OWNERS).forEach(([id, owner]) => {
+  if (!TERRITORY_DEFS[id]) return;
+  TERRITORY_DEFS[id].owner = owner;
+  TERRITORY_DEFS[id].playable = true;
+});
+TERRITORY_DEFS.blackthorn.name = "黑棘镇";
+TERRITORY_DEFS.blackthorn.desc = "渡鸦家的林镇，木材、猎物和皮革是这里最重要的产出。";
+TERRITORY_DEFS.westmarch.name = "麦田镇";
+TERRITORY_DEFS.westmarch.desc = "渡鸦堡南侧的粮镇，收成决定王国能否养得起下一支军队。";
+TERRITORY_DEFS.ironhill.name = "铁溪镇";
+TERRITORY_DEFS.ironhill.desc = "旧铁溪矿镇，矿石和铁匠铺是复国军械的根基。";
+TERRITORY_DEFS.blackthorn.gold = 7; TERRITORY_DEFS.blackthorn.grain = 16;
+TERRITORY_DEFS.westmarch.gold = 5; TERRITORY_DEFS.westmarch.grain = 30;
+TERRITORY_DEFS.ironhill.gold = 15; TERRITORY_DEFS.ironhill.grain = 8;
+
 const playableTerritoryIds = () => Object.keys(TERRITORY_DEFS).filter(id => TERRITORY_DEFS[id].playable !== false);
 
 const CITY_ACTION_DEFS = {
@@ -165,7 +188,7 @@ const CITY_ACTION_DEFS = {
 const CITY_ACTION_DURATIONS = { scout: 20 * 1000, envoy: 30 * 1000, trade: 35 * 1000, raid: 30 * 1000, charter: 40 * 1000, steward: 25 * 1000 };
 
 const OFFICER_DEFS = {
-  player: { name: "罗恩", title: "北境之王", portrait: "assets/player.webp", side: "player", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "亲临阵前", traitText: "国王出战时，本场军心最低按45点计算；可亲自带队攻城。", loyalty: 100, ambition: 55 },
+  player: { name: "罗恩", title: "渡鸦家的王子", portrait: "assets/player.webp", side: "player", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "合法继承人", traitText: "亲自出战时，本场军心最低按45点计算；只有收复旧土后，才有资格重新戴上王冠。", loyalty: 100, ambition: 55 },
   oswin: { name: "奥斯温·维尔", title: "苔原领主", portrait: "assets/oswin.webp", side: "player", stats: { force: 27, command: 51, scheme: 78, govern: 88, charm: 69 }, trait: "旧账如山", traitText: "主持领地时收入更稳定；拒绝他的越冬警告会积累不满。", loyalty: 76, ambition: 18 },
   renard: { name: "雷纳德·霍尔特", title: "黑石领主", portrait: "assets/renard.webp", side: "player", stats: { force: 86, command: 83, scheme: 43, govern: 31, charm: 47 }, trait: "破阵者", traitText: "强攻和骑兵冲击更有力；占尽优势后撤退会激怒他。", loyalty: 70, ambition: 48 },
   ysabel: { name: "伊莎贝尔·马伦", title: "白麦领主", portrait: "assets/ysabel.webp", side: "player", stats: { force: 30, command: 48, scheme: 80, govern: 92, charm: 72 }, trait: "精确到一粒麦", traitText: "随军可降低补给与撤退损失；主持财税能减少盘剥。", loyalty: 68, ambition: 34 },
@@ -191,6 +214,7 @@ const KNIGHT_DEFS = KNIGHT_NAMES.map((name, index) => ({
   status: "available",
   force: 48 + (index % 7) * 5,
   command: 42 + (index % 6) * 6,
+  scheme: 38 + (index % 8) * 6,
   loyalty: 52 + (index % 5) * 4,
   recruitCost: 8 + (index % 4) * 3
 }));
@@ -218,7 +242,7 @@ function availableKnights(s) {
 }
 
 const STAT_LABELS = { force: "武力", command: "统率", scheme: "谋略", govern: "治理", charm: "魅力" };
-const OFFICER_STAT_KEYS = ["force", "command", "scheme", "govern", "charm"];
+const OFFICER_STAT_KEYS = ["command", "govern"];
 
 function makeClock(turn = 0, now = Date.now()) {
   const seasonIndex = Math.max(0, Math.min(MAX_TURNS - 1, Math.round(turn || 0)));
@@ -338,7 +362,7 @@ function canResearch(s, branch, techId) {
 
 function crownRequirements(s) {
   return {
-    territories: ownTerritoryIds(s).length >= 6,
+    territories: ownTerritoryIds(s).length >= 18,
     renown: (s?.renown || 0) >= 60,
     siege: techCompleted(s, "war_engineering"),
     army: armyTotal(s, "army_1") >= 80
@@ -353,10 +377,10 @@ function crownAccessMet(s) {
 function crownRequirementText(s) {
   const requirements = crownRequirements(s);
   const missing = [];
-  if (!requirements.territories) missing.push("控制6块领地");
+  if (!requirements.territories) missing.push("收复18处旧土");
   if (!requirements.renown) missing.push("威望60");
   if (!requirements.siege) missing.push("完成攻城工程");
-  if (!requirements.army) missing.push("第一军团80人");
+  if (!requirements.army) missing.push("王国主力80人");
   return missing.length ? `还需：${missing.join("、")}` : "已满足进军王冠谷的条件";
 }
 
@@ -628,6 +652,19 @@ const UNIT_DEFS = {
   light_cavalry: { name: "轻骑兵", short: "轻骑", gold: 14, grain: 6, amount: 5, attack: 1.32, defense: .92, hp: 112, supply: 2, role: "机动", unlockTech: "field_doctrine", counters: ["archers", "crossbowmen"], weakTo: ["levy", "heavy_infantry"], equipmentTech: ["field_doctrine", "professional_army"], desc: "机动迅速，适合绕击远程部队，不宜正面撞盾墙。" }
 };
 
+const UNIT_DISPLAY_HINTS = {
+  levy: "擅长对付骑兵",
+  archers: "克制重甲",
+  heavy_infantry: "正面作战强",
+  knights: "克制远程",
+  crossbowmen: "远射破甲",
+  light_cavalry: "机动追击"
+};
+
+function unitDisplayHint(type) {
+  return UNIT_DISPLAY_HINTS[type] || UNIT_DEFS[type]?.role || "适应多种战场";
+}
+
 const POLICIES = {
   balanced: { name: "正常管理", gold: 1, grain: 1, desc: "保持正常税收，收入和稳定都不会额外变化。" },
   relief: { name: "减税休养", gold: .76, grain: .96, desc: "减少税收。每季度恢复领地稳定和民心。" },
@@ -639,9 +676,9 @@ const MAP_POINTS = Object.fromEntries(Object.entries(TERRITORY_DEFS).map(([id, d
 const MAP_LINKS = Object.entries(TERRITORY_DEFS).flatMap(([id, d]) => d.adj.filter(next => id < next).map(next => [id, next]));
 
 const PROLOGUE = [
-  { kicker: "序章 · 铁冠继承", title: "铁冠落到你手里时，北境只剩一座城听命", portrait: "assets/oswin.webp", body: ["旧王朝在南方断绝，北境诸领各自举旗。王冠、国玺和一纸催税令被送到渡鸦堡，连同一座漏雨的王城和空荡的国库。", "从今天起，你不是替谁守城的领主，而是名义上的北境之王。可眼下，真正听你号令的只有渡鸦堡。"] },
-  { kicker: "第一封战书", title: "各地领主不把新王当回事", portrait: "assets/bran.webp", body: ["北边的布兰·狼牙占着灰麦原，信使只带来一句话：老王死了，新王最好学会低头。", "河望的艾芙琳拒绝派人来朝，其他领主也在观望。你的王冠是真的，能调动的兵和粮却只有城里这些。"] },
-  { kicker: "第一年 · 春", title: "先让王国活过第一个春天", portrait: "assets/player.webp", body: ["你要从一座城重建王权：修田、研究、募兵，然后把军旗插到下一座城的城墙上。每一项命令都会占用时间，四季不会为新王停下。", "当更多领主败在你的军令下，他们才会向你宣誓；在此之前，渡鸦堡只有你一位领主。"] }
+  { kicker: "序章 · 王国分裂", title: "父亲死后，北境的旗帜一夜之间换了颜色", portrait: "assets/oswin.webp", body: ["你的父亲曾统治整个北境。晚年却遇上战争、饥荒和贵族叛乱，王国从边境开始裂开。父亲死去的消息传出后，手下领主纷纷宣布独立。", "你是渡鸦家最后的合法继承人，但继承到手的不是王冠，而是渡鸦堡、黑棘镇、麦田镇和铁溪镇。"] },
+  { kicker: "第一封战书", title: "曾经向父亲跪拜的人，现在要你交出印章", portrait: "assets/bran.webp", body: ["狼牙公爵、河望伯爵、铁岭侯爵和更多旧臣都挂起了自己的旗帜。他们说北境已经没有国王，只有各自的领地。", "渡鸦堡的城墙还在，粮仓却只够支撑几季。你要先让四块旧土重新运转，再把叛乱领主一座城一座城地打回去。"] },
+  { kicker: "第一年 · 春", title: "复国不是一句誓言，是下一场战争的粮草", portrait: "assets/player.webp", body: ["发展农田、市场和铁匠铺，研究新的军械，招募骑士与兵卒；每一次经营，最后都要落到收复旧土上。", "当最后一面叛旗倒下，你才能在父亲的王座前重新宣告：北境仍属于渡鸦家。"] }
 ];
 
 const WORLD_EVENTS = [
@@ -795,6 +832,7 @@ function cityActionAvailable(s, id, action) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
   if (!d || !t || !CITY_ACTION_DEFS[action] || s.battleSession) return false;
+  if (action !== "scout") return false;
   if (cityActionJob(s, id) || (s.seasonLocks?.[cityActionLockKey(id, action)] || 0) >= 1) return false;
   if (action === "scout") return !owns(s, id);
   if (action === "envoy") return !owns(s, id) && !d.final;
@@ -936,16 +974,16 @@ function applyEventEffects(s, changes = {}, officerId = null) {
 function scriptedEventView(s, def, officerId = null) {
   const person = officerId ? officer(s, officerId) : null;
   return {
-    kicker: def.kicker || `${person?.title || "家臣"} · 人物事件`,
-    title: def.title,
+    kicker: cleanDisplayText(def.kicker || `${person?.title || "家臣"} · 人物事件`),
+    title: cleanDisplayText(def.title),
     portrait: def.portrait || person?.portrait || "assets/player.webp",
-    body: `<p>${esc(def.body)}</p>`,
+    body: `<p>${esc(cleanDisplayText(def.body))}</p>`,
     options: def.options.map(([name, note, changes, chronicle]) => ({
-      name, note,
+      name: cleanDisplayText(name), note: cleanDisplayText(note),
       disabled: (changes.gold < 0 && s.gold < Math.abs(changes.gold)) || (changes.grain < 0 && s.grain < Math.abs(changes.grain)),
       effect() {
         applyEventEffects(s, changes, officerId);
-        log(s, changes.support > 0 || changes.loyalty > 0 ? "good" : changes.support < 0 || changes.grievance > 5 ? "warn" : "info", chronicle);
+        log(s, changes.support > 0 || changes.loyalty > 0 ? "good" : changes.support < 0 || changes.grievance > 5 ? "warn" : "info", cleanDisplayText(chronicle));
       }
     }))
   };
@@ -989,7 +1027,7 @@ function armyTotal(s, armyId = null) {
 function defaultArmyEntity(s) {
   return {
     id: "army_1",
-    name: "第一军团",
+    name: "王国主力",
     owner: "player",
     locationId: "ravenstone",
     destinationId: null,
@@ -1202,7 +1240,7 @@ function createInitialState(name, oath, difficulty) {
       fiefHolder: null,
       policy: "balanced",
       garrison: emptyComposition(),
-      buildings: { fields: id === "ravenstone" ? 1 : 0, market: id === "ravenstone" ? 1 : 0, barracks: id === "ravenstone" ? 1 : 0, walls: id === "ravenstone" ? 1 : 0, granary: id === "ravenstone" ? 1 : 0, academy: 0, workshop: 0, roads: 0, watchtower: 0, temple: 0 }
+      buildings: { fields: id === "ravenstone" ? 1 : id === "westmarch" ? 2 : 0, market: id === "ravenstone" || id === "blackthorn" ? 1 : 0, barracks: id === "ravenstone" || id === "ironhill" ? 1 : 0, walls: id === "ravenstone" ? 1 : 0, granary: id === "ravenstone" || id === "westmarch" ? 1 : 0, academy: 0, workshop: id === "ironhill" ? 1 : 0, roads: 0, watchtower: 0, temple: 0 }
     };
   });
   const officers = Object.entries(OFFICER_DEFS).map(([id, d]) => {
@@ -1220,7 +1258,7 @@ function createInitialState(name, oath, difficulty) {
   const state = {
     version: VERSION,
     playerName: name.trim() || "罗恩",
-    oath, difficulty, style,
+    oath: "oath", difficulty, style,
     turn: 0, tab: "hall", selectedTerritoryId: "ravenstone",
     gold: oath === "wealth" ? 68 : 58,
     grain: 125,
@@ -1228,9 +1266,9 @@ function createInitialState(name, oath, difficulty) {
     army: oath === "iron" ? { levy: 34, archers: 9, knights: 5, heavy_infantry: 2, crossbowmen: 0, light_cavalry: 1 } : { levy: 30, archers: 8, knights: 4, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 },
     troops: oath === "iron" ? 48 : 42,
     armies: [],
-    support: oath === "oath" ? 61 : 54,
-    morale: oath === "iron" ? 66 : 58,
-    renown: 12,
+    support: 52,
+    morale: 55,
+    renown: 8,
     legitimacy: 35,
     training: 0,
     warWeariness: 0,
@@ -1325,7 +1363,7 @@ function hydrateV2(raw) {
   raw.knights = Array.isArray(raw.knights) ? raw.knights : [];
   const knightMap = new Map(raw.knights.filter(knight => knight?.id).map(knight => [knight.id, knight]));
   defaultKnights.forEach(knight => { if (!knightMap.has(knight.id)) knightMap.set(knight.id, knight); });
-  raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight.status || "available", loyalty: Math.round(knight.loyalty || 50), force: Math.round(knight.force || 50), command: Math.round(knight.command || 45) }));
+raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight.status || "available", loyalty: Math.round(knight.loyalty || 50), force: Math.round(knight.force || 50), command: Math.round(knight.command || 45), scheme: Math.round(knight.scheme || 45) }));
   raw.usedActions ||= {};
   raw.seasonLocks ||= {};
   raw.flags ||= {};
@@ -1470,15 +1508,12 @@ function territoryOutput(s, id, season = seasonOf(s)) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
   const stability = .62 + t.stability / 265;
-  const goldStability = techLevel(s, "law_code") ? Math.max(stability, .82 + Math.max(0, techLevel(s, "law_code") - 1) * .02) : stability;
   const damage = 1 - Math.min(3, t.devastated) * .13;
-  const share = t.fiefHolder ? (t.fiefHolder === "charter" ? .78 : techLevel(s, "provincial_offices") ? .77 + Math.max(0, techLevel(s, "provincial_offices") - 1) * .015 : .7) : 1;
-  const wealth = s.oath === "wealth" ? 1.08 : 1;
+  const share = t.fiefHolder && t.fiefHolder !== "charter" ? (techLevel(s, "provincial_offices") ? .77 + Math.max(0, techLevel(s, "provincial_offices") - 1) * .015 : .7) : 1;
+  const wealth = 1;
   const bestGovernor = ownedOfficers(s).filter(o => !o.injured).sort((a, b) => b.stats.govern - a.stats.govern)[0];
   const admin = 1 + Math.max(0, (bestGovernor?.stats.govern || 55) - 55) / 550;
   const diff = difficultyOf(s).income;
-  const policy = POLICIES[t.policy] || POLICIES.balanced;
-  const fatigue = 1 - clamp(s.warWeariness || 0, 0, 100) / 400;
   const grainTech = (1 + techLevel(s, "heavy_plow") * .08) * (1 + techLevel(s, "crop_rotation") * .1) * (1 + techLevel(s, "seed_selection") * .08) * (season.id === "winter" ? 1 + techLevel(s, "winter_storage") * .12 : 1) * (season.id !== "winter" ? 1 + techLevel(s, "irrigation") * .06 : 1);
   const goldTech = (1 + techLevel(s, "tax_registry") * .08) * (1 + techLevel(s, "coinage") * .08) * (1 + techLevel(s, "trade_guild") * .08);
   // 每块领地保留一小段基础余量，确保自动换季结算不是“产出刚好被开支吃完”；
@@ -1486,8 +1521,8 @@ function territoryOutput(s, id, season = seasonOf(s)) {
   const grainBase = (d.grain + t.buildings.fields * 8 + 4) * grainTech;
   const goldBase = (d.gold + t.buildings.market * 3 + t.buildings.roads * 1.5 + 1) * goldTech;
   return {
-    grain: Math.max(0, Math.round(grainBase * season.grain * stability * damage * share * diff * policy.grain * fatigue)),
-    gold: Math.max(0, Math.round(goldBase * season.gold * goldStability * damage * share * wealth * admin * diff * policy.gold * fatigue))
+    grain: Math.max(0, Math.round(grainBase * season.grain * stability * damage * share * diff)),
+    gold: Math.max(0, Math.round(goldBase * season.gold * stability * damage * share * wealth * admin * diff))
   };
 }
 
@@ -1498,16 +1533,12 @@ function forecast(s, season = seasonOf(s)) {
     acc.grain += out.grain;
     return acc;
   }, { gold: 0, grain: 0 });
-  const activeTradeposts = Object.keys(s.cityTradeposts || {}).filter(id => cityTradeActive(s, id)).length;
-  gross.gold += activeTradeposts * (2 + techLevel(s, "caravanserai")) + activeTradeposts * techLevel(s, "royal_exchange");
-  const ysabel = ownedOfficers(s).some(o => o.id === "ysabel" && !o.injured);
-  const winterExtra = season.id === "winter" ? Math.ceil(subjects(s) / 35 * difficultyOf(s).winter) : 0;
+  const winterExtra = season.id === "winter" ? Math.max(1, ownTerritoryIds(s).length) * difficultyOf(s).winter : 0;
   const seedReserve = season.id === "autumn" ? ownTerritoryIds(s).length * 2 : 0;
   const armySplit = playerCompositionSplit(s);
   const army = armySplit.mobile;
   const garrison = armySplit.garrison;
-  let grainCost = Math.max(0, Math.ceil(subjects(s) / 34 + army.levy / 4 + army.archers / 4 + army.knights / 3 + garrison.levy / 8 + garrison.archers / 8 + garrison.knights / 6) - 1) + winterExtra + seedReserve;
-  if (ysabel) grainCost = Math.ceil(grainCost * .92);
+  let grainCost = Math.max(0, Math.ceil(army.levy / 4 + army.archers / 4 + army.knights / 3 + army.heavy_infantry / 3 + army.crossbowmen / 3 + army.light_cavalry / 3 + garrison.levy / 8 + garrison.archers / 8 + garrison.knights / 6) - 1) + winterExtra + seedReserve;
   if (techLevel(s, "census")) grainCost = Math.ceil(grainCost * Math.max(.82, 1 - techLevel(s, "census") * .06));
   const armyGoldCost = army.levy * .12 + army.archers * .23 + army.knights * .55 + garrison.levy * .06 + garrison.archers * .12 + garrison.knights * .28;
   const goldCost = Math.ceil(armyGoldCost * Math.max(.64, 1 - techLevel(s, "professional_army") * .18)) + ownedOfficers(s).filter(o => o.id !== "player").length + activeKnights(s).length;
@@ -1517,7 +1548,7 @@ function forecast(s, season = seasonOf(s)) {
   const projected = s.grain + gross.grain - grainCost;
   const spoilageRate = Math.max(.05, .18 - granaryLevels * .018);
   const spoilage = Math.max(0, Math.round((projected - storageCap) * spoilageRate));
-  return { ...gross, tradeposts: activeTradeposts, grainCost, goldCost, storageCap, spoilage, netGold: gross.gold - goldCost, netGrain: gross.grain - grainCost - spoilage };
+  return { ...gross, grainCost, goldCost, storageCap, spoilage, netGold: gross.gold - goldCost, netGrain: gross.grain - grainCost - spoilage };
 }
 
 function resourceFlow(s, season = seasonOf(s)) {
@@ -1638,7 +1669,7 @@ const ACTIONS = [
       s.officers.forEach(o => { if (o.injured > 0) o.injured--; });
       return "军队停止远征，伤兵得到治疗，本季度战争疲劳下降。";
     } }
-];
+].filter(action => !["inspect", "tax", "feast", "fortify", "rest"].includes(action.id));
 
 function applyAction(id) {
   if (rejectDuringBattle(S)) return false;
@@ -1788,6 +1819,13 @@ function applyShortage(s, deficit) {
   log(s, "bad", `粮仓见底，${deserters}名士兵离队，村庄开始宰杀来年的种畜。`);
 }
 
+function applyUnrest(s) {
+  const deserters = Math.min(armyTotal(s), Math.max(1, Math.ceil((25 - s.support) / 4)));
+  removeTroops(s, deserters);
+  ownTerritoryIds(s).forEach(id => { s.territories[id].stability = clamp(s.territories[id].stability - 4); s.territories[id].devastated = Math.max(s.territories[id].devastated, 1); });
+  log(s, "bad", `民心跌破底线，${deserters}名驻军离队，领地生产受到影响。`);
+}
+
 function enemyGuardCap(s, id) {
   const expansionPressure = Math.max(0, ownTerritoryIds(s).length - 1) * 4;
   const timePressure = Math.floor(s.turn / 4) * 3;
@@ -1804,21 +1842,12 @@ function settleSeasonEconomy(s, options = {}) {
   s.knowledge = Math.max(0, Math.round((s.knowledge || 0) + 3 + academyLevels + techLevel(s, "relay_roads") * 2));
   if (f.spoilage > 0) log(s, "warn", `粮仓容量只有${f.storageCap}，潮气、鼠害与转运损失吃掉了${f.spoilage}粮食。升级农田与磨坊可扩充仓储。`);
   if (s.grain < 0) { const deficit = Math.abs(s.grain); s.grain = 0; applyShortage(s, deficit); }
-  if (s.gold < -25) {
-    s.morale = clamp(s.morale - 7);
-    ownedOfficers(s).forEach(o => { if (o.id !== "player") o.loyalty = clamp(o.loyalty - 4); });
-    log(s, "bad", "军饷拖欠，骑士与雇工开始在大厅外等你的解释。"
-    );
-  }
+  if (s.support < 25) applyUnrest(s);
   ownTerritoryIds(s).forEach(id => {
     const t = s.territories[id];
     const guardCap = TERRITORY_DEFS[id].guard + t.buildings.barracks * 7 + t.buildings.walls * 5 + t.buildings.watchtower * 4;
     if (t.devastated > 0) t.devastated--;
-    const temple = t.buildings.temple || 0;
-    if (t.policy === "relief") { t.stability = clamp(t.stability + 4 + temple); s.support = clamp(s.support + 1 + Math.floor(temple / 2)); }
-    if (t.policy === "extract") t.stability = clamp(t.stability - Math.max(1, 4 - Math.floor(temple / 2)));
-    if (t.policy === "garrison") { t.guard = Math.min(guardCap, t.guard + 3); t.stability = clamp(t.stability + 1); }
-    else if (t.stability >= 65 && t.guard < guardCap) t.guard++;
+    if (t.stability >= 65 && t.guard < guardCap) t.guard++;
   });
   Object.keys(s.territories).filter(id => s.territories[id].owner !== "player").forEach(id => {
     const t = s.territories[id];
@@ -1827,12 +1856,6 @@ function settleSeasonEconomy(s, options = {}) {
     t.guard = Math.min(enemyGuardCap(s, id), t.guard + recovery);
     if (t.devastated > 0) t.devastated--;
   });
-  if (s.warWeariness >= 60) {
-    s.support = clamp(s.support - 3);
-    s.morale = clamp(s.morale - 2);
-    ownedOfficers(s).filter(o => o.id !== "player").forEach(o => o.loyalty = clamp(o.loyalty - 1));
-    log(s, "warn", "连续征发开始压垮村庄，军队也在问下一场战争何时才会结束。");
-  }
   log(s, f.netGrain >= 0 ? "good" : "warn", `${seasonOf(s).name}季结算：金币${f.netGold >= 0 ? "+" : ""}${f.netGold}，粮食${f.netGrain >= 0 ? "+" : ""}${f.netGrain}${f.spoilage ? `（含损耗${f.spoilage}）` : ""}。`);
 }
 
@@ -1841,9 +1864,9 @@ function advanceSeason(s, options = {}) {
   const eventAt = Number.isFinite(options.at) ? options.at : Date.now();
   settleSeasonEconomy(s, { resourcesAlreadyAccrued: !!options.resourcesAlreadyAccrued });
   if (!options.offline) enemyPressure(s, options.rng || Math.random, eventAt);
-  s.officers.forEach(o => { if (o.injured > 0) o.injured--; });
+  s.officers.forEach(o => { o.injured = 0; });
   s.training = Math.max(0, s.training - Math.max(0, 2 - Math.ceil(techLevel(s, "field_doctrine") / 2)));
-  s.warWeariness = clamp(s.warWeariness - 9);
+  s.warWeariness = 0;
   s.turn++;
   s.seasonLocks = {};
   s.usedActions = {};
@@ -2085,9 +2108,9 @@ function battleEstimate(s, targetId, leaderIds, troops, planId, armyId = "army_1
   const enemyComposition = defenderComposition(s, targetId);
   const unitPower = compositionPower(composition, targetId, planId, seasonOf(s).id, s);
   const counter = counterMultiplier(composition, enemyComposition);
-  const fatigue = 1 - clamp(s.warWeariness || 0, 0, 100) / 300;
+  const fatigue = 1;
   const effectiveMorale = leaderIds.includes("player") ? Math.max(45, s.morale) : s.morale;
-  let attack = unitPower * (.62 + command / 190 + force / 330) * (.72 + effectiveMorale / 190) * (1 + s.training / 190) * planMult * fatigue * counter;
+  let attack = unitPower * (.62 + command / 190 + force / 330) * (.72 + effectiveMorale / 190) * planMult * fatigue * counter;
   if (leaderIds.includes("player")) attack *= 1.03;
   const knightMultiplier = knightBattleMultiplier(s, selectedKnightIds);
   attack *= knightMultiplier;
@@ -2132,16 +2155,15 @@ function battleRiskClass(ratio) {
 }
 
 function battlePowerText(ratio) {
-  const percent = Math.round(Math.abs(ratio - 1) * 100);
-  if (percent === 0) return "我军预计与敌军战力相当。";
-  return ratio >= 1 ? `我军预计比敌军强${percent}%。` : `我军预计比敌军弱${percent}%。`;
+  if (ratio >= 1.28) return "我军明显占优";
+  if (ratio >= 1.08) return "我军略占上风";
+  if (ratio < .78) return "这场战斗近乎送死";
+  if (ratio < .94) return "我军处于下风";
+  return "胜负难料";
 }
 
 function battleBreakdownText(est) {
-  const counter = Math.round((est.counter - 1) * 100);
-  const knight = Math.round((est.knightMultiplier - 1) * 100);
-  const counterText = counter >= 0 ? `兵种克制预计贡献 +${counter}%` : `兵种相克预计造成 ${Math.abs(counter)}% 劣势`;
-  return `${counterText}；在列骑士协同 +${knight}%`;
+  return "";
 }
 
 function battleFatigueText(fatigue) {
@@ -2156,8 +2178,7 @@ function battleMoraleText(effectiveMorale, morale) {
 function battleMomentumText(value) {
   const momentum = Math.round(value);
   const label = momentum >= 15 ? "我军明显占优" : momentum >= 5 ? "我军略占优势" : momentum <= -15 ? "敌军明显占优" : momentum <= -5 ? "敌军略占优势" : "双方势均力敌";
-  const signed = momentum > 0 ? `+${momentum}` : `${momentum}`;
-  return `当前战况：${label}（${signed}）`;
+  return `当前战况：${label}`;
 }
 
 function startBattle(s, draft, rng = Math.random) {
@@ -2178,7 +2199,7 @@ function startBattle(s, draft, rng = Math.random) {
   const knightIds = (draft.knightIds || draft.commandKnightIds || []).filter(id => activeKnights(s).some(knight => knight.id === id));
   const est = battleEstimate(s, draft.targetId, leaders.map(o => o.id), troops, draft.plan, army.id, requestedComposition, knightIds.length ? knightIds : null);
   if (!draft.supplyAlreadyPaid) s.grain -= supply;
-  s.warWeariness = clamp(s.warWeariness + 5 + Math.ceil(troops / 12) + (seasonOf(s).id === "winter" ? 5 : 0));
+  s.warWeariness = 0;
   s.battles++;
   s.battleSession = {
     armyId: army.id,
@@ -2250,7 +2271,7 @@ function battleSituation(session) {
   const momentum = Math.round(session.momentum);
   const state = momentum >= 12 ? "我军掌握主动" : momentum <= -12 ? "敌军正在压迫战线" : "双方仍在争夺主动";
   const terrain = TERRITORY_DEFS[session.targetId]?.terrain || "战场";
-  return { stage, title: `${stage}阶段 · ${state}`, text: `${terrain}地形正在影响推进。当前战况 ${momentum > 0 ? "+" : ""}${momentum}；下一道军令会同时改变推进速度和伤亡。` };
+  return { stage, title: `${stage}阶段 · ${state}`, text: `${terrain}地形正在影响推进。下一道军令会同时改变推进速度和伤亡。` };
 }
 
 function applyBattleChoice(s, choiceId, rng = Math.random) {
@@ -2307,19 +2328,14 @@ function finishBattle(s, outcome, rng = Math.random) {
   if (engagedArmy) Object.keys(UNIT_DEFS).forEach(type => { engagedArmy.composition[type] = Math.max(0, (engagedArmy.composition[type] || 0) - (lossesByType[type] || 0)); });
   syncTroops(s);
   s.casualties += session.playerLoss;
-  s.warWeariness = clamp(s.warWeariness + Math.ceil(session.playerLoss * 1.5));
+  s.warWeariness = 0;
   const leaders = session.leaderIds.map(id => officer(s, id)).filter(Boolean);
+  // 领主不再进入受伤计时；战后只结算兵力、军心与领地归属。
   const injured = [];
   let persistentEnemyLoss = 0;
   let garrisoned = 0;
   let lostGold = 0;
   let lostGrain = 0;
-  leaders.forEach(o => {
-    if (rng() < Math.min(.32, session.playerLoss / Math.max(12, session.troops) * .8)) {
-      o.injured = 1 + Math.floor(rng() * 2);
-      injured.push(o.name);
-    }
-  });
   if (outcome === "win") {
     const t = s.territories[targetId];
     const desiredGarrison = Math.max(6, Math.round((session.troops - session.playerLoss) * (session.flags.demanded ? .16 : .22)));
@@ -2482,11 +2498,12 @@ function checkDefeat(s) {
   s.crisis ||= { famine: 0, debt: 0, unrest: 0, checkedTurn: -1 };
   if (s.crisis.checkedTurn !== s.turn) {
     s.crisis.famine = s.grain <= 0 ? s.crisis.famine + 1 : 0;
-    s.crisis.debt = s.gold < -25 ? s.crisis.debt + 1 : 0;
+    // 债务不再作为危机机制；保留旧存档字段只是为了兼容读取。
+    s.crisis.debt = 0;
     s.crisis.unrest = s.support < 12 ? s.crisis.unrest + 1 : 0;
     s.crisis.checkedTurn = s.turn;
   }
-  if (s.crisis.famine >= 3 || s.crisis.debt >= 3 || s.crisis.unrest >= 2 || (armyTotal(s) <= 0 && s.morale < 10)) {
+  if (s.crisis.famine >= 3 || s.crisis.unrest >= 2 || (armyTotal(s) <= 0 && s.morale < 10)) {
     s.ended = true;
     s.endingReason = "collapsed";
     return true;
@@ -2593,18 +2610,18 @@ function pumpDecision() {
   const view = decisionView(S, S.pendingDecisions[0]);
   if (!view) { S.pendingDecisions.shift(); saveGame(); pumpDecision(); return; }
   $("modalMask").classList.remove("hidden");
-  $("modalKicker").textContent = view.kicker;
-  $("modalTitle").textContent = view.title;
-  $("modalBody").innerHTML = view.body;
+  $("modalKicker").textContent = cleanDisplayText(view.kicker);
+  $("modalTitle").textContent = cleanDisplayText(view.title);
+  $("modalBody").innerHTML = cleanDisplayText(view.body);
   $("modalPortrait").src = view.portrait;
   $("modalPortrait").alt = view.title;
-  $("modalResources").innerHTML = [["金币", Math.round(S.gold)], ["粮食", Math.round(S.grain)], ["民心", Math.round(S.support)], ["王室认可", Math.round(S.legitimacy)]].map(([label, value]) => `<span><small>${label}</small><b>${value}</b></span>`).join("");
+  $("modalResources").innerHTML = [["金币", Math.round(S.gold)], ["粮食", Math.round(S.grain)], ["军队", Math.round(S.troops)], ["民心", Math.round(S.support)], ["军心", Math.round(S.morale)], ["声望", Math.round(S.renown)]].map(([label, value]) => `<span><small>${label}</small><b>${value}</b></span>`).join("");
   $("modal").scrollTop = 0;
   $("modalOptions").innerHTML = view.options.map((opt, i) => {
     const plus = (opt.note.match(/\+/g) || []).length;
     const minus = (opt.note.match(/−/g) || []).length;
     const tone = plus && !minus ? "gain" : minus && !plus ? "risk" : plus && minus ? "mixed" : "neutral";
-    return `<button class="${tone}" data-decision-option="${i}" ${opt.disabled ? "disabled" : ""}><b>${esc(opt.name)}</b><small>${esc(opt.note)}</small></button>`;
+    return `<button class="${tone}" data-decision-option="${i}" ${opt.disabled ? "disabled" : ""}><b>${esc(cleanDisplayText(opt.name))}</b><small>${esc(cleanDisplayText(opt.note))}</small></button>`;
   }).join("");
   $("modalOptions").querySelectorAll("[data-decision-option]").forEach(button => button.addEventListener("click", () => {
     const option = view.options[Number(button.dataset.decisionOption)];
@@ -2620,7 +2637,18 @@ function pumpDecision() {
 }
 
 function metrics(items) {
-  return `<div class="metrics">${items.map(([value, label]) => `<div class="metric"><b>${esc(value)}</b><span>${esc(label)}</span></div>`).join("")}</div>`;
+  return `<div class="metrics">${items.map(([value, label]) => { const display = typeof value === "number" ? Math.round(value) : value; return `<div class="metric"><b>${esc(display)}</b><span>${esc(label)}</span></div>`; }).join("")}</div>`;
+}
+
+function cleanDisplayText(value) {
+  return String(value ?? "")
+    .replace(/王室认可/g, "声望")
+    .replace(/战争疲劳/g, "")
+    .replace(/人口/g, "居民")
+    .replace(/稳定/g, "民心")
+    .replace(/不满/g, "")
+    .replace(/功劳/g, "")
+    .replace(/野心/g, "");
 }
 
 function currentStyle(s) {
@@ -2636,20 +2664,22 @@ function renderTop() {
   $("turnText").textContent = `${Math.min(S.turn + 1, MAX_TURNS)} / ${MAX_TURNS}`;
   $("goldText").textContent = Math.round(S.gold);
   $("grainText").textContent = Math.round(S.grain);
-  $("knowledgeText").textContent = Math.round(S.knowledge || 0);
+  if ($("knowledgeText")) $("knowledgeText").textContent = Math.round(S.knowledge || 0);
   $("troopText").textContent = Math.round(S.troops);
   $("phaseText").textContent = season.phase;
   $("turnHint").textContent = S.battleSession ? "远征尚未结束" : `距离换季 ${formatDuration(getSeasonRemainingMs(S))}`;
   $("playerNameText").textContent = S.playerName;
-  $("oathBadge").textContent = OATHS[S.oath].name;
+  $("oathBadge").textContent = "合法继承人";
   $("territoryCount").textContent = `${ownTerritoryIds(S).length} / ${playableTerritoryIds().length}`;
-  [["support", S.support], ["morale", S.morale], ["renown", S.renown], ["legitimacy", S.legitimacy], ["weariness", S.warWeariness]].forEach(([id, value]) => {
+  [["support", S.support], ["morale", S.morale], ["renown", S.renown]].forEach(([id, value]) => {
     $(`${id}Text`).textContent = Math.round(value);
     $(`${id}Bar`).style.width = `${clamp(value)}%`;
   });
+  $("goldSideText").textContent = Math.round(S.gold); $("grainSideText").textContent = Math.round(S.grain); $("armySideText").textContent = Math.round(S.troops);
+  $("goldBar").style.width = `${clamp(S.gold / 2)}%`; $("grainBar").style.width = `${clamp(S.grain / 4)}%`; $("armyBar").style.width = `${clamp(S.troops / 2)}%`;
   $("netGoldText").textContent = formatResourceRate(flow.goldPerSecond, "金");
   $("forecastList").innerHTML = [
-    ["金币流量", formatResourceRate(flow.goldPerSecond, "金")], ["粮食流量", formatResourceRate(flow.grainPerSecond, "粮")], ["人员开支", `−${f.goldCost}/季`], ["粮食消耗", `−${f.grainCost}/季`], ["仓储容量", `${f.storageCap}`]
+    ["金币流量", formatResourceRate(flow.goldPerSecond, "金")], ["粮食流量", formatResourceRate(flow.grainPerSecond, "粮")], ["本季净金", `${f.netGold >= 0 ? "+" : "−"}${Math.abs(f.netGold)}`], ["本季净粮", `${f.netGrain >= 0 ? "+" : "−"}${Math.abs(f.netGrain)}`], ["粮仓容量", `${f.storageCap}`]
   ].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
   $("gameNav").querySelectorAll("[data-tab]").forEach(button => button.classList.toggle("active", button.dataset.tab === S.tab));
 }
@@ -2692,55 +2722,40 @@ function renderHall() {
   const flow = resourceFlow(S);
   const activeJobs = (S.jobs || []).filter(job => job.status === "running");
   const queueHtml = activeJobs.length ? activeJobs.map(job => {
-    const label = job.type === "BUILD" ? `建设 · ${TERRITORY_DEFS[job.territoryId]?.name || "领地"}` : job.type === "RECRUIT" ? "募集兵力" : job.type === "RESEARCH" ? "科技研究" : job.type === "MARCH" ? "军团行军" : job.type === "OFFICER_RECRUIT" ? `招募领主 · ${officer(S, job.payload?.officerId)?.name || "候选人"}` : job.type === "CITY_ACTION" ? `城市行动 · ${TERRITORY_DEFS[job.territoryId]?.name || "城市"}` : "军政指令";
+    const label = job.type === "BUILD" ? `建设 · ${TERRITORY_DEFS[job.territoryId]?.name || "领地"}` : job.type === "RECRUIT" ? "募集兵力" : job.type === "RESEARCH" ? "科技研究" : job.type === "MARCH" ? "王国主力行军" : job.type === "OFFICER_RECRUIT" ? `招募领主 · ${officer(S, job.payload?.officerId)?.name || "候选人"}` : job.type === "CITY_ACTION" ? `城市行动 · ${TERRITORY_DEFS[job.territoryId]?.name || "城市"}` : "军政指令";
     return `<div class="queue-row"><b>${label}</b><span data-job-countdown="${job.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(job))}</span></div>`;
   }).join("") : `<div class="empty-state">当前没有进行中的建设、研究、募兵或行军。</div>`;
-  const actionHtml = ACTIONS.map(action => {
-    const used = S.seasonLocks?.[action.id] || 0;
-    const locked = action.canRun && !action.canRun(S);
-    const actionJob = action.id === "recruit" ? getRunningJob(S, `recruit:${recruitmentTerritoryId(S)}`) : null;
-    const globalJob = getRunningJob(S, "action:global");
-    const currentJob = actionJob || (globalJob?.payload?.actionId === action.id ? globalJob : null);
-    const disabled = !!used || !!locked || !!globalJob || (action.id === "recruit" && !!actionJob);
-    const buttonText = currentJob ? `<span data-job-countdown="${currentJob.id}" data-job-prefix="处理中 · ">处理中 · ${formatDuration(getJobRemainingMs(currentJob))}</span>` : used ? "本季已安排" : globalJob ? "行动队列占用" : locked ? "资源不足" : "安排";
-    return `<article class="action-card ${used ? "used" : ""}"><div class="action-icon">${action.icon}</div><h3>${action.name}</h3><p>${action.desc}</p><div class="effect-row">${action.effects.map(e => `<span>${e}</span>`).join("")}</div><button data-action="${action.id}" ${disabled ? "disabled" : ""}>${buttonText}</button></article>`;
-  }).join("");
   panel.innerHTML = `
     <section class="hero-panel">
       <span class="eyebrow">STRATEGY OVERVIEW</span>
       <h2>${S.turn === 0 ? "第一年春：先发展，再出征" : `第${yearOf(S)}年${seasonOf(S).name}季 · 军政总览`}</h2>
-      <p>${seasonOf(S).note} 资源会自动流入，季节系数会改变金币与粮食的速度。先建设生产，再招募领主和骑士，最后选择出征时机。</p>
-      ${metrics([[subjects(S), "人口"], [ownTerritoryIds(S).length, "领地"], [armyTotal(S), "军队"], [S.warWeariness, "战争疲劳"]])}
+      <p>${seasonOf(S).note} 资源会自动流入，季节系数会改变金币与粮食的速度。先建设生产，再研究科技、募集兵力，最后选择出征时机。</p>
+      ${metrics([[S.gold, "金币"], [S.grain, "粮食"], [armyTotal(S), "军队"], [S.support, "民心"], [S.morale, "军心"], [S.renown, "声望"]])}
     </section>
     ${S.lastAction ? `<div class="feedback-banner"><b>${esc(S.lastAction.name)}</b><p>${esc(S.lastAction.text)}</p></div>` : ""}
     <div class="strategy-overview"><article class="flow-card"><div class="section-head"><h3>实时资源流量（按分钟）</h3><span>${seasonOf(S).name}季系数 · 金${formatSeasonCoefficient(seasonOf(S).gold)} / 粮${formatSeasonCoefficient(seasonOf(S).grain)}</span></div><div class="flow-values"><b>${formatResourceRate(flow.goldPerSecond, "金")}</b><b>${formatResourceRate(flow.grainPerSecond, "粮")}</b></div><p>本季预计净额：金币 ${f.netGold >= 0 ? "+" : "−"}${Math.abs(f.netGold)} · 粮食 ${f.netGrain >= 0 ? "+" : "−"}${Math.abs(f.netGrain)}</p></article><article class="queue-card"><div class="section-head"><h3>进行中的军政事务</h3><span>${activeJobs.length} 项</span></div>${queueHtml}</article></div>
-    <div class="quick-actions"><button data-quick-tab="domain"><b>发展领地</b><small>建筑、政策、科技</small></button><button data-quick-tab="court"><b>招募领主</b><small>任命领主与驻地管理者</small></button><button data-quick-tab="campaign"><b>募集兵力</b><small>训练、编军、出征</small></button><button data-quick-tab="map"><b>查看地图</b><small>选择下一个目标</small></button></div>
-    <details class="minor-actions"><summary>临时政务（低频操作）<span>巡视、应急征收、封赏与休整</span></summary><div class="action-grid">${actionHtml}</div></details>`;
-  panel.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => applyAction(button.dataset.action)));
+    <div class="quick-actions"><button data-quick-tab="domain"><b>发展领地</b><small>建筑与科技</small></button><button data-quick-tab="court"><b>任命领主</b><small>招募、封地与忠诚</small></button><button data-quick-tab="campaign"><b>募集兵力</b><small>兵种、军心与编制</small></button><button data-quick-tab="map"><b>查看地图</b><small>侦察与收复城镇</small></button></div>`;
   panel.querySelectorAll("[data-quick-tab]").forEach(button => button.addEventListener("click", () => { S.tab = button.dataset.quickTab; saveGame(); renderAll(); resetPageScroll(); }));
 }
 
 function officerCard(o, enemy = false) {
   if (!o) return "";
   const fief = o.fief ? `管理${TERRITORY_DEFS[o.fief]?.name}` : "未管理领地";
-  const status = enemy ? (o.recruitable ? "可招募领主" : FACTIONS[o.side]?.name || "已经离开") : o.id === "player" ? "领主本人" : `忠诚 ${Math.round(o.loyalty)}`;
-  const arcTotal = NPC_ARCS.filter(event => event.officerId === o.id).length;
-  const arcDone = NPC_ARCS.filter(event => event.officerId === o.id && S.seenNpcEvents.includes(event.id)).length;
-  return `<article class="officer-card ${enemy ? "enemy" : ""} ${o.injured ? "injured" : ""}">
+  const status = enemy ? `${o.recruitable ? "可招募领主" : FACTIONS[o.side]?.name || "已经离开"} · 忠诚 ${Math.round(o.loyalty)}` : o.id === "player" ? "王子本人" : `忠诚 ${Math.round(o.loyalty)}`;
+  return `<article class="officer-card ${enemy ? "enemy" : ""}">
     <img src="${o.portrait}" alt="${esc(o.name)}">
-    <div class="card-copy"><div class="role-line"><h3>${esc(o.name)}</h3><span>${esc(o.title)}</span></div><p>${esc(o.trait)} · ${esc(o.traitText)}</p>
+    <div class="card-copy"><div class="role-line"><h3>${esc(o.name)}</h3><span>${esc(o.title)}</span></div><p>领主的统率与治理决定带兵和经营效率。</p>
     <div class="stat-chips">${OFFICER_STAT_KEYS.map(key => `<span>${STAT_LABELS[key]}${o.stats[key]}</span>`).join("")}</div>
-    <div class="loyalty-line"><span>${status}</span><b>${o.injured ? `休养${o.injured}季` : enemy ? o.trait : `${fief} · 功劳${o.merit}`}${arcTotal ? ` · 剧情${arcDone}/${arcTotal}` : ""}</b></div><div class="loyalty-track"><i style="width:${enemy ? 56 : clamp(o.loyalty)}%"></i></div></div>
+    <div class="loyalty-line"><span>${status}</span><b>${fief}</b></div><div class="loyalty-track"><i style="width:${enemy ? 56 : clamp(o.loyalty)}%"></i></div></div>
   </article>`;
 }
 
 function renderDomain() {
   const panel = $("panel");
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">DEVELOPMENT</span><h2>发展与科技</h2><p>先用建筑提高资源流量、储粮和守军，再用科技把每块领地的效率放大。建筑最高五级，每块领地同时只进行一项建设。</p>${metrics([[ownTerritoryIds(S).length, "已有领地"], [subjects(S), "人口"], [forecast(S).grain, "本季产粮"], [forecast(S).gold, "本季税收"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">RESTORATION ECONOMY</span><h2>发展复国根基</h2><p>农田养军，市场聚财，铁匠铺和兵营把资源变成收复旧土的军力。建筑最高五级，每块领地同时只进行一项建设。</p>${metrics([[ownTerritoryIds(S).length, "收复领地"], [S.support, "民心"], [forecast(S).grain, "本季产粮"], [forecast(S).gold, "本季金币"]])}</section>
     <div class="section-head"><h2>领地建设</h2><span>农田、市场、兵营、城墙、粮仓、学宫、工坊、驿道、烽火台、神殿</span></div>
     <div class="domain-grid">${ownTerritoryIds(S).map(domainCard).join("")}</div>${researchPanelHtml()}`;
   panel.querySelectorAll("[data-upgrade]").forEach(button => button.addEventListener("click", () => upgradeBuilding(button.dataset.territory, button.dataset.upgrade)));
-  panel.querySelectorAll("[data-policy]").forEach(button => button.addEventListener("click", () => setTerritoryPolicy(button.dataset.territory, button.dataset.policy)));
   panel.querySelectorAll("[data-research]").forEach(button => button.addEventListener("click", () => {
     const job = queueResearch(S, button.dataset.researchBranch, button.dataset.research);
     if (!job) { toast("现在无法开始这项研究"); return; }
@@ -2756,8 +2771,7 @@ function domainCard(id) {
   const t = S.territories[id];
   const out = territoryOutput(S, id);
   const holder = t.fiefHolder === "charter" ? "村镇自治" : t.fiefHolder ? `由${officer(S, t.fiefHolder)?.name || "旧领主"}管理` : "由你管理";
-  const activePolicy = POLICIES[t.policy] || POLICIES.balanced;
-  return `<article class="domain-card"><div class="owner-line"><span>${esc(d.terrain)} · ${holder}</span><b>稳定 ${Math.round(t.stability)}</b></div><h3>${d.name}</h3><div class="stat-chips"><span>本季 ${out.gold}金</span><span>${out.grain}粮</span><span>守军 ${t.guard}</span><span>${t.devastated ? `战损${t.devastated}季` : "生产正常"}</span></div>
+  return `<article class="domain-card"><div class="owner-line"><span>${esc(d.terrain)} · ${holder}</span><b>王国民心 ${Math.round(S.support)}</b></div><h3>${d.name}</h3><div class="stat-chips"><span>本季 ${out.gold}金</span><span>${out.grain}粮</span><span>守军 ${t.guard}</span><span>生产正常</span></div>
     <div class="building-grid">${Object.entries(BUILDINGS).map(([type, b]) => {
       const level = t.buildings[type];
       const cost = buildingCost(S, id, type);
@@ -2765,7 +2779,7 @@ function domainCard(id) {
       const buildingQueued = buildJob?.payload?.buildingType === type;
       const buildLabel = buildingQueued ? `建设中 · ${formatDuration(getJobRemainingMs(buildJob))}` : buildJob ? "建设队列占用" : level >= BUILDING_MAX_LEVEL ? "已达最高级" : `升级 · ${cost}金`;
       return `<div class="building-card"><b>${glyphSvg(type)}${b.name} · ${level}/${BUILDING_MAX_LEVEL}</b><small>${b.desc}</small><button data-territory="${id}" data-upgrade="${type}" ${!canUpgrade(S, id, type) ? "disabled" : ""}>${buildingQueued ? `<span data-job-countdown="${buildJob.id}" data-job-prefix="建设中 · ">建设中 · ${formatDuration(getJobRemainingMs(buildJob))}</span>` : buildLabel}</button></div>`;
-    }).join("")}</div><div class="policy-block"><div class="policy-title"><span>当前政策</span><b>${activePolicy.name}</b></div><div class="policy-grid">${Object.entries(POLICIES).map(([policyId, policy]) => { const active = t.policy === policyId; return `<button class="policy-btn ${active ? "active" : ""}" data-territory="${id}" data-policy="${policyId}" aria-pressed="${active}" ${!active && S.seasonLocks?.[`policy_${id}`] ? "disabled" : ""}><b>${policy.name}</b><small>${policyId === "balanced" ? "收入正常，稳定不变" : policyId === "relief" ? "收入降低，稳定上升" : policyId === "extract" ? "金币增加，稳定下降" : "产出降低，守军增加"}</small></button>`; }).join("")}</div></div></article>`;
+    }).join("")}</div></article>`;
 }
 
 function renderMap() {
@@ -2773,16 +2787,14 @@ function renderMap() {
   const attackable = attackableTerritories(S, "army_1");
   const mapArmy = armyEntity(S, "army_1");
   const mapMarchJob = mapArmy?.jobId ? S.jobs.find(job => job.id === mapArmy.jobId && job.status === "running") : null;
-  const mapArmyStatus = mapArmy?.status === "marching" && mapMarchJob ? `<span data-job-countdown="${mapMarchJob.id}" data-job-prefix="第一军团行军中 · ">第一军团行军中 · ${formatDuration(getJobRemainingMs(mapMarchJob))}</span>` : mapArmy?.status === "recovering" ? "第一军团整补中" : `第一军团驻扎于${TERRITORY_DEFS[mapArmy?.locationId || "ravenstone"]?.name || "渡鸦堡"}`;
+  const mapArmyStatus = mapArmy?.status === "marching" && mapMarchJob ? `<span data-job-countdown="${mapMarchJob.id}" data-job-prefix="王国主力行军中 · ">王国主力行军中 · ${formatDuration(getJobRemainingMs(mapMarchJob))}</span>` : mapArmy?.status === "recovering" ? "王国主力休整中" : `王国主力驻扎于${TERRITORY_DEFS[mapArmy?.locationId || "ravenstone"]?.name || "渡鸦堡"}`;
   const selectedId = S.selectedTerritoryId || "ravenstone";
   const controlled = ownTerritoryIds(S).length;
-  const activeTradeposts = Object.keys(S.cityTradeposts || {}).filter(id => cityTradeActive(S, id)).length;
-  const trustThreshold = charterTrustThreshold(S);
-  const trustedCities = Object.keys(S.cityRelations || {}).filter(id => !owns(S, id) && cityRelation(S, id) >= trustThreshold).length;
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE NORTHERN MARCH · ONE CROWN</span><h2>统一北境，从一座城开始</h2><p>这里不是一张静态地图。每一座城市都有粮道、城门、商人和自己的记忆。点击城市查看城堡选项；出征时在这里选择骑士、兵种、粮食和作战方式，军团会按距离行军，抵达后直接进入战斗。<br><b>${mapArmyStatus}</b></p>${metrics([[`${controlled} / 7`, "主城控制"], [attackable.length, "相邻战场"], [trustedCities, "可签城约"], [activeTradeposts, "运行商站"]])}</section>
-    <div class="unification-track"><div><b>统一进度</b><span>占领主城、建立商路，并让外围城市承认你的保护</span></div><strong>${Math.round(controlled / 7 * 100)}%</strong><i style="width:${Math.round(controlled / 7 * 100)}%"></i></div>
+  const interactiveCount = Object.keys(TERRITORY_DEFS).length;
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE RESTORATION MAP</span><h2>把父亲的旧领土夺回来</h2><p>每个城堡和城镇都是复国路线上的一站。点击敌方城堡，查看守军、侦察情报并直接配置远征。<br><b>${mapArmyStatus}</b></p>${metrics([[`${controlled} / ${playableTerritoryIds().length}`, "已收复"], [attackable.length, "邻近目标"], [playableTerritoryIds().length, "可占领地点"], [interactiveCount, "地图地点"]])}</section>
+    <div class="unification-track"><div><b>复国进度</b><span>收复父亲留下的旧土，逐步逼近王冠谷</span></div><strong>${Math.round(controlled / playableTerritoryIds().length * 100)}%</strong><i style="width:${Math.round(controlled / playableTerritoryIds().length * 100)}%"></i></div>
     <div class="section-head"><h2>北境地图</h2><span>36座城市 · 金边为可出征目标 · 点击查看城镇操作</span></div>
-    <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}<span class="map-legend-note">商站 ${activeTradeposts} · 信任达${trustThreshold}可签城约</span></div><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div><div class="map-inspector">${territorySummary(S, selectedId, attackable)}</div></div>`;
+    <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}<span class="map-legend-note">金边目标可直接配置远征 · 斥候情报按季更新</span></div><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div><div class="map-inspector">${territorySummary(S, selectedId, attackable)}</div></div>`;
   panel.querySelectorAll("[data-map-territory]").forEach(button => button.addEventListener("click", () => {
     const id = button.dataset.mapTerritory;
     S.selectedTerritoryId = id;
@@ -2817,8 +2829,8 @@ function renderMap() {
     if (carried < minimum || carried > S.grain) { toast(`至少需要携带${minimum}粮食`); return; }
     S.grain -= carried;
     const job = startMarch(S, "army_1", targetId, Date.now(), { battlePlan: { leaderIds, knightIds: knight ? [knight] : [], composition, troops: total, plan, suppliedGrain: carried } });
-    if (!job) { S.grain += carried; toast("第一军团当前无法长途出征"); return; }
-    S.lastAction = { name: "远征出发", text: `第一军团携${compositionText(composition)}和${carried}粮食出发，预计${formatDuration(job.endAt - job.startedAt)}后抵达${TERRITORY_DEFS[targetId].name}。` };
+    if (!job) { S.grain += carried; toast("王国主力当前无法长途出征"); return; }
+    S.lastAction = { name: "远征出发", text: `王国主力携${compositionText(composition)}和${carried}粮食出发，预计${formatDuration(job.endAt - job.startedAt)}后抵达${TERRITORY_DEFS[targetId].name}。` };
     log(S, "info", S.lastAction.text);
     saveGame(); renderAll();
   }));
@@ -2845,7 +2857,7 @@ function mapNode(id, attackable) {
   const canAttack = attackable.includes(id);
   const locked = d.final && !crownAccessMet(S);
   const minor = d.playable === false;
-  return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${minor ? "minor" : ""} ${canAttack ? "attackable" : ""} ${locked ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%">${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${canAttack ? "可出征" : mine ? "我方 · " + t.guard : minor ? cityRelation(S, id) >= charterTrustThreshold(S) ? "可签城约" : "可互动" : locked ? "条件未满足" : `守军 ${t.guard}`}</small></span></button>`;
+  return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${minor ? "minor" : ""} ${canAttack ? "attackable" : ""} ${locked ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%">${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${canAttack ? "可出征" : mine ? "我方 · " + t.guard : minor ? "可侦察" : locked ? "条件未满足" : `守军 ${t.guard}`}</small></span></button>`;
 }
 
 function castleExpeditionHtml(s, id) {
@@ -2859,25 +2871,24 @@ function castleExpeditionHtml(s, id) {
   const required = compositionSupply(s, preview, ["player"]);
   const locked = d.final && !crownAccessMet(s);
   const disabled = locked || !army || army.status !== "idle" || compositionTotal(source) < 10 || s.grain < required;
-  return `<section class="castle-plan"><div class="castle-plan-head"><b>出征至${d.name}</b><span>${army?.status === "idle" ? `预计行军${formatDuration(marchDurationForDistance(s, army.locationId, id))}` : "第一军团当前不可出发"}</span></div>
-    <div class="castle-plan-grid"><label>带队骑士<select data-castle-knight="${id}"><option value="">国王亲征</option>${leaders.map(knight => `<option value="${knight.id}">${esc(knight.name)} · 统率${knight.command}</option>`).join("")}</select></label><label>作战方式<select data-castle-plan="${id}">${Object.entries(PLANS).map(([planId, plan]) => `<option value="${planId}">${plan.name}</option>`).join("")}</select></label></div>
-    <div class="castle-unit-picks"><span class="form-label">选择出征兵种与数量（主力 ${compositionTotal(source)} 人）</span>${Object.entries(UNIT_DEFS).map(([type, unit]) => `<label><span>${unit.name}</span><input type="number" min="0" max="${source[type] || 0}" value="${preview[type] || 0}" data-castle-unit="${id}" data-unit-type="${type}"></label>`).join("")}</div>
+  return `<section class="castle-plan"><div class="castle-plan-head"><b>出征至${d.name}</b><span>${army?.status === "idle" ? `预计行军${formatDuration(marchDurationForDistance(s, army.locationId, id))}` : "王国主力当前不可出发"}</span></div>
+    <div class="castle-plan-grid"><label>带队骑士<select data-castle-knight="${id}"><option value="">王子亲征</option>${leaders.map(knight => `<option value="${knight.id}">${esc(knight.name)} · 武力${knight.force} · 谋略${knight.scheme}</option>`).join("")}</select></label><label>作战方式<select data-castle-plan="${id}">${Object.entries(PLANS).map(([planId, plan]) => `<option value="${planId}">${plan.name}</option>`).join("")}</select></label></div>
+    <div class="castle-unit-picks"><span class="form-label">选择出征兵种与数量（王国主力 ${compositionTotal(source)} 人）</span>${Object.entries(UNIT_DEFS).map(([type, unit]) => `<label><span>${unit.name} · ${unitDisplayHint(type)}</span><input type="number" min="0" max="${source[type] || 0}" value="${preview[type] || 0}" data-castle-unit="${id}" data-unit-type="${type}"></label>`).join("")}</div>
     <label class="castle-grain">携带粮食 <input type="number" min="${required}" max="${Math.max(required, Math.floor(s.grain))}" value="${required}" data-castle-grain="${id}"><small>按兵种重量计算，至少需要${required}粮。</small></label>
-    <button class="city-attack-btn" data-castle-launch="${id}" ${disabled ? "disabled" : ""}>${locked ? "王冠谷 · 条件未满足" : army?.status !== "idle" ? "第一军团当前不可出发" : s.grain < required ? "粮食不足" : `出征 · ${d.name}`}</button></section>`;
+    <button class="city-attack-btn" data-castle-launch="${id}" ${disabled ? "disabled" : ""}>${locked ? "王冠谷 · 条件未满足" : army?.status !== "idle" ? "王国主力当前不可出发" : s.grain < required ? "粮食不足" : `出征 · ${d.name}`}</button></section>`;
 }
 
 function territorySummary(s, id, attackable = []) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
   const faction = FACTIONS[t.owner];
-  const relation = cityRelation(s, id);
   const actions = cityActionOptions(s, id);
   const cityJob = cityActionJob(s, id);
   const intel = cityIntelActive(s, id) ? "斥候情报有效" : "情报会随季节过时";
-  const actionHtml = cityJob ? `<div class="city-queue"><b>行动进行中</b><span data-job-countdown="${cityJob.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(cityJob))}</span><small>完成后才能安排这座城市的下一项行动。</small></div>` : actions.length ? `<div class="city-actions">${actions.map(action => `<button data-city-action="${action.id}" data-city-id="${id}" ${action.disabled ? "disabled" : ""}><b>${action.name}</b><small>${action.note}</small></button>`).join("")}</div>` : `<p class="city-empty">本季暂时没有适合的城市行动。${t.owner !== "player" && d.playable !== false ? "先派使者，提高信任后可以签城约。" : ""}</p>`;
+  const actionHtml = cityJob ? `<div class="city-queue"><b>斥候行动进行中</b><span data-job-countdown="${cityJob.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(cityJob))}</span><small>完成后会记录这座城的基础军情。</small></div>` : actions.length ? `<div class="city-actions">${actions.map(action => `<button data-city-action="${action.id}" data-city-id="${id}" ${action.disabled ? "disabled" : ""}><b>${action.name}</b><small>${action.note}</small></button>`).join("")}</div>` : "";
   const attack = attackable.includes(id) ? `<button class="city-attack-btn" data-city-attack="${id}">打开出征配置</button>` : "";
   const castlePlan = t.owner !== "player" && d.playable !== false ? castleExpeditionHtml(s, id) : "";
-  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${d.region}</small><h3>${d.name}</h3></div><b class="city-relation">信任 ${relation}</b></div><p>${d.terrain} · 守军 ${t.guard} · 稳定 ${Math.round(t.stability)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span>${cityTradeActive(s, id) ? " · 商站运行中" : ""}</p>${attack}${castlePlan}${actionHtml}</article>`;
+  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${d.region}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : "独立领地"}</b></div><p>${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
 }
 
 function terrainAdvice(targetId, composition) {
@@ -2897,9 +2908,7 @@ function unitUnlockLabel(s, type, territoryId) {
 }
 
 function unitMatchupText(type) {
-  const unit = UNIT_DEFS[type];
-  const names = ids => (ids || []).map(id => UNIT_DEFS[id]?.name).filter(Boolean).join("、");
-  return `克制：${names(unit.counters) || "无"} · 惧怕：${names(unit.weakTo) || "无"}`;
+  return unitDisplayHint(type);
 }
 
 function armyRosterHtml() {
@@ -2910,7 +2919,7 @@ function armyRosterHtml() {
   const army = armyEntity(S, "army_1");
   const deployable = army?.status === "idle" && army.locationId === territoryId && compositionTotal(garrison) > 0;
   const main = army?.composition || emptyComposition();
-  return `<div class="army-roster"><div class="section-note">第一军团：${compositionText(main)} · ${compositionTotal(main)}人；${place}待编驻军：${compositionText(garrison)}。训练完成后先进入驻军，再由军团驻扎时编入主力。</div>${deployable ? `<button class="secondary-btn" data-deploy-garrison="${territoryId}">把${place}驻军编入第一军团</button>` : ""}${Object.entries(UNIT_DEFS).map(([type, unit]) => { const queued = recruitJob?.payload?.unitType === type; const label = queued ? `训练中 · ${formatDuration(getJobRemainingMs(recruitJob))}` : recruitJob ? "训练队列占用" : unitUnlockLabel(S, type, territoryId); const count = garrison[type] || 0; const mainCount = main[type] || 0; const equipment = unitEquipment(S, type); return `<article class="unit-card"><div class="unit-head"><b>${glyphSvg(type)}${unit.name}</b><strong>${mainCount}<small>主力 · ${count}待编</small></strong></div><p>等级${equipment.level} · 攻${equipment.attack} 防${equipment.defense} 血${equipment.hp}<br>${unit.desc}<br><span class="unit-matchup">${unitMatchupText(type)}</span></p><button data-recruit-unit="${type}" ${!canRecruitUnit(S, type, territoryId) ? "disabled" : ""}>${queued ? `<span data-job-countdown="${recruitJob.id}" data-job-prefix="训练中 · ">${label}</span>` : label}</button></article>`; }).join("")}</div>`;
+  return `<div class="army-roster"><div class="section-note">王国主力：${compositionText(main)} · ${compositionTotal(main)}人；${place}待编驻军：${compositionText(garrison)}。训练完成后先进入驻军，再由主力驻扎时编入。</div>${deployable ? `<button class="secondary-btn" data-deploy-garrison="${territoryId}">把${place}驻军编入王国主力</button>` : ""}${Object.entries(UNIT_DEFS).map(([type, unit]) => { const queued = recruitJob?.payload?.unitType === type; const label = queued ? `训练中 · ${formatDuration(getJobRemainingMs(recruitJob))}` : recruitJob ? "训练队列占用" : unitUnlockLabel(S, type, territoryId); const count = garrison[type] || 0; const mainCount = main[type] || 0; const equipment = unitEquipment(S, type); return `<article class="unit-card"><div class="unit-head"><b>${glyphSvg(type)}${unit.name}</b><strong>${mainCount}<small>主力 · ${count}待编</small></strong></div><p>${unitDisplayHint(type)}<br>装备等级 ${equipment.level}</p><button data-recruit-unit="${type}" ${!canRecruitUnit(S, type, territoryId) ? "disabled" : ""}>${queued ? `<span data-job-countdown="${recruitJob.id}" data-job-prefix="训练中 · ">${label}</span>` : label}</button></article>`; }).join("")}</div>`;
 }
 
 function renderCampaign() {
@@ -2918,14 +2927,14 @@ function renderCampaign() {
   syncTroops(S);
   const panel = $("panel");
   const attackable = attackableTerritories(S);
-  const crownWait = ownTerritoryIds(S).length >= 6 && !crownAccessMet(S);
+  const crownWait = ownTerritoryIds(S).length >= 18 && !crownAccessMet(S);
   const targets = crownWait && !attackable.length ? ["crownvale"] : attackable;
   if (!targets.length) {
     const army = armyEntity(S, "army_1");
     const job = army?.jobId ? S.jobs.find(item => item.id === army.jobId && item.status === "running") : null;
     const status = army?.status === "recovering" && job ? `<span data-job-countdown="${job.id}" data-job-prefix="整补中 · ">整补中 · ${formatDuration(getJobRemainingMs(job))}</span>` : army?.status === "marching" && job ? `<span data-job-countdown="${job.id}" data-job-prefix="行军中 · ">行军中 · ${formatDuration(getJobRemainingMs(job))}</span>` : "当前位置已就绪";
-    panel.innerHTML = `<section class="hero-panel"><h2>军团状态</h2><p>${esc(army?.name || "第一军团")} · ${status}</p></section>${armyRosterHtml()}<div class="empty-state">目前没有可进攻的相邻领地。军团必须真正抵达边界后才能开战。</div>${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
-    panel.querySelectorAll("[data-deploy-garrison]").forEach(button => button.addEventListener("click", () => { deployGarrison(S, button.dataset.deployGarrison); saveGame(); renderAll(); }));
+    panel.innerHTML = `<section class="hero-panel"><h2>王国主力状态</h2><p>${esc(army?.name || "王国主力")} · ${status}</p></section>${armyRosterHtml().replaceAll("第一军团", "王国主力")}<div class="empty-state">目前没有可进攻的相邻领地。王国主力必须真正抵达边界后才能开战。</div>${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
+    panel.querySelectorAll("[data-deploy-garrison]").forEach(button => button.addEventListener("click", () => { if (!deployGarrison(S, button.dataset.deployGarrison)) toast("王国主力必须驻扎在本地且完成整补"); saveGame(); renderAll(); }));
     panel.querySelectorAll("[data-recruit-unit]").forEach(button => button.addEventListener("click", () => recruitUnit(button.dataset.recruitUnit)));
     return;
   }
@@ -2945,9 +2954,9 @@ function renderCampaign() {
   const targetLocked = crownWait && battleDraft.targetId === "crownvale";
   const mainComp = mainArmy?.composition || emptyComposition();
   const activeUnitCount = Object.values(mainComp).filter(value => value > 0).length;
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>制定作战计划</h2><p>选择目标、出战人物、兵力和作战方式。每种兵种都有克制关系，军事科技会提升装备和等级，骑士会以系数强化全军。</p>${metrics([[mainArmyTotal, "主力兵力"], [activeUnitCount, "现役兵种"], [activeKnights(S).length, "在列骑士"], [mainArmy?.status === "recovering" ? "整补中" : mainArmy?.status === "marching" ? "行军中" : "就绪", "第一军团"]])}${armyLocationHtml}</section>
-    <div class="section-head"><h2>军队配置</h2><span>训练完成后进入本地驻军，不再直接加入远方军团</span></div>${armyRosterHtml()}
-    <div class="section-head"><h2>作战计划</h2><span>战后由军团自己的整补队列决定下一次出征时间</span></div>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>制定作战计划</h2><p>选择目标、出战人物、兵力和作战方式。每种兵种都有克制关系，军事科技会提升装备和等级，骑士会以系数强化全军。</p>${metrics([[mainArmyTotal, "主力兵力"], [activeUnitCount, "现役兵种"], [activeKnights(S).length, "在列骑士"], [mainArmy?.status === "recovering" ? "整补中" : mainArmy?.status === "marching" ? "行军中" : "就绪", "王国主力"]])}${armyLocationHtml}</section>
+    <div class="section-head"><h2>军队配置</h2><span>训练完成后进入本地驻军，抵达后再编入王国主力</span></div>${armyRosterHtml().replaceAll("第一军团", "王国主力")}
+    <div class="section-head"><h2>作战计划</h2><span>战后由王国主力自己的整补队列决定下一次出征时间</span></div>
     ${crownWait ? `<div class="campaign-lock-note">王冠谷仍未开放。${crownRequirementText(S)}。</div>` : ""}
     <div class="battle-layout"><div class="battle-targets">${targets.map(id => `<button class="target-row ${id === battleDraft.targetId ? "active" : ""} ${targetLocked && id === "crownvale" ? "locked" : ""}" data-target="${id}"><b>${TERRITORY_DEFS[id].name}</b><span>${targetLocked && id === "crownvale" ? "第7年开放" : `${FACTIONS[S.territories[id].owner].name} · ${TERRITORY_DEFS[id].terrain} · 守军${S.territories[id].guard}`}</span></button>`).join("")}</div>
     <div class="battle-form"><span class="form-label">作战方式</span><div class="plan-grid">${Object.entries(PLANS).map(([id, p]) => `<button class="plan-btn ${battleDraft.plan === id ? "active" : ""}" data-plan="${id}"><b>${p.name}</b><small>${p.desc}</small></button>`).join("")}</div>
@@ -2955,19 +2964,19 @@ function renderCampaign() {
     <span class="form-label">参战兵力：<b id="troopValue">${battleDraft.troops}</b> / ${mainArmyTotal}</span><input id="troopRange" class="troop-range" type="range" min="10" max="${Math.max(10, mainArmyTotal)}" value="${battleDraft.troops}">
     <div class="army-summary">本次出兵：<b>${compositionText(est.composition)}</b><br>${terrainAdvice(battleDraft.targetId, est.composition)} ${seasonOf(S).id === "winter" ? "严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>
     <div id="battleEstimate" class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测：<b>${est.label}</b><br>${battlePowerText(est.ratio)}${battleBreakdownText(est)}。预计伤亡${risk.low}—${risk.high}人，需要携带${supply}粮食。${battleFatigueText(est.fatigue)}${battleMoraleText(est.effectiveMorale, S.morale)}</div>
-    <button id="launchBattle" class="launch-btn ${battleRiskClass(est.ratio)}" ${targetLocked || !attackable.includes(battleDraft.targetId) || mainArmy?.status !== "idle" || mainArmyTotal < 10 || S.grain < supply || !battleDraft.leaderIds.length ? "disabled" : ""}>${targetLocked ? "王冠谷 · 条件未满足" : mainArmy?.status === "recovering" ? "军团整补中" : mainArmy?.status === "marching" ? "军团行军中" : S.grain < supply ? "军粮不足" : `出征 · ${TERRITORY_DEFS[battleDraft.targetId].name}`}</button></div></div>
+    <button id="launchBattle" class="launch-btn ${battleRiskClass(est.ratio)}" ${targetLocked || !attackable.includes(battleDraft.targetId) || mainArmy?.status !== "idle" || mainArmyTotal < 10 || S.grain < supply || !battleDraft.leaderIds.length ? "disabled" : ""}>${targetLocked ? "王冠谷 · 条件未满足" : mainArmy?.status === "recovering" ? "王国主力整补中" : mainArmy?.status === "marching" ? "王国主力行军中" : S.grain < supply ? "军粮不足" : `出征 · ${TERRITORY_DEFS[battleDraft.targetId].name}`}</button></div></div>
     ${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
   panel.querySelectorAll("[data-target]").forEach(button => button.addEventListener("click", () => { battleDraft.targetId = button.dataset.target; renderCampaign(); }));
   panel.querySelectorAll("[data-march-target]").forEach(button => button.addEventListener("click", () => {
     const job = startMarch(S, "army_1", button.dataset.marchTarget);
-    if (!job) { toast("军团当前无法行军"); return; }
-    S.lastAction = { name: "军团开始行军", text: `第一军团出发前往${TERRITORY_DEFS[button.dataset.marchTarget].name}，预计${formatDuration(marchDuration(S))}后抵达。` };
+    if (!job) { toast("王国主力当前无法行军"); return; }
+    S.lastAction = { name: "王国主力开始行军", text: `王国主力出发前往${TERRITORY_DEFS[button.dataset.marchTarget].name}，预计${formatDuration(marchDuration(S))}后抵达。` };
     log(S, "info", S.lastAction.text);
     saveGame(); renderAll();
   }));
   panel.querySelectorAll("[data-plan]").forEach(button => button.addEventListener("click", () => { battleDraft.plan = button.dataset.plan; renderCampaign(); }));
   panel.querySelectorAll("[data-recruit-unit]").forEach(button => button.addEventListener("click", () => recruitUnit(button.dataset.recruitUnit)));
-  panel.querySelectorAll("[data-deploy-garrison]").forEach(button => button.addEventListener("click", () => { if (!deployGarrison(S, button.dataset.deployGarrison)) toast("军团必须驻扎在本地且完成整补"); saveGame(); renderAll(); }));
+  panel.querySelectorAll("[data-deploy-garrison]").forEach(button => button.addEventListener("click", () => { if (!deployGarrison(S, button.dataset.deployGarrison)) toast("王国主力必须驻扎在本地且完成整补"); saveGame(); renderAll(); }));
   panel.querySelectorAll("[data-leader]").forEach(input => input.addEventListener("change", () => {
     const id = input.dataset.leader;
     if (input.checked) {
@@ -3101,7 +3110,7 @@ function knightCard(knight) {
     buttons.push(`<button class="danger-btn" data-knight-action="execute" data-knight-id="${knight.id}" ${job ? "disabled" : ""}>处死</button>`);
   }
   if (knight.status === "active" || knight.status === "captured") buttons.push(`<button class="ghost-btn" data-knight-action="release" data-knight-id="${knight.id}" ${job ? "disabled" : ""}>释放</button>`);
-  return `<article class="knight-card"><div class="knight-mark">骑</div><div class="card-copy"><div class="role-line"><h3>${esc(knight.name)}</h3><span>${status}</span></div><p>无立绘骑士 · 武力${knight.force} · 统率${knight.command} · 忠诚${knight.loyalty}</p><div class="knight-actions">${buttons.join("")}</div></div></article>`;
+  return `<article class="knight-card"><div class="knight-mark">骑</div><div class="card-copy"><div class="role-line"><h3>${esc(knight.name)}</h3><span>${status}</span></div><p>无立绘骑士 · 武力${knight.force} · 谋略${knight.scheme || 45}</p><div class="knight-actions">${buttons.join("")}</div></div></article>`;
 }
 
 function renderCourt() {
@@ -3113,21 +3122,20 @@ function renderCourt() {
   const locked = others.filter(o => o.side === "locked");
   const averageLoyalty = own.length > 1 ? Math.round(own.filter(o => o.id !== "player").reduce((sum, o) => sum + o.loyalty, 0) / (own.length - 1)) : 100;
   const knights = S.knights || [];
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE LORDS & KNIGHTS</span><h2>领主与骑士</h2><p>有立绘的人物都是领主，负责带兵、守城和经营；没有立绘的骑士数量更多，可以招募、招降、处死或释放。</p>${metrics([[own.length, "我方领主"], [activeKnights(S).length, "我方骑士"], [averageLoyalty, "平均忠诚"], [own.filter(o => o.fief).length, "镇守领地"]])}</section>
-    <div class="section-head"><h2>我方领主</h2><span>五项核心能力：武力、统率、谋略、治理、魅力</span></div><div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}${o.id !== "player" ? `<button class="secondary-btn" data-talk="${o.id}" ${S.gold < 3 ? "disabled" : ""}>召见 · 3金</button>` : ""}</div>`).join("")}</div>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE RESTORATION COURT</span><h2>复国王庭</h2><p>有立绘的人物都是领主。战胜或招降他们后，可以任命其管理封地；无立绘骑士负责带兵和战场协同。</p>${metrics([[own.length, "我方领主"], [activeKnights(S).length, "我方骑士"], [averageLoyalty, "平均忠诚"], [own.filter(o => o.fief).length, "已封领地"]])}</section>
+    <div class="section-head"><h2>我方领主</h2><span>只显示统率、治理、忠诚；打下领地后再封给领主</span></div><div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}</div>`).join("")}</div>
     <div class="section-head"><h2>可招募领主</h2><span>金币预扣，招募需要${formatDuration(JOB_CONFIG.OFFICER_RECRUIT.durationMs)}</span></div><div class="officer-grid">${candidates.length ? candidates.map(o => { const job = getRunningJob(S, `officer:${o.id}`); const label = job ? `<span data-job-countdown="${job.id}" data-job-prefix="招募中 · ">招募中 · ${formatDuration(getJobRemainingMs(job))}</span>` : `招募 · ${o.recruitCost}金`; return `<div class="officer-slot">${officerCard(o, true)}<button class="secondary-btn" data-recruit-officer="${o.id}" ${job || S.gold < o.recruitCost ? "disabled" : ""}>${label}</button></div>`; }).join("") : `<div class="empty-state">当前没有可招募的领主。</div>`}</div>
     <div class="section-head"><h2>骑士名册</h2><span>${activeKnights(S).length}名在列 · ${availableKnights(S).length}名可招募 · 俘虏可处置</span></div><div class="knight-grid">${knights.filter(k => !["gone", "executed", "released"].includes(k.status)).map(knightCard).join("") || `<div class="empty-state">暂时没有可处理的骑士。</div>`}</div>
     <div class="section-head"><h2>敌方领主</h2><span>可在战场击败、招降或迫使其离场</span></div><div class="officer-grid">${enemies.length ? enemies.map(o => officerCard(o, true)).join("") : `<div class="empty-state">北境已经没有仍举着敌旗的领主。</div>`}</div>
     ${locked.length ? `<div class="section-head"><h2>尚未归附</h2><span>${locked.length}名领主仍在观望</span></div><div class="empty-state">占领新的城堡或接受敌方领主投降后，才能解锁新的领主。</div>` : ""}`;
-  panel.querySelectorAll("[data-talk]").forEach(button => button.addEventListener("click", () => talkOfficer(button.dataset.talk)));
   panel.querySelectorAll("[data-recruit-officer]").forEach(button => button.addEventListener("click", () => recruitOfficer(button.dataset.recruitOfficer)));
   panel.querySelectorAll("[data-knight-action]").forEach(button => button.addEventListener("click", () => knightAction(button.dataset.knightId, button.dataset.knightAction)));
 }
 
 function renderChronicle() {
   const panel = $("panel");
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE CHRONICLE</span><h2>领地大事记</h2><p>这里记录建设、征税、封赏、战争和重大事件。本局结局会根据这些选择判断你的统治风格。</p>${metrics([[S.battles, "出征次数"], [S.wins, "胜场"], [S.casualties, "累计伤亡"], [OATHS[currentStyle(S)].short, "当前风格"]])}</section>
-    <div class="section-head"><h2>渡鸦堡编年史</h2><span>最近120条</span></div><div class="chronicle">${S.log.map(item => `<article class="log-row"><time>第${Math.floor(item.turn / 4) + 1}年 · ${SEASONS[item.turn % 4].name}</time><div><b>${item.kind === "good" ? "进展" : item.kind === "bad" ? "损失" : item.kind === "warn" ? "警示" : "记录"}</b><p>${esc(item.text)}</p></div></article>`).join("")}</div>`;
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE CHRONICLE</span><h2>复国编年史</h2><p>这里记录建设、侦察、封赏、战争和重大事件。</p>${metrics([[S.battles, "出征次数"], [S.wins, "胜场"], [S.casualties, "累计伤亡"], [ownTerritoryIds(S).length, "控制领地"]])}</section>
+    <div class="section-head"><h2>渡鸦家编年史</h2><span>最近120条</span></div><div class="chronicle">${S.log.map(item => `<article class="log-row"><time>第${Math.floor(item.turn / 4) + 1}年 · ${SEASONS[item.turn % 4].name}</time><div><b>${item.kind === "good" ? "进展" : item.kind === "bad" ? "损失" : item.kind === "warn" ? "警示" : "记录"}</b><p>${cleanDisplayText(item.text)}</p></div></article>`).join("")}</div>`;
 }
 
 function endingCopy(s) {
