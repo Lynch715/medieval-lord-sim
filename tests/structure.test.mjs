@@ -23,7 +23,8 @@ assert.equal(game.BUILDING_MAX_LEVEL, 5);
 assert.equal(Object.values(game.TECH_DEFS).length, 5);
 assert.ok(Object.values(game.TECH_DEFS).every(branch => branch.length === 5), "五条科技分支各有五项科技");
 assert.deepEqual(game.attackableTerritories(fresh).sort(), ["ashfield", "blackthorn", "ironhill", "pineford", "westmarch"].filter(id => id !== "blackthorn" && id !== "ironhill" && id !== "westmarch").sort());
-assert.equal(game.cityActionOptions(fresh, "ashfield").length, 1, "城市常规操作只保留侦察");
+assert.deepEqual(game.cityActionOptions(fresh, "ashfield").map(o => o.id), ["scout"], "使者/商站/城约等说服路线已移除，只保留侦察");
+assert.deepEqual(Object.keys(game.CITY_ACTION_DEFS), ["scout"], "CITY_ACTION_DEFS 不应残留未接线的行动定义");
 assert.ok(game.UNIT_DEFS.heavy_infantry.counters.includes("knights"));
 assert.ok(game.UNIT_DEFS.light_cavalry.counters.includes("archers"));
 assert.ok(game.counterMultiplier({ levy: 20 }, { knights: 10 }) > 1, "长矛兵应克制骑兵");
@@ -98,14 +99,20 @@ for (const staleCopy of ["行动点", "王国层面", "累计阵亡", "军饷家
 for (const plainLabel of ["武力", "统率", "谋略", "治理", "金币", "粮食", "军队", "民心", "军心", "声望", "预计伤亡"]) {
   assert.ok(source.includes(plainLabel), `界面应保留白话标签：${plainLabel}`);
 }
-for (const removedCopy of ["CAMPAIGN_AP_COST", "行动点", "结束本季", "apText", "每个季度只有三次重要行动"]) {
-  assert.ok(!source.includes(removedCopy) && !html.includes(removedCopy));
+// cityTradeposts / cityRelations 只允许出现在 hydrateV2 的存档清理里，不允许作为活代码回归。
+for (const removedCopy of ["CAMPAIGN_AP_COST", "行动点", "结束本季", "apText", "每个季度只有三次重要行动",
+  "applyAction", "setTerritoryPolicy", "battleDraft", "charterTrustThreshold", "CROWN_OPEN_TURN"]) {
+  assert.ok(!source.includes(removedCopy) && !html.includes(removedCopy), `已删除的标识符不应回归：${removedCopy}`);
+}
+for (const legacyField of ["cityTradeposts", "cityRelations"]) {
+  assert.equal(source.split(legacyField).length - 1, 1, `${legacyField} 只应保留 hydrateV2 里的一处存档清理`);
+  assert.ok(source.includes(`delete raw.${legacyField};`), `${legacyField} 的唯一出现处应是存档清理`);
 }
 assert.ok(!source.includes("AudioContext") && !source.includes("soundBtn") && !html.includes("soundBtn"));
 assert.ok(!/^html[^{}]*touch-action/m.test(css) && !/^body[^{}]*touch-action/m.test(css));
 assert.ok(css.includes("html, body { touch-action: pan-x pan-y; overscroll-behavior: none; }") || css.includes("touch-action: pan-x pan-y"));
-assert.ok(game.ACTIONS.every(action => action.durationMs > 0));
-assert.ok(!game.ACTIONS.some(action => ["inspect", "tax", "feast", "fortify", "rest"].includes(action.id)), "巡视、征税、宴会、加固和旧休整行动已移除");
+assert.equal(game.ACTIONS, undefined, "领主行动系统已整体移除");
+assert.equal(game.POLICIES, undefined, "领地政策系统已整体移除");
 
 const saveRoundTrip = game.hydrateState(JSON.parse(JSON.stringify(battleState)));
 assert.equal(saveRoundTrip.version, 2);
