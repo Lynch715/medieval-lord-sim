@@ -251,6 +251,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .map-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 2px 2px 11px; color: #aaaCA2; font-size: 11px; }
 .map-legend span { display: flex; align-items: center; gap: 5px; }
 .map-legend svg { width: 22px; height: 25px; color: var(--crest-color); }
+.map-viewport { width: 100%; overflow: hidden; border: 1px solid rgba(226,207,157,.25); }
 .realm-map { position: relative; aspect-ratio: 3 / 2; min-height: 430px; overflow: hidden; border: 1px solid rgba(226,207,157,.25); background-color: #171a15; background-image: url("assets/image2.webp"), url("assets/northern-march-map.webp"); background-position: center,center; background-size: cover,cover; background-repeat: no-repeat; box-shadow: inset 0 0 90px rgba(0,0,0,.72); }
 .realm-map::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg,rgba(5,6,5,.4),transparent 28%),radial-gradient(circle,transparent 38%,rgba(4,5,4,.42)); }
 .map-routes { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
@@ -541,7 +542,12 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .officer-card .card-copy { padding: 12px; }
   .knight-grid { grid-template-columns: 1fr; }
   .map-shell { padding: 10px; }
-  .realm-map { width: 100%; height: 340px; min-height: 0; aspect-ratio: auto; }
+  .map-viewport { overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; scrollbar-color: rgba(200,169,106,.65) rgba(255,255,255,.06); }
+  .map-viewport:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .realm-map { width: 720px; min-width: 720px; height: 480px; min-height: 0; aspect-ratio: auto; }
+  .map-legend { gap: 8px 12px; margin-bottom: 9px; font-size: 10px; }
+  .map-legend svg { width: 18px; height: 21px; }
+  .map-legend-note { flex-basis: 100%; margin-left: 0; line-height: 1.45; }
   .map-node { min-width: 82px; padding: 4px 5px; }
   .map-node svg { width: 19px; height: 24px; }
   .map-node b { font-size: 12px; }
