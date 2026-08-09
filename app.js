@@ -8,9 +8,7 @@ const TIME_CONFIG = {
   logicTickMs: 1000,
   uiTickMs: 250,
   // 离线只推进一季；长时间离开不应把玩家锁死在连续崩溃判定里。
-  maxCatchUpMs: 2 * 60 * 60 * 1000,
-  // 仅供即将删除的 advanceSeasonAuto 使用，Task 4 会随该函数一并移除
-  maxOfflineSeasonCatchup: 1
+  maxCatchUpMs: 2 * 60 * 60 * 1000
 };
 
 // 每个周期性系统有自己的节奏，不再全部挤在换季那一刻。
@@ -550,11 +548,11 @@ function startJob(s, job = {}) {
   return record;
 }
 
-function finishJob(s, job, now = Date.now()) {
+function finishJob(s, job, now = Date.now(), rng = Math.random) {
   if (!job || job.status !== "running") return false;
   job.status = "completed";
   job.completedAt = now;
-  applyCompletedJob(s, job);
+  applyCompletedJob(s, job, rng);
   return true;
 }
 
@@ -570,10 +568,10 @@ function cancelJob(s, jobId) {
   return true;
 }
 
-function processCompletedJobs(s, now = Date.now()) {
+function processCompletedJobs(s, now = Date.now(), rng = Math.random) {
   let completed = 0;
   (s?.jobs || []).slice().sort((a, b) => a.endAt - b.endAt).forEach(job => {
-    if (job.status === "running" && getJobRemainingMs(job, now) <= 0 && finishJob(s, job, now)) completed++;
+    if (job.status === "running" && getJobRemainingMs(job, now) <= 0 && finishJob(s, job, now, rng)) completed++;
   });
   return completed;
 }
@@ -592,7 +590,7 @@ function startArmyRecovery(s, army, durationMs = JOB_CONFIG.RECOVER.durationMs, 
   return job;
 }
 
-function applyCompletedJob(s, job) {
+function applyCompletedJob(s, job, rng = Math.random) {
   if (!s || !job) return false;
   if (job.type === "CITY_ACTION") {
     return resolveCityAction(s, job.territoryId, job.payload?.actionId);
@@ -702,7 +700,7 @@ function applyCompletedJob(s, job) {
       item.jobId = null;
     });
     if (army.owner !== "player" && s.territories[destinationId]?.owner === "player") {
-      const result = resolveAIAttack(s, army, destinationId, Math.random, originId);
+      const result = resolveAIAttack(s, army, destinationId, rng, originId);
       if (result !== "captured") army.locationId = originId;
       startArmyRecovery(s, army, result === "captured" ? 110 * 1000 : 90 * 1000, job.completedAt || Date.now());
     }
@@ -1807,20 +1805,6 @@ function resourceFlow(s, season = seasonOf(s)) {
   return { goldPerSecond: f.netGold / (duration / 1000), grainPerSecond: f.netGrain / (duration / 1000), goldGrossPerSecond: f.gold / (duration / 1000), grainGrossPerSecond: f.grain / (duration / 1000), forecast: f };
 }
 
-function accrueResources(s, fromAt, toAt) {
-  if (!s || !s.clock || !Number.isFinite(fromAt) || !Number.isFinite(toAt) || toAt <= fromAt) return 0;
-  // 只结算到本季边界为止：跨季由 advanceSeason() 负责推进季号后再次调用，
-  // 否则同一段时间会按新季系数被重复结算。
-  const boundary = Math.min(toAt, s.clock.lastProcessedAt + getSeasonRemainingMs(s));
-  const changed = Math.max(0, boundary - fromAt) / 1000;
-  if (changed > 0) {
-    const flow = resourceFlow(s, seasonOf(s));
-    s.gold += flow.goldPerSecond * changed;
-    s.grain += flow.grainPerSecond * changed;
-  }
-  return changed;
-}
-
 // 累积到某个绝对时刻，而非累积一段时长——这样重复调用天然幂等，
 // 在线逐帧推进与离线一次性补算才可能得到完全相同的结果。
 function accrueTo(s, at) {
@@ -1996,7 +1980,10 @@ function enemyGuardCap(s, id) {
 }
 
 function settleSeasonEconomy(s, options = {}) {
-  const f = forecast(s);
+  // 调用时 elapsedMs 可能已跨过季界，seasonOf 会返回新的一季；
+  // 结算必须用刚结束的那一季的系数，因此允许显式传入。
+  const season = options.season || seasonOf(s);
+  const f = forecast(s, season);
   if (!options.resourcesAlreadyAccrued) {
     s.gold += f.gold - f.goldCost;
     s.grain += f.grain - f.grainCost - f.spoilage;
@@ -2019,42 +2006,7 @@ function settleSeasonEconomy(s, options = {}) {
     t.guard = Math.min(enemyGuardCap(s, id), t.guard + recovery);
     if (t.devastated > 0) t.devastated--;
   });
-  log(s, f.netGrain >= 0 ? "good" : "warn", `${seasonOf(s).name}季结算：金币${f.netGold >= 0 ? "+" : ""}${f.netGold}，粮食${f.netGrain >= 0 ? "+" : ""}${f.netGrain}${f.spoilage ? `（含损耗${f.spoilage}）` : ""}。`);
-}
-
-function advanceSeason(s, options = {}) {
-  if (s.battleSession) { if (s === S) toast("必须先结束当前战役"); return false; }
-  const eventAt = Number.isFinite(options.at) ? options.at : Date.now();
-  settleSeasonEconomy(s, { resourcesAlreadyAccrued: !!options.resourcesAlreadyAccrued });
-  if (!options.offline) enemyPressure(s, options.rng || Math.random, eventAt);
-  s.officers.forEach(o => { o.injured = 0; });
-  s.training = Math.max(0, s.training - Math.max(0, 2 - Math.ceil(techLevel(s, "field_doctrine") / 2)));
-  s.warWeariness = 0;
-  s.clock ||= makeClock(0, eventAt);
-  s.clock.elapsedMs = (turnOf(s) + 1) * TIME_CONFIG.seasonDurationMs;
-  s.seasonLocks = {};
-  s.lastAction = null;
-  handleOfficerPolitics(s);
-  queueSeasonEvents(s);
-  if (turnOf(s) >= MAX_TURNS && !s.ended) {
-    s.ended = true;
-    s.endingReason = ownTerritoryIds(s).length >= 5 ? "great_lord" : "minor_lord";
-  }
-  if (options.offline) {
-    // 离线期间不把饥荒、欠薪和民乱连续累计到结束；回到游戏后再由玩家处理。
-    s.crisis ||= { famine: 0, debt: 0, unrest: 0, checkedTurn: -1 };
-    s.crisis.famine = Math.max(0, s.crisis.famine - 1);
-    s.crisis.debt = Math.max(0, s.crisis.debt - 1);
-    s.crisis.unrest = Math.max(0, s.crisis.unrest - 1);
-    s.crisis.checkedTurn = turnOf(s);
-  } else checkDefeat(s);
-  s.clock.lastProcessedAt = eventAt;
-  if (options.save !== false && s === S) saveGame();
-  if (options.render !== false && s === S) {
-    renderAll();
-    pumpDecision();
-  }
-  return true;
+  log(s, f.netGrain >= 0 ? "good" : "warn", `${season.name}季结算：金币${f.netGold >= 0 ? "+" : ""}${f.netGold}，粮食${f.netGrain >= 0 ? "+" : ""}${f.netGrain}${f.spoilage ? `（含损耗${f.spoilage}）` : ""}。`);
 }
 
 function fireTimer(s, key, at, rng, options = {}) {
@@ -2062,6 +2014,33 @@ function fireTimer(s, key, at, rng, options = {}) {
   const timer = s.timers[key];
   timer.nextAt = at + def.intervalMs;
   if (options.offline && !def.offline) return false;   // 离线不结算 AI 与事件
+  if (key === "season") {
+    // 原本挂在 advanceSeason 上的季界工作，除 AI 与事件外全部保留在这里。
+    // accrueTo 已把 elapsedMs 推过边界，所以要显式指明刚结束的那一季。
+    const endedSeason = SEASONS[(turnOf(s) + 3) % 4];
+    settleSeasonEconomy(s, { resourcesAlreadyAccrued: true, season: endedSeason });
+    s.officers.forEach(o => { o.injured = 0; });
+    s.training = Math.max(0, s.training - Math.max(0, 2 - Math.ceil(techLevel(s, "field_doctrine") / 2)));
+    s.warWeariness = 0;
+    handleOfficerPolitics(s);
+    if (!options.offline) {
+      queueSeasonEvents(s);
+      checkDefeat(s);
+    }
+    return true;
+  }
+  if (def.faction) { runFactionTurn(s, def.faction, rng, at); return true; }
+  if (key === "events") { queueSeasonEvents(s); return true; }
+  return false;
+}
+
+// 终局判定必须独立于任何计时器：turnOf 由 elapsedMs 派生，
+// 可能在两次计时器触发之间越过阈值，挂在 season 分支上会漏判。
+function checkCampaignEnd(s) {
+  if (!s || s.ended) return false;
+  if (turnOf(s) < MAX_TURNS) return false;
+  s.ended = true;
+  s.endingReason = ownTerritoryIds(s).length >= 5 ? "great_lord" : "minor_lord";
   return true;
 }
 
@@ -2077,11 +2056,12 @@ function advanceWorld(s, now = Date.now(), options = {}) {
     const next = nextDueEvent(s, horizon);
     if (!next) break;
     accrueTo(s, next.at);
-    if (next.kind === "job") jobs += processCompletedJobs(s, next.at);
+    if (next.kind === "job") jobs += processCompletedJobs(s, next.at, rng);
     else if (fireTimer(s, next.key, next.at, rng, options)) steps++;
   }
   accrueTo(s, horizon);
-  jobs += processCompletedJobs(s, horizon);
+  jobs += processCompletedJobs(s, horizon, rng);
+  checkCampaignEnd(s);
   // 超出补算上限的部分直接跳过，不结算也不累积，避免离开一整天后被补算淹没
   if (horizon < now) {
     s.clock.lastProcessedAt = now;
@@ -2092,58 +2072,21 @@ function advanceWorld(s, now = Date.now(), options = {}) {
   return { steps, jobs };
 }
 
-function advanceSeasonAuto(s, now = Date.now(), options = {}) {
-  if (!s || s.ended || s.battleSession || s.pauseState) return { seasons: 0, jobs: 0 };
-  s.clock ||= makeClock(0, now);
-  let seasons = 0;
-  let jobs = 0;
-  let guard = 0;
-  while (!s.ended && guard++ < 2000) {
-    const nextJob = (s.jobs || []).filter(job => job.status === "running").sort((a, b) => a.endAt - b.endAt)[0];
-    const nextJobAt = nextJob?.endAt ?? Infinity;
-    const nextSeasonAt = (s.clock.lastProcessedAt || now) + getSeasonRemainingMs(s);
-    const nextAt = Math.min(nextJobAt, nextSeasonAt);
-    if (nextAt <= now && nextJobAt > nextSeasonAt && seasons >= TIME_CONFIG.maxOfflineSeasonCatchup) break;
-    const cursor = s.clock.lastProcessedAt || now;
-    const accrualTo = Math.min(nextAt, now);
-    if (accrualTo > cursor) {
-      accrueResources(s, cursor, accrualTo);
-      s.clock.lastProcessedAt = accrualTo;
-    }
-    if (nextAt > now) break;
-    if (nextJobAt <= nextSeasonAt) {
-      jobs += processCompletedJobs(s, nextJobAt);
-      s.clock.lastProcessedAt = nextJobAt;
-      continue;
-    }
-    if (seasons >= TIME_CONFIG.maxOfflineSeasonCatchup) break;
-    if (!advanceSeason(s, { fromClock: true, at: nextSeasonAt, save: false, render: false, offline: !!options.offline, resourcesAlreadyAccrued: true })) break;
-    seasons++;
-  }
-  if (seasons >= TIME_CONFIG.maxOfflineSeasonCatchup) s.clock.lastProcessedAt = now;
-  const finalCursor = s.clock.lastProcessedAt || now;
-  if (now > finalCursor) accrueResources(s, finalCursor, now);
-  jobs += processCompletedJobs(s, now);
-  s.clock.lastProcessedAt = now;
-  return { seasons, jobs };
-}
-
 function catchUpOffline(s, now = Date.now()) {
   if (!s) return 0;
   s.clock ||= makeClock(0, now);
-  if (s.pauseState) {
-    s.pauseState.pausedAt = now;
-    s.clock.lastProcessedAt = now;
-    return 0;
-  }
-  const result = advanceSeasonAuto(s, now, { offline: true });
-  if (result.seasons > 0) {
-    const text = `你离开期间结算了${result.seasons}季。离线期间不会发生敌袭，领地崩溃判定留给你回来后的正常经营。`;
+  s.timers ||= initTimers(s, now);
+  if (s.pauseState) { s.clock.lastProcessedAt = now; return 0; }
+  const before = turnOf(s);
+  advanceWorld(s, now, { offline: true });
+  const seasons = turnOf(s) - before;
+  if (seasons > 0) {
+    const text = `你离开期间推进了${seasons}季。离线不结算敌袭与事件，回来后照常继续。`;
     s.lastAction = { name: "离线结算完成", text };
     log(s, "info", text);
     saveGame();
   }
-  return result.seasons;
+  return seasons;
 }
 
 function updateJobCountdowns(now = Date.now()) {
@@ -2159,21 +2102,21 @@ function updateJobCountdowns(now = Date.now()) {
 function updateWorldTime(now = Date.now()) {
   if (!S || S.ended || S.pauseState) {
     updateJobCountdowns(now);
-    return { seasons: 0, jobs: 0 };
+    return { steps: 0, jobs: 0 };
   }
   S.clock ||= makeClock(0, now);
   const shouldProcessLogic = now - (S.clock.lastProcessedAt || 0) >= TIME_CONFIG.logicTickMs;
-  const result = shouldProcessLogic ? advanceSeasonAuto(S, now) : { seasons: 0, jobs: 0 };
-  const { seasons, jobs } = result;
+  const result = shouldProcessLogic ? advanceWorld(S, now) : { steps: 0, jobs: 0 };
+  const { steps, jobs } = result;
   updateJobCountdowns(now);
-  if (seasons || jobs) {
+  if (steps || jobs) {
     saveGame();
     renderAll();
     pumpDecision();
   } else if (typeof document !== "undefined" && !$("game")?.classList.contains("hidden")) {
     renderTop();
   }
-  return { seasons, jobs };
+  return { steps, jobs };
 }
 
 function handleOfficerPolitics(s) {
@@ -2682,11 +2625,16 @@ function startAIMarch(s, factionId, army, targetId, now = Date.now()) {
   return job;
 }
 
-function runAiTurn(s, rng = Math.random, now = Date.now()) {
+function runFactionTurn(s, factionId, rng = Math.random, now = Date.now()) {
+  return runAiTurn(s, rng, now, factionId);
+}
+
+function runAiTurn(s, rng = Math.random, now = Date.now(), onlyFaction = null) {
   if (!s || s.ended) return null;
   ensureAIFactions(s);
   let started = 0;
   Object.entries(AI_FACTION_DEFS).forEach(([factionId, def]) => {
+    if (onlyFaction && factionId !== onlyFaction) return;
     const faction = s.factions[factionId];
     faction.gold += Math.round(10 * difficultyOf(s).income);
     faction.grain += 18;
@@ -2699,10 +2647,6 @@ function runAiTurn(s, rng = Math.random, now = Date.now()) {
     if (rng() <= chance && startAIMarch(s, factionId, army, targets[Math.floor(rng() * targets.length)], now)) started++;
   });
   return started ? "marching" : null;
-}
-
-function enemyPressure(s, rng = Math.random, now = Date.now()) {
-  return runAiTurn(s, rng, now);
 }
 
 function checkDefeat(s) {
@@ -3524,16 +3468,16 @@ function boot() {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    createInitialState, hydrateState, seasonOf, forecast, resourceFlow, accrueResources, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
+    createInitialState, hydrateState, seasonOf, forecast, resourceFlow, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, defenderLeader, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals,
+    finishBattle, defenderLeader, runFactionTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
-    applyEventEffects, handleOfficerPolitics, interactionLocked, advanceSeason, checkDefeat,
+    applyEventEffects, handleOfficerPolitics, interactionLocked, checkDefeat,
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
-    initClock, turnOf, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
-    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2, migrateV2ToV3,
+    initClock, turnOf, checkCampaignEnd, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
+    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
     migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, KNIGHT_LIEGE
   };
 }

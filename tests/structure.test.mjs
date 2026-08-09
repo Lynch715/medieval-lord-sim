@@ -58,7 +58,7 @@ assert.ok(upgradedEquipment.level > baseEquipment.level && upgradedEquipment.att
 const flowState = game.createInitialState("实时产出", "oath", "standard");
 const flowGold = flowState.gold;
 const flowGrain = flowState.grain;
-game.advanceSeasonAuto(flowState, flowState.clock.lastProcessedAt + 1000);
+game.advanceWorld(flowState, flowState.clock.lastProcessedAt + 1000);
 assert.ok(flowState.gold > flowGold && flowState.grain > flowGrain, "资源应自动产生");
 assert.ok(game.resourceFlow(flowState).goldPerSecond > 0 && game.resourceFlow(flowState).grainPerSecond > 0);
 
@@ -135,7 +135,7 @@ assert.equal(saveRoundTrip.territories.ashfield.owner, "player");
 const clockState = game.createInitialState("时钟测试", "oath", "standard");
 const clockStart = clockState.clock.lastProcessedAt;
 // 跨过一个季界后，派生的 turn 应当推进
-assert.equal(game.advanceSeasonAuto(clockState, clockStart + game.TIME_CONFIG.seasonDurationMs).seasons, 1);
+game.advanceWorld(clockState, clockStart + game.TIME_CONFIG.seasonDurationMs);
 assert.equal(game.turnOf(clockState), 1, "跨过季界后派生 turn 应为 1");
 assert.equal(game.selfCheck(clockState).ok, true);
 

@@ -70,4 +70,35 @@ game.advanceWorld(bulk, base + TWO_HOURS, { rng: bulkRng, maxCatchUpMs: TWO_HOUR
 for (let i = 1; i <= 120; i++) game.advanceWorld(step, base + i * 60000, { rng: stepRng, maxCatchUpMs: TWO_HOURS });
 assert.equal(strip(step), strip(bulk), "整块推进与分步推进必须得到相同世界状态");
 
+// season 计时器到期时，原本挂在换季上的事该照常发生
+const sea = game.createInitialState("换季测试", "oath", "standard");
+const seaBase = sea.clock.lastProcessedAt;
+const knowledgeBefore = sea.knowledge;
+game.advanceWorld(sea, seaBase + SEASON + 1000, { rng: () => .5 });
+assert.equal(game.turnOf(sea), 1, "过了一季，派生 turn 应为 1");
+assert.ok(sea.knowledge > knowledgeBefore, "换季应产出知识");
+assert.equal(game.advanceSeason, undefined, "advanceSeason 应已删除");
+assert.equal(game.advanceSeasonAuto, undefined, "advanceSeasonAuto 应已删除");
+
+// 季界结算必须用「刚结束的那一季」的系数，而不是刚跨入的新一季。
+// accrueTo 先把 elapsedMs 推过边界，此时 seasonOf 已是新季 —— 这是个易踩的时序陷阱。
+const coef = game.createInitialState("季界系数", "oath", "standard");
+const coefBase = coef.clock.lastProcessedAt;
+// 推进到第 2 季末（秋末），结算日志应报「秋」而非刚跨入的「冬」
+game.advanceWorld(coef, coefBase + SEASON * 3, { rng: () => .5 });
+const settleLogs = coef.log.filter(l => l.text.includes("季结算"));
+assert.ok(settleLogs.length >= 3, `应有至少 3 条季度结算日志，实际 ${settleLogs.length}`);
+const seasonsReported = settleLogs.map(l => l.text.slice(0, 1));
+assert.deepEqual(seasonsReported.slice(0, 3).reverse(), ["春", "夏", "秋"],
+  `季度结算应按「刚结束的那一季」报告，实际：${seasonsReported.join(",")}`);
+
+// 离线：资源与任务照常结算，但不触发 AI 与事件
+const off = game.createInitialState("离线测试", "oath", "standard");
+const offBase = off.clock.lastProcessedAt;
+const decisionsBefore = off.pendingDecisions.length;
+game.advanceWorld(off, offBase + 40 * 60 * 1000, { rng: () => .01, offline: true });
+assert.ok(off.gold > 58, "离线期间资源应照常累积");
+assert.equal(off.pendingDecisions.length, decisionsBefore, "离线期间不应投放事件");
+assert.ok(!off.log.some(l => l.text.includes("袭扰") || l.text.includes("攻占")), "离线期间不应发生 AI 进攻");
+
 console.log("clock tests passed");

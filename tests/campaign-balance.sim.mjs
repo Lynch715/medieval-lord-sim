@@ -114,7 +114,9 @@ function run(seed) {
         recruit(state, t % 3 === 0 ? "levy" : t % 3 === 1 ? "archers" : "knights");
       }
       now += game.TIME_CONFIG.seasonDurationMs;
-      game.advanceSeason(state, { at: now });
+      // 不设补算上限：上限是为了保护真实玩家离开很久后不被洪水般的结算淹没，
+      // 而这里是逐季步进的确定性测试台，截断只会让游戏时间被悄悄丢弃。
+      game.advanceWorld(state, now, { rng: random, maxCatchUpMs: Infinity });
     }
   } finally {
     Math.random = originalRandom;
