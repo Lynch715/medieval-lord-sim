@@ -203,4 +203,22 @@ game.checkDefeat(cr2);
 assert.equal(cr2.ended, true);
 assert.equal(cr2.endingReason, "collapsed");
 
+// 研究并发数 = 1 + 学宫总等级 / 5
+const rs = game.createInitialState("研究并发", "oath", "standard");
+rs.gold = 5000; rs.knowledge = 5000;
+assert.equal(game.researchCapacity(rs), 1, "开局无学宫，只有一条研究队列");
+assert.ok(game.queueResearch(rs, "agriculture", "heavy_plow", 1000), "第一项研究应可开始");
+assert.equal(game.queueResearch(rs, "military", "refined_iron", 1000), null, "容量为 1 时第二项应被拒绝");
+
+const rs2 = game.createInitialState("研究并发2", "oath", "standard");
+rs2.gold = 5000; rs2.knowledge = 5000;
+rs2.territories.ravenstone.buildings.academy = 5;
+assert.equal(game.researchCapacity(rs2), 2, "学宫总等级 5 应给到 2 条队列");
+assert.ok(game.queueResearch(rs2, "agriculture", "heavy_plow", 1000));
+assert.ok(game.queueResearch(rs2, "military", "refined_iron", 1000), "第二项应可并发");
+assert.equal(game.queueResearch(rs2, "commerce", "coinage", 1000), null, "超出容量应被拒绝");
+const rsJobs = rs2.jobs.filter(j => j.status === "running" && j.type === "RESEARCH");
+assert.equal(rsJobs.length, 2);
+assert.equal(new Set(rsJobs.map(j => j.queueKey)).size, 2, "并发研究必须各自占用不同的队列键");
+
 console.log("clock tests passed");

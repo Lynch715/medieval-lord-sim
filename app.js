@@ -457,8 +457,19 @@ function marchDurationForDistance(s, originId, destinationId) {
   return Math.max(20 * 1000, Math.round(marchDuration(s) * (0.72 + distance * 0.16)));
 }
 
-function researchQueueJob(s) {
-  return getRunningJob(s, "research:global");
+// 「扩容队列」本身是一个成长目标：学宫每 5 级多开一条研究线。
+function researchCapacity(s) {
+  const academyLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.academy || 0), 0);
+  return 1 + Math.floor(academyLevels / 5);
+}
+
+function runningResearchJobs(s) {
+  return (s?.jobs || []).filter(job => job.status === "running" && job.type === "RESEARCH");
+}
+
+function researchQueueJob(s, techId = null) {
+  const jobs = runningResearchJobs(s);
+  return (techId ? jobs.find(job => job.payload?.techId === techId) : jobs[0]) || null;
 }
 
 function canResearch(s, branch, techId) {
@@ -466,7 +477,9 @@ function canResearch(s, branch, techId) {
   const branchState = s?.tech?.[branch];
   const currentLevel = techLevel(s, techId);
   const nextLevel = currentLevel + 1;
-  if (!tech || !branchState || currentLevel >= techMaxLevel(tech) || researchQueueJob(s)) return false;
+  if (!tech || !branchState || currentLevel >= techMaxLevel(tech)) return false;
+  if (researchQueueJob(s, techId)) return false;                       // 同一项不能重复排队
+  if (runningResearchJobs(s).length >= researchCapacity(s)) return false;
   if (tech.requires.some(id => !techCompleted(s, id))) return false;
   const cost = techCost(tech, nextLevel);
   return s.knowledge >= cost.knowledge && s.gold >= cost.gold;
@@ -1935,7 +1948,7 @@ function queueResearch(s, branch, techId, now = Date.now()) {
     type: "RESEARCH",
     startedAt: now,
     endAt: now + researchDuration(tech, level),
-    queueKey: "research:global",
+    queueKey: `research:${techId}`,
     payload: { branch, techId, level, gold: cost.gold, knowledge: cost.knowledge }
   });
 }
@@ -2927,18 +2940,20 @@ function renderAll() {
 }
 
 function researchPanelHtml() {
-  const queue = researchQueueJob(S);
-  return `<section class="research-panel"><div class="section-head"><h2>学堂与研究</h2><span>当前知识 ${Math.floor(S.knowledge || 0)} · 全局仅限一个研究队列 · 每项科技三阶</span></div><div class="tech-grid">${Object.entries(TECH_DEFS).map(([branch, techs]) => `<article class="tech-branch"><div class="tech-branch-head"><b>${TECH_BRANCH_NAMES[branch]}</b><small>${techs.reduce((sum, tech) => sum + techLevel(S, tech.id), 0)} / ${techs.reduce((sum, tech) => sum + techMaxLevel(tech), 0)} 阶</small></div>${techs.map(tech => {
+  const running = runningResearchJobs(S);
+  const atCapacity = running.length >= researchCapacity(S);
+  return `<section class="research-panel"><div class="section-head"><h2>学堂与研究</h2><span>当前知识 ${Math.floor(S.knowledge || 0)} · 研究队列 ${running.length}/${researchCapacity(S)} · 每项科技三阶</span></div><div class="tech-grid">${Object.entries(TECH_DEFS).map(([branch, techs]) => `<article class="tech-branch"><div class="tech-branch-head"><b>${TECH_BRANCH_NAMES[branch]}</b><small>${techs.reduce((sum, tech) => sum + techLevel(S, tech.id), 0)} / ${techs.reduce((sum, tech) => sum + techMaxLevel(tech), 0)} 阶</small></div>${techs.map(tech => {
     const currentLevel = techLevel(S, tech.id);
     const maxLevel = techMaxLevel(tech);
     const nextLevel = currentLevel + 1;
-    const active = queue?.payload?.techId === tech.id;
+    const queue = researchQueueJob(S, tech.id);
+    const active = !!queue;
     const unmet = tech.requires.filter(id => !techCompleted(S, id));
     const cost = techCost(tech, nextLevel);
     const duration = researchDuration(tech, nextLevel);
     const affordable = S.knowledge >= cost.knowledge && S.gold >= cost.gold;
-    const label = currentLevel >= maxLevel ? `已满阶 · ${currentLevel}/${maxLevel}` : active ? `研究中 · ${nextLevel}/${maxLevel} · ${formatDuration(getJobRemainingMs(queue))}` : queue ? "研究队列占用" : unmet.length ? `需要：${unmet.map(id => techDefinition(branch, id)?.name || id).join("、")}` : !affordable ? "知识或金币不足" : `研究 ${nextLevel}/${maxLevel} · ${cost.knowledge}知 · ${cost.gold}金 · ${formatDuration(duration)}`;
-    const disabled = currentLevel >= maxLevel || !!queue || unmet.length > 0 || !affordable;
+    const label = currentLevel >= maxLevel ? `已满阶 · ${currentLevel}/${maxLevel}` : active ? `研究中 · ${nextLevel}/${maxLevel} · ${formatDuration(getJobRemainingMs(queue))}` : atCapacity ? "研究队列已满" : unmet.length ? `需要：${unmet.map(id => techDefinition(branch, id)?.name || id).join("、")}` : !affordable ? "知识或金币不足" : `研究 ${nextLevel}/${maxLevel} · ${cost.knowledge}知 · ${cost.gold}金 · ${formatDuration(duration)}`;
+    const disabled = currentLevel >= maxLevel || active || atCapacity || unmet.length > 0 || !affordable;
     return `<div class="tech-card ${currentLevel >= maxLevel ? "completed" : active ? "active" : ""}"><div><b>${esc(tech.name)} <i class="tech-level-badge">${currentLevel}/${maxLevel}</i></b><small>${esc(tech.desc)} 每阶都会强化效果，研究时间逐阶增加。</small></div><button data-research-branch="${branch}" data-research="${tech.id}" ${disabled ? "disabled" : ""}>${active && queue ? `<span data-job-countdown="${queue.id}" data-job-prefix="研究中 · ">研究中 · ${nextLevel}/${maxLevel} · ${formatDuration(getJobRemainingMs(queue))}</span>` : label}</button></div>`;
   }).join("")}</article>`).join("")}</div></section>`;
 }
@@ -3527,7 +3542,7 @@ if (typeof module !== "undefined" && module.exports) {
     applyEventEffects, handleOfficerPolitics, interactionLocked, checkDefeat,
     enemyGuardCap, CRISIS_LIMITS, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
-    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
+    getQueueUsage, researchCapacity, runningResearchJobs, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
     migrateSave, migrateV3ToV4, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
   };
 }
