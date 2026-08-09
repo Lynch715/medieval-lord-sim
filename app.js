@@ -1719,11 +1719,14 @@ raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight
     raw.armies[0].composition = clone(raw.armies[0].composition);
   }
   raw.warWeariness ??= 0;
-  raw.crisis ||= { famine: 0, debt: 0, unrest: 0, checkedTurn: -1 };
-  raw.crisis.famine ??= 0;
-  raw.crisis.debt ??= 0;
-  raw.crisis.unrest ??= 0;
-  raw.crisis.checkedTurn ??= -1;
+  // 危机已改为毫秒累计；这里只补默认值，不要再补 v4 的按季计数字段，
+  // 否则会把 migrateV4ToV5 刚折算好的结果又污染回去。
+  raw.crisis.famineMs ??= 0;
+  raw.crisis.unrestMs ??= 0;
+  delete raw.crisis.famine;
+  delete raw.crisis.debt;
+  delete raw.crisis.unrest;
+  delete raw.crisis.checkedTurn;
   raw.officers.forEach(o => { o.grievance ??= 0; o.merit ??= 0; o.injured ??= 0; o.fief ??= null; });
   // 旧存档曾把玩家称为“主将”。迁移时同步为领主称谓，避免旧文案继续污染新界面。
   const playerOfficer = raw.officers.find(o => o.id === "player");
