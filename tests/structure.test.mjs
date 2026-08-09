@@ -133,10 +133,10 @@ const saveRoundTrip = game.hydrateState(JSON.parse(JSON.stringify(battleState)))
 assert.equal(saveRoundTrip.version, 3);
 assert.equal(saveRoundTrip.territories.ashfield.owner, "player");
 const clockState = game.createInitialState("时钟测试", "oath", "standard");
-const clockStart = clockState.clock.seasonStartedAt;
-clockState.clock.seasonEndsAt = clockStart + 1;
-assert.equal(game.advanceSeasonAuto(clockState, clockStart + 1).seasons, 1);
-assert.equal(clockState.turn, 1);
+const clockStart = clockState.clock.lastProcessedAt;
+// 跨过一个季界后，派生的 turn 应当推进
+assert.equal(game.advanceSeasonAuto(clockState, clockStart + game.TIME_CONFIG.seasonDurationMs).seasons, 1);
+assert.equal(game.turnOf(clockState), 1, "跨过季界后派生 turn 应为 1");
 assert.equal(game.selfCheck(clockState).ok, true);
 
 assert.equal(Object.keys(game.LORD_DEFS).length, 22, "9 条深写 + 13 条浅写");

@@ -100,7 +100,7 @@ function run(seed) {
   let now = Date.now();
   Math.random = random;
   try {
-    while (!state.ended && state.turn < 48) {
+    while (!state.ended && game.turnOf(state) < 48) {
       game.processCompletedJobs(state, now);
       resolveDecisions(state);
       if (state.ended) break;
@@ -108,9 +108,10 @@ function run(seed) {
       if (state.ended) break;
       // 应急征收已随「领主行动」系统一并删除：现在缺钱只能靠经营和扩张，
       // 这正是模拟需要暴露的压力，不再用一次性补钱把它抹平。
-      if (state.turn >= 4) researchNext(state, now);
-      if (game.armyTotal(state, "army_1") < 72 || state.turn >= 20) {
-        recruit(state, state.turn % 3 === 0 ? "levy" : state.turn % 3 === 1 ? "archers" : "knights");
+      if (game.turnOf(state) >= 4) researchNext(state, now);
+      if (game.armyTotal(state, "army_1") < 72 || game.turnOf(state) >= 20) {
+        const t = game.turnOf(state);
+        recruit(state, t % 3 === 0 ? "levy" : t % 3 === 1 ? "archers" : "knights");
       }
       now += game.TIME_CONFIG.seasonDurationMs;
       game.advanceSeason(state, { at: now });
@@ -119,7 +120,7 @@ function run(seed) {
     Math.random = originalRandom;
   }
   return {
-    turn: Math.min(48, state.turn + 1),
+    turn: Math.min(48, game.turnOf(state) + 1),
     territories: game.playableTerritoryIds().filter(id => state.territories[id].owner === "player").length,
     wins: state.wins, battles: state.battles, ending: state.endingReason, casualties: state.casualties,
     renown: Math.round(state.renown), army: game.armyTotal(state, "army_1"),

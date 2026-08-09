@@ -329,25 +329,25 @@ function availableKnights(s) {
 const STAT_LABELS = { force: "武力", command: "统率", scheme: "谋略", govern: "治理", charm: "魅力" };
 const OFFICER_STAT_KEYS = ["command", "govern"];
 
-function makeClock(turn = 0, now = Date.now()) {
-  const seasonIndex = Math.max(0, Math.min(MAX_TURNS - 1, Math.round(turn || 0)));
-  return {
-    seasonIndex,
-    seasonStartedAt: now,
-    seasonEndsAt: now + TIME_CONFIG.seasonDurationMs,
-    lastProcessedAt: now
-  };
+// clock.elapsedMs 是游戏时间的唯一真相源（不含暂停时长）。
+// turn / 季节 / 年份全部由它派生，任何代码都无法靠调用函数凭空推进世界。
+function makeClock(elapsedMs = 0, now = Date.now()) {
+  return { startedAt: now, elapsedMs: Math.max(0, Math.round(elapsedMs)), lastProcessedAt: now };
 }
 
 function initClock(s, now = Date.now()) {
   if (!s) return null;
-  s.clock = makeClock(s.turn, now);
+  s.clock = makeClock(0, now);
   return s.clock;
 }
 
-function getSeasonRemainingMs(s, now = Date.now()) {
-  const effectiveNow = s?.pauseState?.pausedAt || now;
-  return Math.max(0, (s?.clock?.seasonEndsAt || effectiveNow) - effectiveNow);
+function turnOf(s) {
+  return Math.floor((s?.clock?.elapsedMs || 0) / TIME_CONFIG.seasonDurationMs);
+}
+
+function getSeasonRemainingMs(s) {
+  const elapsed = s?.clock?.elapsedMs || 0;
+  return TIME_CONFIG.seasonDurationMs - (elapsed % TIME_CONFIG.seasonDurationMs);
 }
 
 function formatDuration(ms) {
@@ -493,11 +493,8 @@ function resumeWorld(s, now = Date.now()) {
       job.startedAt += delta;
       job.endAt += delta;
     });
-    if (s.clock) {
-      s.clock.seasonStartedAt += delta;
-      s.clock.seasonEndsAt += delta;
-      s.clock.lastProcessedAt = now;
-    }
+    Object.values(s.timers || {}).forEach(timer => { timer.nextAt += delta; });
+    if (s.clock) s.clock.lastProcessedAt = now;
   }
   s.pauseState = null;
   return true;
@@ -576,7 +573,7 @@ function applyCompletedJob(s, job) {
     recruit.side = "player";
     recruit.loyalty = clamp(job.payload?.startingLoyalty || 58);
     recruit.grievance = 0;
-    recruit.recruitedAt = s.turn;
+    recruit.recruitedAt = turnOf(s);
     const text = `${recruit.name}接受封赏，正式加入你的领主议会。`;
     s.lastAction = { name: "领主招募完成", text };
     log(s, "good", text);
@@ -591,7 +588,7 @@ function applyCompletedJob(s, job) {
       knight.liegeLordId = "player";
       knight.status = "active";
       knight.loyalty = clamp(Math.round(job.payload?.loyalty || (action === "surrender" ? 42 : 58)));
-      knight.recruitedAt = s.turn;
+      knight.recruitedAt = turnOf(s);
       const text = `${knight.name}披挂入列，成为你的骑士。`;
       s.lastAction = { name: "骑士加入", text };
       log(s, "good", text);
@@ -936,8 +933,8 @@ const $ = id => typeof document === "undefined" ? null : document.getElementById
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));
 const esc = value => String(value ?? "").replace(/[&<>'"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
 const clone = value => JSON.parse(JSON.stringify(value));
-const seasonOf = s => SEASONS[s.turn % 4];
-const yearOf = s => Math.floor(s.turn / 4) + 1;
+const seasonOf = s => SEASONS[turnOf(s) % 4];
+const yearOf = s => Math.floor(turnOf(s) / 4) + 1;
 const difficultyOf = s => DIFFICULTIES[s.difficulty] || DIFFICULTIES.standard;
 const officer = (s, id) => s.officers.find(o => o.id === id);
 const ownedOfficers = s => s.officers.filter(o => o.side === "player");
@@ -965,7 +962,7 @@ function lordVassals(s, lordId) {
   return (s?.officers || []).filter(o => LORD_DEFS[o.id]?.liege === lordId && o.side !== "player" && o.side !== "gone");
 }
 
-const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= s.turn;
+const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= turnOf(s);
 
 function cityActionLockKey(id, action) { return `city_${id}_${action}`; }
 
@@ -1016,7 +1013,7 @@ function resolveCityAction(s, id, action) {
   if (!d || !t || !CITY_ACTION_DEFS[action]) return false;
   s.cityIntel ||= {};
   if (action !== "scout") return false;
-  s.cityIntel[id] = s.turn + 2;
+  s.cityIntel[id] = turnOf(s) + 2;
   const text = `斥候从${d.name}带回城防、粮道与地形记录。`;
   s.lastAction = { name: `${d.name} · ${CITY_ACTION_DEFS[action].name}`, text };
   log(s, "info", text);
@@ -1436,7 +1433,7 @@ function createInitialState(name, startingStyle, difficulty) {
     version: VERSION,
     playerName: name.trim() || "罗恩",
     difficulty, style,
-    turn: 0, tab: "hall", selectedTerritoryId: "ravenstone",
+    tab: "hall", selectedTerritoryId: "ravenstone",
     gold: 58,
     grain: 125,
     knowledge: 12,
@@ -1481,7 +1478,7 @@ function migrateV1ToV2(raw, now = Date.now()) {
   const migrated = clone(raw);
   migrated.version = 2;
   delete migrated.ap;
-  migrated.clock = makeClock(migrated.turn || 0, now);
+  migrated.clock = makeClock((migrated.turn || 0) * TIME_CONFIG.seasonDurationMs, now);
   migrated.jobs = Array.isArray(migrated.jobs) ? migrated.jobs : [];
   migrated.tech ||= clone(TECH_DEFAULTS);
   migrated.factions ||= {};
@@ -1550,7 +1547,7 @@ function hydrateV3(raw) {
   if (!raw || raw.version !== VERSION) return null;
   raw.turn ??= 0;
   raw.selectedTerritoryId ||= "ravenstone";
-  raw.clock ||= makeClock(raw.turn);
+  raw.clock ||= makeClock((raw.turn || 0) * TIME_CONFIG.seasonDurationMs);
   raw.pauseState ||= null;
   raw.jobs = Array.isArray(raw.jobs) ? raw.jobs : [];
   raw.knowledge ??= 12;
@@ -1653,7 +1650,7 @@ function selfCheck(s = S) {
   const errors = [];
   if (!s) errors.push("state missing");
   if (s && s.version !== VERSION) errors.push(`version ${s.version} !== ${VERSION}`);
-  if (s && !s.clock?.seasonEndsAt) errors.push("clock missing seasonEndsAt");
+  if (s && !Number.isFinite(s.clock?.elapsedMs)) errors.push("clock missing elapsedMs");
   if (s && !Array.isArray(s.jobs)) errors.push("jobs must be an array");
   if (s && Array.isArray(s.jobs)) {
     const ids = s.jobs.map(job => job.id);
@@ -1694,7 +1691,7 @@ function rejectDuringBattle(s) {
 }
 
 function log(s, kind, text) {
-  s.log.unshift({ turn: s.turn, kind, text });
+  s.log.unshift({ turn: turnOf(s), kind, text });
   s.log = s.log.slice(0, 120);
 }
 
@@ -1783,7 +1780,7 @@ function accrueResources(s, fromAt, toAt) {
   if (!s || !s.clock || !Number.isFinite(fromAt) || !Number.isFinite(toAt) || toAt <= fromAt) return 0;
   // 只结算到本季边界为止：跨季由 advanceSeason() 负责推进季号后再次调用，
   // 否则同一段时间会按新季系数被重复结算。
-  const boundary = Math.min(toAt, s.clock.seasonEndsAt || toAt);
+  const boundary = Math.min(toAt, s.clock.lastProcessedAt + getSeasonRemainingMs(s));
   const changed = Math.max(0, boundary - fromAt) / 1000;
   if (changed > 0) {
     const flow = resourceFlow(s, seasonOf(s));
@@ -1947,7 +1944,7 @@ function applyUnrest(s) {
 
 function enemyGuardCap(s, id) {
   const expansionPressure = Math.max(0, ownTerritoryIds(s).length - 1) * 4;
-  const timePressure = Math.floor(s.turn / 4) * 3;
+  const timePressure = Math.floor(turnOf(s) / 4) * 3;
   return Math.round(TERRITORY_DEFS[id].guard + (expansionPressure + timePressure) * difficultyOf(s).enemy);
 }
 
@@ -1970,7 +1967,7 @@ function settleSeasonEconomy(s, options = {}) {
   });
   Object.keys(s.territories).filter(id => s.territories[id].owner !== "player").forEach(id => {
     const t = s.territories[id];
-    const normalRecovery = Math.min(4, 2 + Math.floor(s.turn / 12));
+    const normalRecovery = Math.min(4, 2 + Math.floor(turnOf(s) / 12));
     const recovery = t.devastated > 0 ? 1 : Math.max(1, normalRecovery - techLevel(s, "blockade"));
     t.guard = Math.min(enemyGuardCap(s, id), t.guard + recovery);
     if (t.devastated > 0) t.devastated--;
@@ -1986,12 +1983,13 @@ function advanceSeason(s, options = {}) {
   s.officers.forEach(o => { o.injured = 0; });
   s.training = Math.max(0, s.training - Math.max(0, 2 - Math.ceil(techLevel(s, "field_doctrine") / 2)));
   s.warWeariness = 0;
-  s.turn++;
+  s.clock ||= makeClock(0, eventAt);
+  s.clock.elapsedMs = (turnOf(s) + 1) * TIME_CONFIG.seasonDurationMs;
   s.seasonLocks = {};
   s.lastAction = null;
   handleOfficerPolitics(s);
   queueSeasonEvents(s);
-  if (s.turn >= MAX_TURNS && !s.ended) {
+  if (turnOf(s) >= MAX_TURNS && !s.ended) {
     s.ended = true;
     s.endingReason = ownTerritoryIds(s).length >= 5 ? "great_lord" : "minor_lord";
   }
@@ -2001,12 +1999,8 @@ function advanceSeason(s, options = {}) {
     s.crisis.famine = Math.max(0, s.crisis.famine - 1);
     s.crisis.debt = Math.max(0, s.crisis.debt - 1);
     s.crisis.unrest = Math.max(0, s.crisis.unrest - 1);
-    s.crisis.checkedTurn = s.turn;
+    s.crisis.checkedTurn = turnOf(s);
   } else checkDefeat(s);
-  s.clock ||= makeClock(s.turn, eventAt);
-  s.clock.seasonIndex = s.turn;
-  s.clock.seasonStartedAt = eventAt;
-  s.clock.seasonEndsAt = eventAt + TIME_CONFIG.seasonDurationMs;
   s.clock.lastProcessedAt = eventAt;
   if (options.save !== false && s === S) saveGame();
   if (options.render !== false && s === S) {
@@ -2018,17 +2012,17 @@ function advanceSeason(s, options = {}) {
 
 function advanceSeasonAuto(s, now = Date.now(), options = {}) {
   if (!s || s.ended || s.battleSession || s.pauseState) return { seasons: 0, jobs: 0 };
-  s.clock ||= makeClock(s.turn, now);
+  s.clock ||= makeClock(0, now);
   let seasons = 0;
   let jobs = 0;
   let guard = 0;
   while (!s.ended && guard++ < 2000) {
     const nextJob = (s.jobs || []).filter(job => job.status === "running").sort((a, b) => a.endAt - b.endAt)[0];
     const nextJobAt = nextJob?.endAt ?? Infinity;
-    const nextSeasonAt = s.clock.seasonEndsAt;
+    const nextSeasonAt = (s.clock.lastProcessedAt || now) + getSeasonRemainingMs(s);
     const nextAt = Math.min(nextJobAt, nextSeasonAt);
     if (nextAt <= now && nextJobAt > nextSeasonAt && seasons >= TIME_CONFIG.maxOfflineSeasonCatchup) break;
-    const cursor = s.clock.lastProcessedAt || s.clock.seasonStartedAt || now;
+    const cursor = s.clock.lastProcessedAt || now;
     const accrualTo = Math.min(nextAt, now);
     if (accrualTo > cursor) {
       accrueResources(s, cursor, accrualTo);
@@ -2044,12 +2038,8 @@ function advanceSeasonAuto(s, now = Date.now(), options = {}) {
     if (!advanceSeason(s, { fromClock: true, at: nextSeasonAt, save: false, render: false, offline: !!options.offline, resourcesAlreadyAccrued: true })) break;
     seasons++;
   }
-  if (seasons >= TIME_CONFIG.maxOfflineSeasonCatchup && s.clock.seasonEndsAt <= now) {
-    s.clock.seasonStartedAt = now;
-    s.clock.seasonEndsAt = now + TIME_CONFIG.seasonDurationMs;
-    s.clock.lastProcessedAt = now;
-  }
-  const finalCursor = s.clock.lastProcessedAt || s.clock.seasonStartedAt || now;
+  if (seasons >= TIME_CONFIG.maxOfflineSeasonCatchup) s.clock.lastProcessedAt = now;
+  const finalCursor = s.clock.lastProcessedAt || now;
   if (now > finalCursor) accrueResources(s, finalCursor, now);
   jobs += processCompletedJobs(s, now);
   s.clock.lastProcessedAt = now;
@@ -2058,13 +2048,9 @@ function advanceSeasonAuto(s, now = Date.now(), options = {}) {
 
 function catchUpOffline(s, now = Date.now()) {
   if (!s) return 0;
-  s.clock ||= makeClock(s.turn, now);
+  s.clock ||= makeClock(0, now);
   if (s.pauseState) {
-    if (s.clock.seasonEndsAt <= now) {
-      s.pauseState.pausedAt = now;
-      s.clock.seasonStartedAt = now;
-      s.clock.seasonEndsAt = now + TIME_CONFIG.seasonDurationMs;
-    }
+    s.pauseState.pausedAt = now;
     s.clock.lastProcessedAt = now;
     return 0;
   }
@@ -2093,7 +2079,7 @@ function updateWorldTime(now = Date.now()) {
     updateJobCountdowns(now);
     return { seasons: 0, jobs: 0 };
   }
-  S.clock ||= makeClock(S.turn, now);
+  S.clock ||= makeClock(0, now);
   const shouldProcessLogic = now - (S.clock.lastProcessedAt || 0) >= TIME_CONFIG.logicTickMs;
   const result = shouldProcessLogic ? advanceSeasonAuto(S, now) : { seasons: 0, jobs: 0 };
   const { seasons, jobs } = result;
@@ -2137,24 +2123,24 @@ function queueSeasonEvents(s) {
     s.flags.firstWinter = true;
     s.pendingDecisions.push({ type: "first_winter" });
   }
-  if (s.turn >= 5 && !s.flags.cousinDemand && officer(s, "edmund")?.side === "player") {
+  if (turnOf(s) >= 5 && !s.flags.cousinDemand && officer(s, "edmund")?.side === "player") {
     s.flags.cousinDemand = true;
     s.pendingDecisions.push({ type: "cousin_demand" });
   }
-  if (s.turn >= 10 && !s.flags.taxDemand) {
+  if (turnOf(s) >= 10 && !s.flags.taxDemand) {
     s.flags.taxDemand = true;
     s.pendingDecisions.push({ type: "royal_tax" });
   }
-  if (s.turn >= 2 && s.turn % 2 === 0) {
+  if (turnOf(s) >= 2 && turnOf(s) % 2 === 0) {
     const nextWorld = WORLD_EVENTS.find(event => !s.seenEvents.includes(event.id));
     if (nextWorld) {
       s.seenEvents.push(nextWorld.id);
       s.pendingDecisions.push({ type: "world_event", eventId: nextWorld.id });
     }
   }
-  if (s.turn >= 3 && s.turn % 3 === 0) {
+  if (turnOf(s) >= 3 && turnOf(s) % 3 === 0) {
     const nextNpc = NPC_ARCS.find(event => {
-      if (s.seenNpcEvents.includes(event.id) || s.turn < event.minTurn) return false;
+      if (s.seenNpcEvents.includes(event.id) || turnOf(s) < event.minTurn) return false;
       const person = officer(s, event.officerId);
       if (!person || person.side === "gone") return false;
       return event.side !== "player" || person.side === "player";
@@ -2574,8 +2560,8 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
   const faction = army.owner;
   const t = s.territories[targetId];
   if (!t || t.owner !== "player") return null;
-  const vulnerableKeep = targetId === "ravenstone" && s.turn > 16 && (t.guard < 30 || s.grain < 24 || s.support < 25);
-  const decisiveRaid = faction === "wolf" && targetId === "ravenstone" && s.turn > 12 && (vulnerableKeep || rng() < .12);
+  const vulnerableKeep = targetId === "ravenstone" && turnOf(s) > 16 && (t.guard < 30 || s.grain < 24 || s.support < 25);
+  const decisiveRaid = faction === "wolf" && targetId === "ravenstone" && turnOf(s) > 12 && (vulnerableKeep || rng() < .12);
   const attack = aiArmyPower(army) * (.56 + (army.morale || 50) / 420) * (difficultyOf(s).enemy * (.9 + rng() * .2)) * (decisiveRaid ? 1.65 : 1);
   const defense = t.guard + (t.buildings.walls || 0) * 8 + (t.buildings.watchtower || 0) * 4 + t.stability * .2;
   const loss = Math.max(1, Math.round((army.composition?.levy || 0) * .08));
@@ -2624,7 +2610,7 @@ function runAiTurn(s, rng = Math.random, now = Date.now()) {
     faction.grain += 18;
     faction.knowledge += 2;
     const army = faction.armies.find(item => item.status === "idle");
-    if (!army || s.turn < 2) return;
+    if (!army || turnOf(s) < 2) return;
     const targets = (TERRITORY_DEFS[army.locationId]?.adj || []).filter(id => owns(s, id));
     if (!targets.length) return;
     const chance = def.personality === "aggressive" ? .23 : def.personality === "cautious" ? .1 : .16;
@@ -2641,12 +2627,12 @@ function checkDefeat(s) {
   if (s.ended) return true;
   if (!owns(s, "ravenstone")) { s.ended = true; s.endingReason = "fallen"; return true; }
   s.crisis ||= { famine: 0, debt: 0, unrest: 0, checkedTurn: -1 };
-  if (s.crisis.checkedTurn !== s.turn) {
+  if (s.crisis.checkedTurn !== turnOf(s)) {
     s.crisis.famine = s.grain <= 0 ? s.crisis.famine + 1 : 0;
     // 债务不再作为危机机制；保留旧存档字段只是为了兼容读取。
     s.crisis.debt = 0;
     s.crisis.unrest = s.support < 12 ? s.crisis.unrest + 1 : 0;
-    s.crisis.checkedTurn = s.turn;
+    s.crisis.checkedTurn = turnOf(s);
   }
   if (s.crisis.famine >= 3 || s.crisis.unrest >= 2 || (armyTotal(s) <= 0 && s.morale < 10)) {
     s.ended = true;
@@ -2826,7 +2812,7 @@ function renderTop() {
   const f = forecast(S);
   const flow = resourceFlow(S, season);
   $("chapterText").textContent = `第${yearOf(S)}年 · ${season.name}季`;
-  $("turnText").textContent = `${Math.min(S.turn + 1, MAX_TURNS)} / ${MAX_TURNS}`;
+  $("turnText").textContent = `${Math.min(turnOf(S) + 1, MAX_TURNS)} / ${MAX_TURNS}`;
   $("goldText").textContent = Math.round(S.gold);
   $("grainText").textContent = Math.round(S.grain);
   if ($("knowledgeText")) $("knowledgeText").textContent = Math.round(S.knowledge || 0);
@@ -2893,7 +2879,7 @@ function renderHall() {
   panel.innerHTML = `
     <section class="hero-panel">
       <span class="eyebrow">STRATEGY OVERVIEW</span>
-      <h2>${S.turn === 0 ? "第一年春：先发展，再出征" : `第${yearOf(S)}年${seasonOf(S).name}季 · 军政总览`}</h2>
+      <h2>${turnOf(S) === 0 ? "第一年春：先发展，再出征" : `第${yearOf(S)}年${seasonOf(S).name}季 · 军政总览`}</h2>
       <p>${seasonOf(S).note} 资源会自动流入，季节系数会改变金币与粮食的速度。先建设生产，再研究科技、募集兵力，最后选择出征时机。</p>
       ${metrics([[S.gold, "金币"], [S.grain, "粮食"], [armyTotal(S), "军队"], [S.support, "民心"], [S.morale, "军心"], [S.renown, "声望"]])}
     </section>
@@ -3321,7 +3307,7 @@ function showEnding(s) {
   $("endingPortrait").src = visual.src;
   $("endingPortrait").alt = visual.alt;
   const victory = s.endingReason === "unified";
-  $("endingBody").innerHTML = `<span class="eyebrow">${victory ? "THE IRON CROWN" : "THE CHRONICLE CLOSES"}</span><h1>${copy.title}</h1><div class="story-body"><p>${copy.text}</p><p class="ending-style"><b>本局统治风格：${STYLES[currentStyle(s)].short}</b></p></div><div class="ending-stats"><div><b>${Math.min(s.turn + 1, MAX_TURNS)}</b><span>经过季度</span></div><div><b>${ownTerritoryIds(s).length}</b><span>最终领地</span></div><div><b>${s.wins}</b><span>胜场</span></div><div><b>${ownedOfficers(s).length}</b><span>最终家臣</span></div></div><button id="endingRestart" class="primary-btn" type="button">重新继承渡鸦堡</button>`;
+  $("endingBody").innerHTML = `<span class="eyebrow">${victory ? "THE IRON CROWN" : "THE CHRONICLE CLOSES"}</span><h1>${copy.title}</h1><div class="story-body"><p>${copy.text}</p><p class="ending-style"><b>本局统治风格：${STYLES[currentStyle(s)].short}</b></p></div><div class="ending-stats"><div><b>${Math.min(turnOf(s) + 1, MAX_TURNS)}</b><span>经过季度</span></div><div><b>${ownTerritoryIds(s).length}</b><span>最终领地</span></div><div><b>${s.wins}</b><span>胜场</span></div><div><b>${ownedOfficers(s).length}</b><span>最终家臣</span></div></div><button id="endingRestart" class="primary-btn" type="button">重新继承渡鸦堡</button>`;
   $("endingRestart").addEventListener("click", () => {
     if (confirm("删除当前存档并重新开始？")) { deleteSave(); S = null; showMenu(); }
   });
@@ -3464,7 +3450,7 @@ if (typeof module !== "undefined" && module.exports) {
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, advanceSeason, checkDefeat,
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
-    initClock, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
+    initClock, turnOf, yearOf, getSeasonRemainingMs, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2, migrateV2ToV3,
     migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, KNIGHT_LIEGE
   };
