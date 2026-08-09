@@ -923,6 +923,9 @@ const ownedOfficers = s => s.officers.filter(o => o.side === "player");
 const ownTerritoryIds = s => Object.keys(s.territories).filter(id => TERRITORY_DEFS[id]?.playable !== false && s.territories[id].owner === "player");
 const owns = (s, id) => s.territories[id]?.owner === "player";
 
+// 返回的是运行时 officer 记录（含 side/loyalty 等可变字段），不是 LORD_DEFS 静态条目。
+// 契约：返回 null 同时代表「此地无守将」和「lordId 指向了不存在的领主」两种情况，
+// 调用方无法区分——数据损坏由 selfCheck() 负责发现。
 function lordAt(s, territoryId) {
   const lordId = s?.territories?.[territoryId]?.lordId;
   return lordId ? (officer(s, lordId) || null) : null;
@@ -930,10 +933,14 @@ function lordAt(s, territoryId) {
 
 // 辖地由 territories 派生，不单独存储，因此永远不会和地图对不上。
 function lordHoldings(s, lordId) {
+  if (!lordId) return [];
   return Object.keys(s?.territories || {}).filter(id => s.territories[id].lordId === lordId);
 }
 
+// 从属关系取自静态表：本作没有「附庸改换门庭」的流程，领主只会从叛臣归降为玩家方。
+// 必须挡住 lordId 为空的调用，否则会把所有 liege 为 null 的独立叛臣当成某人的附庸返回。
 function lordVassals(s, lordId) {
+  if (!lordId) return [];
   return (s?.officers || []).filter(o => LORD_DEFS[o.id]?.liege === lordId && o.side !== "player" && o.side !== "gone");
 }
 

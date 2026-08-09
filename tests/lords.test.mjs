@@ -30,4 +30,10 @@ s.territories.highpass.lordId = null;
 assert.equal(game.lordAt(s, "highpass"), null);
 assert.deepEqual(game.lordHoldings(s, "bran"), [], "失去全部辖地的领主辖地列表为空");
 
+// 空 lordId 必须返回空集：所有独立叛臣的 liege 都是 null，
+// 不加这层保护会把他们全部当成「某个 null 主君的附庸」返回。
+assert.deepEqual(game.lordVassals(s, null), [], "lordVassals(null) 不应返回独立叛臣");
+assert.deepEqual(game.lordVassals(s, undefined), [], "lordVassals(undefined) 不应返回独立叛臣");
+assert.deepEqual(game.lordHoldings(s, null), [], "lordHoldings(null) 不应返回玩家领地");
+
 console.log("lords tests passed");
