@@ -2170,12 +2170,11 @@ function factionTerritories(s, faction) {
   return Object.keys(s.territories).filter(id => s.territories[id].owner === faction);
 }
 
+// 每块叛臣领地都有具名守将，不再只有三名大叛臣的主城才有人守。
 function defenderLeader(s, targetId) {
-  const owner = s.territories[targetId].owner;
-  if (owner === "wolf" && officer(s, "bran")?.side === "wolf") return officer(s, "bran");
-  if (owner === "river" && officer(s, "aveline")?.side === "river") return officer(s, "aveline");
-  if (owner === "crown" && officer(s, "regent")?.side === "crown") return officer(s, "regent");
-  return null;
+  if (owns(s, targetId)) return null;
+  const lord = lordAt(s, targetId);
+  return lord && lord.side !== "player" && lord.side !== "gone" ? lord : null;
 }
 
 function averageStat(s, ids, stat) {
@@ -3438,7 +3437,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, accrueResources, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals,
+    finishBattle, defenderLeader, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,

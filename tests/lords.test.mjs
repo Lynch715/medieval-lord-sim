@@ -67,4 +67,20 @@ assert.ok(sworn, "应存在效忠于叛臣的骑士");
 assert.equal(game.knightAction(sworn.id, "recruit", inv), false, `${sworn.id} 效忠 ${sworn.liegeLordId}，不应能被直接招募`);
 assert.ok(game.availableKnights(inv).every(k => !k.liegeLordId), "可招募名单里不应出现有主君的骑士");
 
+// 守将：每块叛臣领地都该有具名守将，而不是只有三名大叛臣的主城才有人守
+const ds = game.createInitialState("守将测试", "oath", "standard");
+assert.equal(game.defenderLeader(ds, "highpass").id, "bran", "北境关由布兰亲守");
+assert.equal(game.defenderLeader(ds, "wolfden").id, "harald", "狼穴由附庸哈拉尔守");
+assert.equal(game.defenderLeader(ds, "crownvale").id, "regent");
+assert.equal(game.defenderLeader(ds, "ashgate").id, "renard", "独立叛臣也是守将");
+assert.equal(game.defenderLeader(ds, "ravenstone"), null, "玩家领地没有敌方守将");
+// 20 块叛臣领地应当无一例外都有守将
+const undefended = game.playableTerritoryIds()
+  .filter(id => ds.territories[id].owner !== "player")
+  .filter(id => !game.defenderLeader(ds, id));
+assert.deepEqual(undefended, [], `这些叛臣领地没有守将：${undefended.join("、")}`);
+// 守将归降玩家后不再守卫原地
+ds.officers.find(o => o.id === "harald").side = "player";
+assert.equal(game.defenderLeader(ds, "wolfden"), null, "已归降的领主不应再作为敌方守将");
+
 console.log("lords tests passed");
