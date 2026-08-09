@@ -1,7 +1,7 @@
 "use strict";
 
 const SAVE_KEY = "iron-crown-lord-save-v1";
-const VERSION = 4;
+const VERSION = 5;
 // 加冕记在游戏时间（elapsedMs）上而非真实时间，这样暂停与离线都不会让公爵偷跑。
 const CORONATION_AT_MS = 48 * 5 * 60 * 1000;      // 12 游戏年
 const CORONATION_DELAY_MS = 20 * 60 * 1000;       // 每拿下一块公爵直辖地推迟 20 分钟
@@ -1607,21 +1607,46 @@ function migrateV3ToV4(raw, now = Date.now()) {
   return migrated;
 }
 
+function migrateV4ToV5(raw, now = Date.now()) {
+  const migrated = clone(raw);
+  migrated.version = 5;
+  // 危机从「连续 N 季」折算为毫秒累计，每档按一季 5 分钟计
+  const old = migrated.crisis || {};
+  migrated.crisis = {
+    famineMs: Math.max(0, Math.round(old.famineMs ?? (old.famine || 0) * TIME_CONFIG.seasonDurationMs)),
+    unrestMs: Math.max(0, Math.round(old.unrestMs ?? (old.unrest || 0) * TIME_CONFIG.seasonDurationMs))
+  };
+  migrated.coronation ||= { atElapsedMs: CORONATION_AT_MS, delayedMs: 0, delayedBy: [] };
+  migrated.coronation.delayedBy ||= [];
+  Object.values(migrated.territories || {}).forEach(t => { t.drift ||= { guard: 0, devastated: 0 }; });
+  // 研究队列从全局单键改为按科技分键，否则并发研究会互相顶掉
+  (migrated.jobs || []).forEach(job => {
+    if (job.type === "RESEARCH" && job.queueKey === "research:global" && job.payload?.techId) {
+      job.queueKey = `research:${job.payload.techId}`;
+    }
+  });
+  // 旧的「打满 48 季」结局在新体系里没有对应物
+  if (migrated.endingReason === "great_lord" || migrated.endingReason === "minor_lord") migrated.endingReason = "crowned";
+  migrated.migrationLog = [...(migrated.migrationLog || []), "v4-to-v5"];
+  return migrated;
+}
+
 function migrateSave(raw, now = Date.now()) {
   if (!raw) return null;
   let migrated = clone(raw);
   if (migrated.version === 1 || migrated.version == null) migrated = migrateV1ToV2(migrated, now);
   if (migrated.version === 2) migrated = migrateV2ToV3(migrated);
   if (migrated.version === 3) migrated = migrateV3ToV4(migrated, now);
+  if (migrated.version === 4) migrated = migrateV4ToV5(migrated, now);
   if (migrated.version !== VERSION) return null;
-  return hydrateV4(migrated);
+  return hydrateV5(migrated);
 }
 
 function hydrateState(raw) {
   return migrateSave(raw);
 }
 
-function hydrateV4(raw) {
+function hydrateV5(raw) {
   if (!raw || raw.version !== VERSION) return null;
   raw.selectedTerritoryId ||= "ravenstone";
   raw.clock ||= makeClock(0);
@@ -1656,6 +1681,8 @@ function hydrateV4(raw) {
   defaultKnights.forEach(knight => { if (!knightMap.has(knight.id)) knightMap.set(knight.id, knight); });
 raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight.status || "available", loyalty: Math.round(knight.loyalty || 50), force: Math.round(knight.force || 50), command: Math.round(knight.command || 45), scheme: Math.round(knight.scheme || 45) }));
   raw.cooldowns ||= {};
+  raw.crisis ||= { famineMs: 0, unrestMs: 0 };
+  raw.coronation ||= { atElapsedMs: CORONATION_AT_MS, delayedMs: 0, delayedBy: [] };
   raw.flags ||= {};
   raw.flags.firstWinter ??= false;
   raw.flags.cousinDemand ??= false;
@@ -3576,7 +3603,7 @@ if (typeof module !== "undefined" && module.exports) {
     enemyGuardCap, CRISIS_LIMITS, DUCHY_HOLDINGS, CROWN_GATE_HOLDING, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, coronationRemainingMs, delayCoronation, CORONATION_AT_MS, CORONATION_DELAY_MS, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, researchCapacity, runningResearchJobs, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
-    migrateSave, migrateV3ToV4, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
+    migrateSave, migrateV3ToV4, migrateV4ToV5, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
   };
 }
 
