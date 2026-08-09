@@ -101,4 +101,28 @@ assert.ok(off.gold > 58, "离线期间资源应照常累积");
 assert.equal(off.pendingDecisions.length, decisionsBefore, "离线期间不应投放事件");
 assert.ok(!off.log.some(l => l.text.includes("袭扰") || l.text.includes("攻占")), "离线期间不应发生 AI 进攻");
 
+// 三个势力各走各的钟
+assert.equal(game.TIMER_DEFS.aiWolf.intervalMs, 60000);
+assert.equal(game.TIMER_DEFS.aiRiver.intervalMs, 75000);
+assert.equal(game.TIMER_DEFS.aiCrown.intervalMs, 90000);
+assert.equal(game.runAiTurn, undefined, "runAiTurn 应已被 runFactionTurn 取代");
+assert.equal(game.enemyPressure, undefined, "enemyPressure 应已删除");
+
+// 单个势力的计时器只驱动该势力
+const solo = game.createInitialState("单势力", "oath", "standard");
+solo.clock.elapsedMs = SEASON * 3;   // 越过 AI 的开战门槛
+const wolfBefore = JSON.stringify(solo.factions.wolf);
+const riverBefore = JSON.stringify(solo.factions.river);
+game.runFactionTurn(solo, "wolf", () => .01, Date.now());
+assert.notEqual(JSON.stringify(solo.factions.wolf), wolfBefore, "狼牙的计时器应驱动狼牙");
+assert.equal(JSON.stringify(solo.factions.river), riverBefore, "狼牙的计时器不应驱动河望");
+
+// 势力资源增长按计时器间隔摊薄：跑满一季的份额应约等于原本每季一次的量
+const acc = game.createInitialState("摊薄", "oath", "standard");
+const goldStart = acc.factions.wolf.gold;
+const firesPerSeason = SEASON / game.TIMER_DEFS.aiWolf.intervalMs;
+for (let i = 0; i < firesPerSeason; i++) game.runFactionTurn(acc, "wolf", () => .99, Date.now());
+const gained = acc.factions.wolf.gold - goldStart;
+assert.ok(Math.abs(gained - 10) < 0.5, `一季内累计增长应约为 10，实际 ${gained.toFixed(2)}`);
+
 console.log("clock tests passed");

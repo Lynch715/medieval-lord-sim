@@ -2625,28 +2625,28 @@ function startAIMarch(s, factionId, army, targetId, now = Date.now()) {
   return job;
 }
 
-function runFactionTurn(s, factionId, rng = Math.random, now = Date.now()) {
-  return runAiTurn(s, rng, now, factionId);
-}
+// 每个势力由自己的计时器驱动。原本每季掷一次骰子，现在每 60~90 秒掷一次，
+// 因此增长与开战概率都要按「本次间隔占一季的比例」摊薄，否则 AI 会被放大数倍。
+const FACTION_TIMER_KEY = { wolf: "aiWolf", river: "aiRiver", crown: "aiCrown" };
 
-function runAiTurn(s, rng = Math.random, now = Date.now(), onlyFaction = null) {
+function runFactionTurn(s, factionId, rng = Math.random, now = Date.now()) {
   if (!s || s.ended) return null;
   ensureAIFactions(s);
-  let started = 0;
-  Object.entries(AI_FACTION_DEFS).forEach(([factionId, def]) => {
-    if (onlyFaction && factionId !== onlyFaction) return;
-    const faction = s.factions[factionId];
-    faction.gold += Math.round(10 * difficultyOf(s).income);
-    faction.grain += 18;
-    faction.knowledge += 2;
-    const army = faction.armies.find(item => item.status === "idle");
-    if (!army || turnOf(s) < 2) return;
-    const targets = (TERRITORY_DEFS[army.locationId]?.adj || []).filter(id => owns(s, id));
-    if (!targets.length) return;
-    const chance = def.personality === "aggressive" ? .23 : def.personality === "cautious" ? .1 : .16;
-    if (rng() <= chance && startAIMarch(s, factionId, army, targets[Math.floor(rng() * targets.length)], now)) started++;
-  });
-  return started ? "marching" : null;
+  const def = AI_FACTION_DEFS[factionId];
+  const faction = s.factions[factionId];
+  const timerKey = FACTION_TIMER_KEY[factionId];
+  if (!def || !faction || !timerKey) return null;
+  const share = TIMER_DEFS[timerKey].intervalMs / TIME_CONFIG.seasonDurationMs;
+  faction.gold += 10 * difficultyOf(s).income * share;
+  faction.grain += 18 * share;
+  faction.knowledge += 2 * share;
+  const army = faction.armies.find(item => item.status === "idle");
+  if (!army || turnOf(s) < 2) return null;
+  const targets = (TERRITORY_DEFS[army.locationId]?.adj || []).filter(id => owns(s, id));
+  if (!targets.length) return null;
+  const chance = (def.personality === "aggressive" ? .23 : def.personality === "cautious" ? .1 : .16) * share;
+  if (rng() <= chance && startAIMarch(s, factionId, army, targets[Math.floor(rng() * targets.length)], now)) return "marching";
+  return null;
 }
 
 function checkDefeat(s) {
@@ -3470,7 +3470,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, defenderLeader, runFactionTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals,
+    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
