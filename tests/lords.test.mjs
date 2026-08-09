@@ -83,4 +83,38 @@ assert.deepEqual(undefended, [], `这些叛臣领地没有守将：${undefended.
 ds.officers.find(o => o.id === "harald").side = "player";
 assert.equal(game.defenderLeader(ds, "wolfden"), null, "已归降的领主不应再作为敌方守将");
 
+// Task 7: 打服路线 —— 领主被俘
+// 测试 1: 攻下领主唯一辖地 → 守将被俘，产生 lord_capture 决策，conquest 决策被取代
+const bs = game.createInitialState("被俘测试", "iron", "standard");
+const fixedRng = v => () => v;
+const sess = game.startBattle(bs, { targetId: "ashfield", leaderIds: ["player"], troops: bs.troops, plan: "assault" }, fixedRng(.8));
+assert.ok(sess);
+game.applyBattleChoice(bs, "ridge", fixedRng(.9));
+game.applyBattleChoice(bs, "shield", fixedRng(.9));
+game.applyBattleChoice(bs, "press", fixedRng(.9));
+assert.equal(bs.territories.ashfield.owner, "player", "灰麦原应被攻下");
+assert.equal(bs.territories.ashfield.lordId, null, "攻下后该地不再有叛臣守将");
+const selma = bs.officers.find(o => o.id === "selma");
+assert.equal(selma.captured, true, "失去全部辖地的守将被俘");
+assert.ok(bs.pendingDecisions.some(d => d.type === "lord_capture" && d.lordId === "selma"), "应产生领主处置决策");
+assert.ok(!bs.pendingDecisions.some(d => d.type === "conquest"), "旧的战后处置已被领主处置取代");
+
+// 测试 2: 仍有其他辖地的领主不会在失去一块地时被俘，而是退走
+// 给布兰额外控制 pineford（原本是 otto 的地），打下 pineford 后
+// 布兰还持有 highpass，所以不会被俘。
+const ms = game.createInitialState("多地测试", "iron", "standard");
+ms.territories.pineford.lordId = "bran";
+const msess = game.startBattle(ms, { targetId: "pineford", leaderIds: ["player"], troops: ms.troops, plan: "assault" }, fixedRng(.8));
+assert.ok(msess, "应能对松林渡发起进攻");
+game.applyBattleChoice(ms, "ridge", fixedRng(.9));
+game.applyBattleChoice(ms, "shield", fixedRng(.9));
+game.applyBattleChoice(ms, "press", fixedRng(.9));
+assert.equal(ms.territories.pineford.owner, "player", "松林渡应被攻下");
+const bran = ms.officers.find(o => o.id === "bran");
+assert.equal(bran.captured, false, "布兰还有 highpass，不应被俘");
+assert.ok(!ms.pendingDecisions.some(d => d.type === "lord_capture" && d.lordId === "bran"), "仍有辖地的领主不产生被俘决策");
+// 验证退走日志（log 条目字段为 kind/text）
+const warnLogs = ms.log.filter(l => l.kind === "warn" && l.text.includes("布兰"));
+assert.ok(warnLogs.length > 0, "仍有辖地的领主应有退走日志");
+
 console.log("lords tests passed");

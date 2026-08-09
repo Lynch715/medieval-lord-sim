@@ -2486,25 +2486,24 @@ function finishBattle(s, outcome, rng = Math.random) {
     s.legitimacy = clamp(s.legitimacy + 3);
     s.morale = clamp(s.morale + 7);
     leaders.forEach(o => { if (o.merit != null) o.merit += 7 + (session.flags.demanded ? 2 : 0); if (o.loyalty != null) o.loyalty = clamp(o.loyalty + 2); });
-    const submissive = factionTerritories(s, oldOwner).length === 0 ? officer(s, oldOwner === "wolf" ? "bran" : oldOwner === "river" ? "aveline" : "") : null;
-    if (submissive && submissive.side !== "player" && submissive.side !== "gone") {
-      submissive.side = "neutral";
-      submissive.recruitable = true;
-      submissive.recruitCost ||= 28;
-      log(s, "info", `${submissive.name}失去最后一座城，愿意以中立身份等待你的处置。`);
-    } else {
-      const waiting = s.officers.find(o => o.side === "locked" && o.id !== "player");
-      if (waiting) {
-        waiting.side = "neutral";
-        waiting.recruitable = true;
-        waiting.recruitCost ||= 24;
-        log(s, "info", `${waiting.name}听闻你的胜利，派使者来渡鸦堡请求议和。`);
+    const fallenLord = lordAt(s, targetId);
+    t.lordId = null;
+    if (fallenLord) {
+      const stillHolds = lordHoldings(s, fallenLord.id).length;
+      if (stillHolds === 0) {
+        // 失去最后一块辖地才被俘；仍有其他城的领主只是退走。
+        fallenLord.captured = true;
+        s.pendingDecisions.push({ type: "lord_capture", lordId: fallenLord.id, territoryId: targetId });
+        log(s, "info", `${fallenLord.name}失去最后一座城，在${targetName}城下被俘。`);
+      } else {
+        log(s, "warn", `${fallenLord.name}退往${TERRITORY_DEFS[lordHoldings(s, fallenLord.id)[0]].name}，仍有${stillHolds}座城在手。`);
       }
+      // 该领主名下的骑士按 45% 被俘，其余战死
+      (s.knights || []).filter(k => k.liegeLordId === fallenLord.id && k.status === "available").forEach(knight => {
+        if (rng() < .45) { knight.status = "captured"; knight.captured = true; log(s, "info", `${knight.name}在${targetName}城下被俘。`); }
+        else { knight.status = "gone"; knight.side = "gone"; knight.liegeLordId = null; }
+      });
     }
-    s.pendingDecisions.push({ type: "conquest", territoryId: targetId, heroId: leaders.filter(o => o.id !== "player").sort((a, b) => b.merit - a.merit)[0]?.id || "renard" });
-    const capturedKnight = (s.knights || []).find(knight => knight.side === oldOwner && knight.status === "available" && rng() < .45);
-    if (capturedKnight) { capturedKnight.status = "captured"; capturedKnight.captured = true; log(s, "info", `${capturedKnight.name}在${targetName}城下被俘，可选择招降、处死或释放。`); }
-    if (["wolf", "river"].includes(oldOwner) && factionTerritories(s, oldOwner).length === 0) s.pendingDecisions.push({ type: "submission", faction: oldOwner });
     log(s, "good", `${targetName}被占领。此战我军损失${session.playerLoss}人，敌军约损失${session.enemyLoss}人。另抽调${garrisoned}名士兵驻守新领地。`);
   } else if (outcome === "retreat") {
     const t = s.territories[targetId];
