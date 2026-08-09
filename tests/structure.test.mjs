@@ -139,4 +139,12 @@ assert.equal(game.advanceSeasonAuto(clockState, clockStart + 1).seasons, 1);
 assert.equal(clockState.turn, 1);
 assert.equal(game.selfCheck(clockState).ok, true);
 
+assert.equal(Object.keys(game.LORD_DEFS).length, 22, "9 条深写 + 13 条浅写");
+const rebels = Object.entries(game.LORD_DEFS).filter(([, d]) => d.tier !== "loyal");
+assert.equal(rebels.length, 20, "应有 20 名叛臣");
+const seats = rebels.map(([, d]) => d.seat);
+assert.equal(new Set(seats).size, 20, "每名叛臣占据不同的主城");
+assert.ok(seats.every(id => game.TERRITORY_DEFS[id] && game.TERRITORY_DEFS[id].playable !== false), "叛臣主城必须是可占领地");
+assert.ok(!seats.includes("ravenstone"), "祖堡不能被叛臣占据");
+
 console.log("structure tests passed");

@@ -194,6 +194,46 @@ const LORD_DEFS = {
   roderic: { name: "罗德里克·石手", title: "石手领主", portrait: "assets/roderic.webp", age: 44, stats: { force: 82, command: 78, scheme: 48, govern: 46, charm: 53 }, trait: "守关", traitText: "守城和山地作战更稳，适合镇守新领地。", loyalty: 55, ambition: 47, tier: "vassal", faction: "wolf",    seat: "stonejaw",   liege: "bran", oldTie: "父亲的关隘守将，欠饷十一年",   defiance: 55, routes: { force: 0.9, persuade: 0.7, bribe: 1.2 }, knights: ["knight_11"] }
 };
 
+// 浅写附庸只有名字、出身和倾向，用四种原型区分行为，不单独写剧本。
+const LORD_ARCHETYPES = {
+  garrison: { title: "守成领主", defiance: 42, routes: { force: 1,   persuade: 0.8, bribe: 0.7 }, trait: "守成", traitText: "只想守住自己的城墙，不主动惹事。" },
+  venal:    { title: "贪财领主", defiance: 35, routes: { force: 0.9, persuade: 0.5, bribe: 1.4 }, trait: "贪财", traitText: "开价明确，钱到位就换旗。" },
+  loyalist: { title: "忠仆领主", defiance: 50, routes: { force: 1.1, persuade: 0.4, bribe: 0.3 }, trait: "死忠", traitText: "认死主君，除非主君先倒下。" },
+  waverer:  { title: "观望领主", defiance: 30, routes: { force: 0.9, persuade: 1.2, bribe: 1   }, trait: "观望", traitText: "谁看着能赢就跟谁，最容易被说动。" }
+};
+
+// [id, 姓名, 主城, 势力, 主君, 原型, 初始骑士]
+const MINOR_LORD_ROWS = [
+  ["gilbert", "吉尔伯特·铺石", "duchyroad",   "crown",   "regent",  "loyalist", ["knight_21"]],
+  ["alwin",   "阿尔文·麦茬",   "crownfield",  "crown",   "regent",  "garrison", ["knight_22"]],
+  ["luca",    "卢卡·浅滩",     "kingsford",   "crown",   "regent",  "venal",    []],
+  ["harald",  "哈拉尔·牙岩",   "wolfden",     "wolf",    "bran",    "loyalist", ["knight_12"]],
+  ["morton",  "莫尔顿·泥步",   "redfen",      "wolf",    "bran",    "waverer",  []],
+  ["selma",   "塞尔玛·灰穗",   "ashfield",    "wolf",    "bran",    "venal",    ["knight_13"]],
+  ["otto",    "奥托·松脂",     "pineford",    "wolf",    "bran",    "garrison", ["knight_14"]],
+  ["piers",   "皮尔斯·双道",   "crossford",   "river",   "aveline", "venal",    ["knight_23"]],
+  ["vera",    "薇拉·苇心",     "reedbank",    "river",   "aveline", "waverer",  []],
+  ["conrad",  "康拉德·盐税",   "saltbridge",  "river",   "aveline", "venal",    ["knight_24"]],
+  ["hanna",   "汉娜·磨坊",     "millrun",     "river",   "aveline", "garrison", []],
+  ["godwin",  "戈德温·灰枝",   "greywood",    "neutral", null,      "garrison", ["knight_15"]],
+  ["miro",    "米罗·秤星",     "tradersrest", "neutral", null,      "venal",    ["knight_16"]]
+];
+
+MINOR_LORD_ROWS.forEach(([id, name, seat, faction, liege, archetypeId, knights], index) => {
+  const archetype = LORD_ARCHETYPES[archetypeId];
+  LORD_DEFS[id] = {
+    name, title: `${archetype.title} · ${TERRITORY_DEFS[seat].name}`,
+    portrait: null,                       // 浅写领主没有立绘，由家徽兜底
+    age: 34 + (index % 5) * 6,
+    tier: "vassal", faction, seat, liege, archetype: archetypeId,
+    oldTie: `父亲在世时管理${TERRITORY_DEFS[seat].name}的旧吏`,
+    defiance: archetype.defiance, routes: { ...archetype.routes }, knights,
+    trait: archetype.trait, traitText: archetype.traitText,
+    stats: { force: 44 + (index % 6) * 5, command: 40 + (index % 5) * 6, scheme: 38 + (index % 7) * 5, govern: 42 + (index % 4) * 7, charm: 40 + (index % 6) * 6 },
+    loyalty: 50, ambition: 30 + (index % 5) * 8
+  };
+});
+
 const KNIGHT_NAMES = [
   "阿尔德里克·铁掌", "贝伦·灰盾", "科尔文·长矛", "德里克·鸦眼", "埃尔莎·白鬃", "法恩·磨石",
   "加雷特·断弦", "赫尔曼·冷泉", "伊沃·黑马", "贾斯珀·松针", "凯尔·旧门", "莱娜·红披风",
