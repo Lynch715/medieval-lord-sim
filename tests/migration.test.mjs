@@ -103,7 +103,7 @@ assert.equal(game.seasonOf(m4).id, game.SEASONS[19 % 4].id, "季节不应跳变"
 assert.equal(game.yearOf(m4), Math.floor(19 / 4) + 1, "年份不应跳变");
 assert.equal(m4.turn, undefined, "turn 不应再作为存储字段保留");
 assert.equal(m4.seasonLocks, undefined, "seasonLocks 应被删除");
-assert.deepEqual(Object.keys(m4.timers).sort(), ["aiCrown", "aiRiver", "aiWolf", "events", "season"]);
+assert.deepEqual(Object.keys(m4.timers).sort(), ["aiCrown", "aiRiver", "aiWolf", "drift", "events", "season"]);
 assert.ok(m4.cooldowns && typeof m4.cooldowns === "object");
 assert.equal(game.selfCheck(m4).ok, true, `迁移后 selfCheck 失败：${JSON.stringify(game.selfCheck(m4).errors)}`);
 

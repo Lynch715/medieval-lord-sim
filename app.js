@@ -18,7 +18,8 @@ const TIMER_DEFS = {
   aiWolf:  { intervalMs: 60 * 1000, faction: "wolf", offline: false },
   aiRiver: { intervalMs: 75 * 1000, faction: "river", offline: false },
   aiCrown: { intervalMs: 90 * 1000, faction: "crown", offline: false },
-  events:  { intervalMs: 120 * 1000, offline: false }
+  events:  { intervalMs: 120 * 1000, offline: false },
+  drift:   { intervalMs: 5 * 1000, offline: true }
 };
 
 const TECH_DEFAULTS = {
@@ -1443,6 +1444,7 @@ function createInitialState(name, startingStyle, difficulty) {
       devastated: 0,
       fiefHolder: null,
       garrison: emptyComposition(),
+      drift: { guard: 0, devastated: 0 },
       lordId: d.owner === "player" ? null : (SEAT_TO_LORD[id] || null),
       buildings: { fields: id === "ravenstone" ? 1 : id === "westmarch" ? 2 : 0, market: id === "ravenstone" || id === "blackthorn" ? 1 : 0, barracks: id === "ravenstone" || id === "ironhill" ? 1 : 0, walls: id === "ravenstone" ? 1 : 0, granary: id === "ravenstone" || id === "westmarch" ? 1 : 0, academy: 0, workshop: id === "ironhill" ? 1 : 0, roads: 0, watchtower: 0, temple: 0 }
     };
@@ -2025,20 +2027,34 @@ function settleSeasonEconomy(s, options = {}) {
   if (f.spoilage > 0) log(s, "warn", `粮仓容量只有${f.storageCap}，潮气、鼠害与转运损失吃掉了${f.spoilage}粮食。升级农田与磨坊可扩充仓储。`);
   if (s.grain < 0) { const deficit = Math.abs(s.grain); s.grain = 0; applyShortage(s, deficit); }
   if (s.support < 25) applyUnrest(s);
+  log(s, f.netGrain >= 0 ? "good" : "warn", `${season.name}季结算：金币${f.netGold >= 0 ? "+" : ""}${f.netGold}，粮食${f.netGrain >= 0 ? "+" : ""}${f.netGrain}${f.spoilage ? `（含损耗${f.spoilage}）` : ""}。`);
+}
+
+// 守军与破坏度是整数量，无法按秒平滑增长，因此用浮点累加器攒够 1 再落地。
+// 长期速率与原本的「每季 +1」一致，同时保持确定性（不掷骰子，否则步进等价性立刻崩）。
+function applyDrift(s, intervalMs) {
+  const share = intervalMs / TIME_CONFIG.seasonDurationMs;
+  const bump = (t, key, perSeason) => {
+    if (!perSeason) return 0;
+    t.drift ||= {};
+    t.drift[key] = (t.drift[key] || 0) + perSeason * share;
+    const whole = Math.trunc(t.drift[key]);
+    if (whole !== 0) t.drift[key] -= whole;
+    return whole;
+  };
   ownTerritoryIds(s).forEach(id => {
     const t = s.territories[id];
     const guardCap = TERRITORY_DEFS[id].guard + t.buildings.barracks * 7 + t.buildings.walls * 5 + t.buildings.watchtower * 4;
-    if (t.devastated > 0) t.devastated--;
-    if (t.stability >= 65 && t.guard < guardCap) t.guard++;
+    if (t.devastated > 0) t.devastated = Math.max(0, t.devastated + bump(t, "devastated", -1));
+    if (t.stability >= 65 && t.guard < guardCap) t.guard = Math.min(guardCap, t.guard + bump(t, "guard", 1));
   });
   Object.keys(s.territories).filter(id => s.territories[id].owner !== "player").forEach(id => {
     const t = s.territories[id];
     const normalRecovery = Math.min(4, 2 + Math.floor(turnOf(s) / 12));
-    const recovery = t.devastated > 0 ? 1 : Math.max(1, normalRecovery - techLevel(s, "blockade"));
-    t.guard = Math.min(enemyGuardCap(s, id), t.guard + recovery);
-    if (t.devastated > 0) t.devastated--;
+    const perSeason = t.devastated > 0 ? 1 : Math.max(1, normalRecovery - techLevel(s, "blockade"));
+    t.guard = Math.min(enemyGuardCap(s, id), t.guard + bump(t, "guard", perSeason));
+    if (t.devastated > 0) t.devastated = Math.max(0, t.devastated + bump(t, "devastated", -1));
   });
-  log(s, f.netGrain >= 0 ? "good" : "warn", `${season.name}季结算：金币${f.netGold >= 0 ? "+" : ""}${f.netGold}，粮食${f.netGrain >= 0 ? "+" : ""}${f.netGrain}${f.spoilage ? `（含损耗${f.spoilage}）` : ""}。`);
 }
 
 function fireTimer(s, key, at, rng, options = {}) {
@@ -2061,6 +2077,7 @@ function fireTimer(s, key, at, rng, options = {}) {
     return true;
   }
   if (def.faction) { runFactionTurn(s, def.faction, rng, at); return true; }
+  if (key === "drift") { applyDrift(s, def.intervalMs); return true; }
   if (key === "events") { queueSeasonEvents(s); return true; }
   return false;
 }
@@ -3507,7 +3524,7 @@ if (typeof module !== "undefined" && module.exports) {
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, checkDefeat,
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
-    initClock, turnOf, checkCampaignEnd, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
+    initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
     migrateSave, migrateV3ToV4, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
   };

@@ -42,7 +42,7 @@ assert.equal(a.clock.elapsedMs, elapsedAfterFirst, "回退到过去的时刻应�
 
 // 计时器表就位
 const w = game.createInitialState("调度测试", "oath", "standard");
-assert.deepEqual(Object.keys(w.timers).sort(), ["aiCrown", "aiRiver", "aiWolf", "events", "season"]);
+assert.deepEqual(Object.keys(w.timers).sort(), ["aiCrown", "aiRiver", "aiWolf", "drift", "events", "season"]);
 for (const [key, timer] of Object.entries(w.timers)) {
   assert.ok(Number.isFinite(timer.nextAt), `${key} 缺少 nextAt`);
   assert.ok(timer.nextAt > w.clock.lastProcessedAt, `${key} 的 nextAt 应在未来`);
@@ -159,5 +159,26 @@ const spActual = sp.grain - spStart;
 const spExpected = spFlow.grainPerSecond * 10;
 assert.ok(Math.abs(spActual - spExpected) < 1e-6,
   `粮食增量应恰好等于 grainPerSecond×秒数（损耗已含在其中），预期 ${spExpected.toFixed(4)} 实际 ${spActual.toFixed(4)}`);
+
+// drift 计时器让守军平滑恢复，而不是季界跳一次
+assert.equal(game.TIMER_DEFS.drift.intervalMs, 5000);
+const dr = game.createInitialState("漂移", "oath", "standard");
+const drBase = dr.clock.lastProcessedAt;
+const home = dr.territories.ravenstone;
+home.stability = 80;
+home.guard = 10;
+const guardStart = home.guard;
+game.advanceWorld(dr, drBase + SEASON, { rng: () => .99 });
+assert.ok(home.guard > guardStart, "一季内守军应有恢复");
+assert.ok(home.guard - guardStart <= 2, `一季恢复量不应远超原本的每季 +1，实际 +${home.guard - guardStart}`);
+assert.equal(home.guard, Math.round(home.guard), "守军必须保持整数");
+
+// 破坏度也随时间消退
+const dv = game.createInitialState("破坏度", "oath", "standard");
+const dvBase = dv.clock.lastProcessedAt;
+dv.territories.ravenstone.devastated = 3;
+game.advanceWorld(dv, dvBase + SEASON * 2, { rng: () => .99 });
+assert.ok(dv.territories.ravenstone.devastated < 3, "破坏度应随时间消退");
+assert.equal(dv.territories.ravenstone.devastated, Math.round(dv.territories.ravenstone.devastated), "破坏度必须保持整数");
 
 console.log("clock tests passed");
