@@ -14,13 +14,23 @@ const fresh = game.createInitialState("测试继承人", "oath", "standard");
 assert.equal(fresh.playerName, "测试继承人");
 assert.equal(game.playableTerritoryIds().length, 24, "地图应有足够多的可交互、可占领地点");
 assert.deepEqual(game.ownTerritoryIds ? game.ownTerritoryIds(fresh).sort() : ["blackthorn", "ironhill", "ravenstone", "westmarch"], ["blackthorn", "ironhill", "ravenstone", "westmarch"]);
-assert.equal(fresh.officers.filter(o => o.side === "player").length, 1, "开局只应有玩家一名领主");
+assert.deepEqual(fresh.officers.filter(o => o.side === "player").map(o => o.id).sort(), ["oswin", "player"], "开局只有王子与死忠管家");
 assert.equal(fresh.officers.find(o => o.id === "player").title, "渡鸦家的王子");
-assert.equal(fresh.officers.find(o => o.id === "renard").side, "locked");
+assert.equal(fresh.officers.find(o => o.id === "renard").side, "neutral", "雷纳德已叛变独立");
+assert.equal(fresh.officers.filter(o => o.side === "locked").length, 0, "locked 语义已移除");
 assert.equal(fresh.officers.find(o => o.id === "regent").portrait, "assets/regent-duke.webp");
 assert.equal(fresh.officers.find(o => o.id === "roderic").portrait, "assets/roderic.webp");
-assert.equal(game.OFFICER_DEFS.regent.age, 52);
-assert.equal(game.OFFICER_DEFS.roderic.age, 44);
+assert.equal(game.LORD_DEFS.regent.age, 52);
+assert.equal(game.LORD_DEFS.roderic.age, 44);
+assert.equal(game.OFFICER_DEFS, undefined, "OFFICER_DEFS 已更名为 LORD_DEFS");
+for (const [id, def] of Object.entries(game.LORD_DEFS)) {
+  assert.ok(["liege", "vassal", "loyal"].includes(def.tier), `${id} 缺少合法 tier`);
+  assert.ok(def.routes && ["force", "persuade", "bribe"].every(k => Number.isFinite(def.routes[k])), `${id} 缺少 routes`);
+  assert.ok(Number.isFinite(def.defiance), `${id} 缺少 defiance`);
+  assert.ok(Array.isArray(def.knights), `${id} 缺少 knights 数组`);
+  if (def.liege) assert.equal(game.LORD_DEFS[def.liege].tier, "liege", `${id} 的主君必须是大叛臣`);
+}
+assert.equal(game.LORD_DEFS.regent.routes.persuade, 0, "摄政公爵不可说服");
 assert.equal(game.seasonOf(fresh).id, "spring");
 assert.equal(Object.keys(game.BUILDINGS).length, 10);
 assert.equal(game.BUILDING_MAX_LEVEL, 5);

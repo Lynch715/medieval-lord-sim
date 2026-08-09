@@ -96,7 +96,7 @@ const FACTIONS = {
   wolf: { name: "狼牙氏族", color: "#9c5045" },
   river: { name: "河望领地", color: "#66846f" },
   crown: { name: "摄政公爵", color: "#77879a" },
-  neutral: { name: "中立城邦", color: "#8f866c" }
+  neutral: { name: "独立领主", color: "#8f866c" }
 };
 
 const AI_FACTION_DEFS = {
@@ -182,18 +182,16 @@ const CITY_ACTION_DEFS = {
 };
 const CITY_ACTION_DURATIONS = { scout: 20 * 1000 };
 
-const OFFICER_DEFS = {
-  player: { name: "罗恩", title: "渡鸦家的王子", portrait: "assets/player.webp", side: "player", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "合法继承人", traitText: "亲自出战时，本场军心最低按45点计算；只有收复旧土后，才有资格重新戴上王冠。", loyalty: 100, ambition: 55 },
-  regent: { name: "摄政公爵", title: "篡位摄政 · 王冠谷", portrait: "assets/regent-duke.webp", side: "crown", age: 52, stats: { force: 62, command: 86, scheme: 72, govern: 78, charm: 64 }, trait: "铁冠法统", traitText: "守住王冠谷，拒绝承认渡鸦家的继承权。", loyalty: 100, ambition: 68 },
-  oswin: { name: "奥斯温·维尔", title: "苔原领主", portrait: "assets/oswin.webp", side: "player", stats: { force: 27, command: 51, scheme: 78, govern: 88, charm: 69 }, trait: "旧账如山", traitText: "主持领地时收入更稳定；拒绝他的越冬警告会积累不满。", loyalty: 76, ambition: 18 },
-  renard: { name: "雷纳德·霍尔特", title: "黑石领主", portrait: "assets/renard.webp", side: "player", stats: { force: 86, command: 83, scheme: 43, govern: 31, charm: 47 }, trait: "破阵者", traitText: "强攻和骑兵冲击更有力；占尽优势后撤退会激怒他。", loyalty: 70, ambition: 48 },
-  ysabel: { name: "伊莎贝尔·马伦", title: "白麦领主", portrait: "assets/ysabel.webp", side: "player", stats: { force: 30, command: 48, scheme: 80, govern: 92, charm: 72 }, trait: "精确到一粒麦", traitText: "随军可降低补给与撤退损失；主持财税能减少盘剥。", loyalty: 68, ambition: 34 },
-  edmund: { name: "埃德蒙·维恩", title: "鸦堡领主", portrait: "assets/edmund.webp", side: "player", stats: { force: 74, command: 76, scheme: 69, govern: 57, charm: 84 }, trait: "另一种继承", traitText: "伏击和招降能力出众；功劳越高，越希望管理自己的领地。", loyalty: 61, ambition: 82 },
-  aveline: { name: "艾芙琳·多尔", title: "河望领主", portrait: "assets/aveline.webp", side: "river", stats: { force: 71, command: 80, scheme: 75, govern: 74, charm: 78 }, trait: "河地之主", traitText: "熟悉河谷作战与治理。若被逼到绝境，她会选择一个值得效忠的人。", loyalty: 52, ambition: 65 },
-  bran: { name: "布兰·狼牙", title: "狼牙领主", portrait: "assets/bran.webp", side: "wolf", stats: { force: 92, command: 80, scheme: 41, govern: 37, charm: 61 }, trait: "只服强者", traitText: "森林和山地作战极强；只会向正面击败自己的人低头。", loyalty: 48, ambition: 58 },
-  maelis: { name: "梅利斯·灰帆", title: "灰帆领主", portrait: "assets/ysabel.webp", side: "neutral", recruitable: true, recruitCost: 32, stats: { force: 42, command: 55, scheme: 86, govern: 68, charm: 71 }, trait: "行军账册", traitText: "降低远征补给，并能主持商路。", loyalty: 58, ambition: 42 },
-  roderic: { name: "罗德里克·石手", title: "石手领主", portrait: "assets/roderic.webp", side: "neutral", recruitable: true, recruitCost: 38, age: 44, stats: { force: 82, command: 78, scheme: 48, govern: 46, charm: 53 }, trait: "守关", traitText: "守城和山地作战更稳，适合镇守新领地。", loyalty: 55, ambition: 47 },
-  elian: { name: "伊莲·鸦羽", title: "鸦羽领主", portrait: "assets/edmund.webp", side: "neutral", recruitable: true, recruitCost: 42, stats: { force: 64, command: 72, scheme: 76, govern: 52, charm: 81 }, trait: "招降", traitText: "出征时更容易瓦解敌军，适合外交与攻心。", loyalty: 52, ambition: 63 }
+const LORD_DEFS = {
+  player:  { name: "罗恩", title: "渡鸦家的王子", portrait: "assets/player.webp", side: "player", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "合法继承人", traitText: "亲自出战时，本场军心最低按45点计算；只有收复旧土后，才有资格重新戴上王冠。", loyalty: 100, ambition: 55, tier: "loyal",  faction: "player",  seat: "ravenstone", liege: null,   oldTie: "先王之子",                     defiance: 0,  routes: { force: 0, persuade: 0, bribe: 0 },        knights: ["knight_2"] },
+  regent:  { name: "摄政公爵", title: "篡位摄政 · 王冠谷", portrait: "assets/regent-duke.webp", side: "crown", age: 52, stats: { force: 62, command: 86, scheme: 72, govern: 78, charm: 64 }, trait: "铁冠法统", traitText: "守住王冠谷，拒绝承认渡鸦家的继承权。", loyalty: 100, ambition: 68, tier: "liege",  faction: "crown",   seat: "crownvale",  liege: null,   oldTie: "父亲加冕时的监誓人",           defiance: 95, routes: { force: 1,   persuade: 0,   bribe: 0 },   knights: ["knight_17", "knight_18"] },
+  oswin:   { name: "奥斯温·维尔", title: "苔原领主", portrait: "assets/oswin.webp", side: "player", stats: { force: 27, command: 51, scheme: 78, govern: 88, charm: 69 }, trait: "旧账如山", traitText: "主持领地时收入更稳定；拒绝他的越冬警告会积累不满。", loyalty: 76, ambition: 18, tier: "loyal",  faction: "player",  seat: null,         liege: null,   oldTie: "父亲的老管家，唯一没有走的人", defiance: 0,  routes: { force: 0, persuade: 0, bribe: 0 },        knights: [] },
+  renard:  { name: "雷纳德·霍尔特", title: "黑石领主", portrait: "assets/renard.webp", side: "player", stats: { force: 86, command: 83, scheme: 43, govern: 31, charm: 47 }, trait: "破阵者", traitText: "强攻和骑兵冲击更有力；占尽优势后撤退会激怒他。", loyalty: 70, ambition: 48, tier: "liege",  faction: "neutral", seat: "ashgate",    liege: null,   oldTie: "父亲的骑士长",                 defiance: 70, routes: { force: 1.2, persuade: 0.6, bribe: 0.2 }, knights: ["knight_3", "knight_4"] },
+  ysabel:  { name: "伊莎贝尔·马伦", title: "白麦领主", portrait: "assets/ysabel.webp", side: "player", stats: { force: 30, command: 48, scheme: 80, govern: 92, charm: 72 }, trait: "精确到一粒麦", traitText: "随军可降低补给与撤退损失；主持财税能减少盘剥。", loyalty: 68, ambition: 34, tier: "liege",  faction: "neutral", seat: "frostfield", liege: null,   oldTie: "父亲的财政官",                 defiance: 45, routes: { force: 0.7, persuade: 1.3, bribe: 0.6 }, knights: ["knight_5"] },
+  edmund:  { name: "埃德蒙·维恩", title: "鸦堡领主", portrait: "assets/edmund.webp", side: "player", stats: { force: 74, command: 76, scheme: 69, govern: 57, charm: 84 }, trait: "另一种继承", traitText: "伏击和招降能力出众；功劳越高，越希望管理自己的领地。", loyalty: 61, ambition: 82, tier: "liege",  faction: "neutral", seat: "crowstep",   liege: null,   oldTie: "父亲的私生侄，另一条继承线",   defiance: 85, routes: { force: 1,   persuade: 0.4, bribe: 0.5 }, knights: ["knight_6", "knight_7"] },
+  aveline: { name: "艾芙琳·多尔", title: "河望领主", portrait: "assets/aveline.webp", side: "river", stats: { force: 71, command: 80, scheme: 75, govern: 74, charm: 78 }, trait: "河地之主", traitText: "熟悉河谷作战与治理。若被逼到绝境，她会选择一个值得效忠的人。", loyalty: 52, ambition: 65, tier: "liege",  faction: "river",   seat: "riverwatch", liege: null,   oldTie: "父亲的河地总管",               defiance: 62, routes: { force: 1,   persuade: 1,   bribe: 0.8 }, knights: ["knight_19", "knight_20"] },
+  bran:    { name: "布兰·狼牙", title: "狼牙领主", portrait: "assets/bran.webp", side: "wolf", stats: { force: 92, command: 80, scheme: 41, govern: 37, charm: 61 }, trait: "只服强者", traitText: "森林和山地作战极强；只会向正面击败自己的人低头。", loyalty: 48, ambition: 58, tier: "liege",  faction: "wolf",    seat: "highpass",   liege: null,   oldTie: "父亲的北境边将",               defiance: 78, routes: { force: 1,   persuade: 0.2, bribe: 0.3 }, knights: ["knight_9", "knight_10"] },
+  roderic: { name: "罗德里克·石手", title: "石手领主", portrait: "assets/roderic.webp", side: "neutral", age: 44, stats: { force: 82, command: 78, scheme: 48, govern: 46, charm: 53 }, trait: "守关", traitText: "守城和山地作战更稳，适合镇守新领地。", loyalty: 55, ambition: 47, tier: "vassal", faction: "wolf",    seat: "stonejaw",   liege: "bran", oldTie: "父亲的关隘守将，欠饷十一年",   defiance: 55, routes: { force: 0.9, persuade: 0.7, bribe: 1.2 }, knights: ["knight_11"] }
 };
 
 const KNIGHT_NAMES = [
@@ -1331,14 +1329,14 @@ function createInitialState(name, startingStyle, difficulty) {
       buildings: { fields: id === "ravenstone" ? 1 : id === "westmarch" ? 2 : 0, market: id === "ravenstone" || id === "blackthorn" ? 1 : 0, barracks: id === "ravenstone" || id === "ironhill" ? 1 : 0, walls: id === "ravenstone" ? 1 : 0, granary: id === "ravenstone" || id === "westmarch" ? 1 : 0, academy: 0, workshop: id === "ironhill" ? 1 : 0, roads: 0, watchtower: 0, temple: 0 }
     };
   });
-  const officers = Object.entries(OFFICER_DEFS).map(([id, d]) => {
-    const enemy = ["aveline", "bran", "regent"].includes(id);
-    const side = id === "player" ? "player" : enemy ? d.side : d.recruitable ? "neutral" : "locked";
+  const officers = Object.entries(LORD_DEFS).map(([id, d]) => {
+    // 领主的 side 就是其势力；只有 tier "loyal" 的人（王子、老管家）站在玩家一边。
+    const side = d.tier === "loyal" ? "player" : d.faction;
     return {
-      id, ...clone(d), side, recruitable: id !== "player" && !enemy,
-      recruitCost: d.recruitCost || (18 + Object.keys(OFFICER_DEFS).indexOf(id) * 3),
+      id, ...clone(d), side, recruitable: false,
       name: id === "player" ? (name.trim() || "罗恩") : d.name,
-      loyalty: d.loyalty, ambition: d.ambition, grievance: 0, merit: 0, injured: 0, fief: null, captured: false
+      loyalty: d.loyalty, ambition: d.ambition, grievance: 0, merit: 0, injured: 0, fief: null,
+      captured: false, rapport: 0, submitted: false, promisedFief: null
     };
   });
   const style = { oath: 0, iron: 0, wealth: 0 };
@@ -1436,15 +1434,12 @@ function hydrateV2(raw) {
   raw.seenEvents ||= [];
   raw.seenNpcEvents ||= [];
   raw.officers ||= [];
-  Object.entries(OFFICER_DEFS).filter(([, def]) => def.recruitable && !raw.officers.some(o => o.id === def.id)).forEach(([id, def]) => {
-    raw.officers.push({ id, ...clone(def), loyalty: def.loyalty, ambition: def.ambition, grievance: 0, merit: 0, injured: 0, fief: null, captured: false });
-  });
   // 早期版本在重复打开存档时可能写入同一名候选领主，按 id 去重，避免领主府出现重复卡片。
   const uniqueOfficers = new Map();
   raw.officers.forEach(o => { if (o?.id && !uniqueOfficers.has(o.id)) uniqueOfficers.set(o.id, o); });
   raw.officers = [...uniqueOfficers.values()];
   // 旧存档把可招募领主标成 locked；迁移后统一放入中立候选区，避免人物页看不到可招募对象。
-  raw.officers.forEach(o => { if (OFFICER_DEFS[o.id]?.recruitable && o.side === "locked") o.side = "neutral"; });
+  raw.officers.forEach(o => { if (LORD_DEFS[o.id]?.recruitable && o.side === "locked") o.side = "neutral"; });
   const defaultKnights = createKnightRoster();
   raw.knights = Array.isArray(raw.knights) ? raw.knights : [];
   const knightMap = new Map(raw.knights.filter(knight => knight?.id).map(knight => [knight.id, knight]));
@@ -1496,9 +1491,9 @@ raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight
   // 旧存档曾把玩家称为“主将”。迁移时同步为领主称谓，避免旧文案继续污染新界面。
   const playerOfficer = raw.officers.find(o => o.id === "player");
   if (playerOfficer) {
-    playerOfficer.title = OFFICER_DEFS.player.title;
-    playerOfficer.trait = OFFICER_DEFS.player.trait;
-    playerOfficer.traitText = OFFICER_DEFS.player.traitText;
+    playerOfficer.title = LORD_DEFS.player.title;
+    playerOfficer.trait = LORD_DEFS.player.trait;
+    playerOfficer.traitText = LORD_DEFS.player.traitText;
   }
   Object.values(raw.territories).forEach(t => {
     if (t.fiefHolder && t.fiefHolder !== "charter" && officer(raw, t.fiefHolder)?.side !== "player") t.fiefHolder = null;
@@ -2553,7 +2548,7 @@ function decisionView(s, decision) {
       kicker: "敌方领主投降", title: `${leader.name}请求成为你的家臣`, portrait: leader.portrait,
       body: `<p>${isBran ? "“你拿走了我的渡口和山关。狼牙不会向城墙下跪，但会跟随真正打赢我们的人。”" : "“河望家的旗已经落下。我可以把河地的账册和渡船交给你，也可以带着我的名字离开北境。”"}</p><p>接受投降可提高新领地稳定并获得一名家臣。收取赎金或放逐会让该人物永久离开。</p>`,
       options: [
-        { name: "接受投降，让他成为家臣", note: "加入家臣；之前的事件会影响忠诚；长矛兵 +6，新领地稳定 +8", effect() { const original = OFFICER_DEFS[leader.id].loyalty; const base = 67; const relation = clamp(Math.round((leader.loyalty - original) * .75 - leader.grievance / 4), -12, 12); leader.side = "player"; leader.loyalty = clamp(base + relation); leader.grievance = Math.max(0, Math.round(leader.grievance * .35)); addUnits(s, "levy", 6); factionTerritories(s, "player").forEach(id => { if (TERRITORY_DEFS[id].owner === decision.faction) s.territories[id].stability = clamp(s.territories[id].stability + 8); }); s.style.oath++; log(s, "good", `${leader.name}加入渡鸦家，当前忠诚为${leader.loyalty}。`); } },
+        { name: "接受投降，让他成为家臣", note: "加入家臣；之前的事件会影响忠诚；长矛兵 +6，新领地稳定 +8", effect() { const original = LORD_DEFS[leader.id].loyalty; const base = 67; const relation = clamp(Math.round((leader.loyalty - original) * .75 - leader.grievance / 4), -12, 12); leader.side = "player"; leader.loyalty = clamp(base + relation); leader.grievance = Math.max(0, Math.round(leader.grievance * .35)); addUnits(s, "levy", 6); factionTerritories(s, "player").forEach(id => { if (TERRITORY_DEFS[id].owner === decision.faction) s.territories[id].stability = clamp(s.territories[id].stability + 8); }); s.style.oath++; log(s, "good", `${leader.name}加入渡鸦家，当前忠诚为${leader.loyalty}。`); } },
         { name: "收取26金币，放他离开", note: "金币 +26，威望 +2；该人物永久离开", effect() { leader.side = "gone"; s.gold += 26; s.renown = clamp(s.renown + 2); s.style.wealth += 2; log(s, "info", `${leader.name}支付赎金后离开北境。`); } },
         { name: "放逐他，禁止再次返回", note: "王室认可 +3，军心 +4；民心 −3", effect() { leader.side = "gone"; s.legitimacy = clamp(s.legitimacy + 3); s.morale = clamp(s.morale + 4); s.support = clamp(s.support - 3); s.style.iron += 2; log(s, "warn", `${leader.name}被放逐，旧旗帜在城门外烧成灰。`); } }
       ]
@@ -3316,7 +3311,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, accrueResources, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, OFFICER_DEFS,
+    finishBattle, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
