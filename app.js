@@ -8,7 +8,19 @@ const TIME_CONFIG = {
   logicTickMs: 1000,
   uiTickMs: 250,
   // 离线只推进一季；长时间离开不应把玩家锁死在连续崩溃判定里。
+  maxCatchUpMs: 2 * 60 * 60 * 1000,
+  // 仅供即将删除的 advanceSeasonAuto 使用，Task 4 会随该函数一并移除
   maxOfflineSeasonCatchup: 1
+};
+
+// 每个周期性系统有自己的节奏，不再全部挤在换季那一刻。
+// drift（守军与稳定度慢漂移）属 P1b 连续化那批，此处先不加。
+const TIMER_DEFS = {
+  season:  { intervalMs: 5 * 60 * 1000, offline: true },
+  aiWolf:  { intervalMs: 60 * 1000, faction: "wolf", offline: false },
+  aiRiver: { intervalMs: 75 * 1000, faction: "river", offline: false },
+  aiCrown: { intervalMs: 90 * 1000, faction: "crown", offline: false },
+  events:  { intervalMs: 120 * 1000, offline: false }
 };
 
 const TECH_DEFAULTS = {
@@ -348,6 +360,24 @@ function turnOf(s) {
 function getSeasonRemainingMs(s) {
   const elapsed = s?.clock?.elapsedMs || 0;
   return TIME_CONFIG.seasonDurationMs - (elapsed % TIME_CONFIG.seasonDurationMs);
+}
+
+function initTimers(s, now = Date.now()) {
+  s.timers = {};
+  Object.entries(TIMER_DEFS).forEach(([key, def]) => { s.timers[key] = { nextAt: now + def.intervalMs }; });
+  return s.timers;
+}
+
+// 返回最早到期的事件：计时器或任务，二者同构（都由绝对时刻驱动）。
+function nextDueEvent(s, now) {
+  let best = null;
+  Object.entries(s.timers || {}).forEach(([key, timer]) => {
+    if (timer.nextAt <= now && (!best || timer.nextAt < best.at)) best = { at: timer.nextAt, kind: "timer", key };
+  });
+  (s.jobs || []).forEach(job => {
+    if (job.status === "running" && job.endAt <= now && (!best || job.endAt < best.at)) best = { at: job.endAt, kind: "job", key: job.id };
+  });
+  return best;
 }
 
 function formatDuration(ms) {
@@ -1470,6 +1500,7 @@ function createInitialState(name, startingStyle, difficulty) {
   state.armies = [defaultArmyEntity(state)];
   ensureAIFactions(state);
   initClock(state);
+  initTimers(state, state.clock.startedAt);
   log(state, "info", `${state.playerName}在雨夜接过渡鸦堡的领主印戒。`);
   return state;
 }
@@ -1790,6 +1821,22 @@ function accrueResources(s, fromAt, toAt) {
   return changed;
 }
 
+// 累积到某个绝对时刻，而非累积一段时长——这样重复调用天然幂等，
+// 在线逐帧推进与离线一次性补算才可能得到完全相同的结果。
+function accrueTo(s, at) {
+  if (!s?.clock) return 0;
+  const from = s.clock.lastProcessedAt;
+  if (!Number.isFinite(at) || !(at > from)) return 0;
+  const deltaMs = at - from;
+  const flow = resourceFlow(s, seasonOf(s));
+  const seconds = deltaMs / 1000;
+  s.gold += flow.goldPerSecond * seconds;
+  s.grain += flow.grainPerSecond * seconds;
+  s.clock.elapsedMs += deltaMs;
+  s.clock.lastProcessedAt = at;
+  return seconds;
+}
+
 function buildingCost(s, id, type) {
   const level = s.territories[id].buildings[type];
   return Math.round(BUILDINGS[type].base + level * 13);
@@ -2008,6 +2055,41 @@ function advanceSeason(s, options = {}) {
     pumpDecision();
   }
   return true;
+}
+
+function fireTimer(s, key, at, rng, options = {}) {
+  const def = TIMER_DEFS[key];
+  const timer = s.timers[key];
+  timer.nextAt = at + def.intervalMs;
+  if (options.offline && !def.offline) return false;   // 离线不结算 AI 与事件
+  return true;
+}
+
+function advanceWorld(s, now = Date.now(), options = {}) {
+  if (!s || s.ended || s.battleSession || s.pauseState) return { steps: 0, jobs: 0 };
+  s.clock ||= makeClock(0, now);
+  s.timers ||= initTimers(s, now);
+  const rng = options.rng || Math.random;
+  const cap = Number.isFinite(options.maxCatchUpMs) ? options.maxCatchUpMs : TIME_CONFIG.maxCatchUpMs;
+  const horizon = Math.min(now, s.clock.lastProcessedAt + cap);
+  let steps = 0, jobs = 0, guard = 0;
+  while (!s.ended && guard++ < 5000) {
+    const next = nextDueEvent(s, horizon);
+    if (!next) break;
+    accrueTo(s, next.at);
+    if (next.kind === "job") jobs += processCompletedJobs(s, next.at);
+    else if (fireTimer(s, next.key, next.at, rng, options)) steps++;
+  }
+  accrueTo(s, horizon);
+  jobs += processCompletedJobs(s, horizon);
+  // 超出补算上限的部分直接跳过，不结算也不累积，避免离开一整天后被补算淹没
+  if (horizon < now) {
+    s.clock.lastProcessedAt = now;
+    Object.entries(s.timers).forEach(([key, timer]) => {
+      if (timer.nextAt <= now) timer.nextAt = now + TIMER_DEFS[key].intervalMs;
+    });
+  }
+  return { steps, jobs };
 }
 
 function advanceSeasonAuto(s, now = Date.now(), options = {}) {
@@ -3450,7 +3532,7 @@ if (typeof module !== "undefined" && module.exports) {
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, advanceSeason, checkDefeat,
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
-    initClock, turnOf, yearOf, getSeasonRemainingMs, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
+    initClock, turnOf, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2, migrateV2ToV3,
     migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, KNIGHT_LIEGE
   };
