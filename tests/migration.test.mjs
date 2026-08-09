@@ -54,4 +54,34 @@ const m1 = game.migrateSave(v1);
 assert.ok(m1 && m1.version === 3, "v1 应能连续迁移到 v3");
 assert.ok(!("ap" in m1));
 
+// —— 中盘存档：真实玩家的存档不是刚开局的，下面这些情形只有中盘档才会暴露 ——
+const mid = JSON.parse(JSON.stringify(game.createInitialState("中盘档", "oath", "standard")));
+mid.version = 2;
+mid.turn = 19;
+Object.values(mid.territories).forEach(t => { delete t.lordId; });
+mid.knights.forEach(k => { delete k.liegeLordId; });
+mid.territories.ashfield.owner = "player";   // 塞尔玛的座城已被攻下
+mid.officers.forEach(o => { delete o.rapport; delete o.submitted; if (o.id === "bran") o.side = "gone"; });
+const hiredKnight = mid.knights.find(k => k.id === "knight_9");   // 布兰的骑士，旧档里已被玩家招募
+hiredKnight.side = "player";
+hiredKnight.status = "active";
+const goneKnight = mid.knights.find(k => k.id === "knight_10");
+goneKnight.side = "gone";
+goneKnight.status = "executed";
+
+const mm = game.hydrateState(mid);
+assert.ok(mm, "中盘 v2 存档必须能迁移");
+assert.equal(game.selfCheck(mm).ok, true, `中盘档迁移后 selfCheck 失败：${JSON.stringify(game.selfCheck(mm).errors)}`);
+// 已被玩家占领的座城不应再挂守将
+assert.equal(mm.territories.ashfield.lordId, null, "玩家已占领的领地不应被迁移重新塞回守将");
+assert.deepEqual(game.lordHoldings(mm, "selma"), [], "失去座城的领主辖地应为空");
+// 已离场的领主不得被复活
+assert.equal(mm.officers.find(o => o.id === "bran").side, "gone", "已离场的领主不应被迁移复活");
+// 关键：已属玩家的骑士必须改挂玩家，不能按初始名册挂回原主君
+assert.equal(mm.knights.find(k => k.id === "knight_9").liegeLordId, "player",
+  "旧档里已被玩家招募的骑士，迁移后必须效忠玩家，否则处死其原主君时会连累玩家自己的骑士");
+assert.equal(mm.knights.find(k => k.id === "knight_10").liegeLordId, null, "已离场的骑士不应挂在任何主君名下");
+// 幂等
+assert.deepEqual(game.hydrateState(JSON.parse(JSON.stringify(mm))), mm, "迁移必须幂等");
+
 console.log("migration tests passed");

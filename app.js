@@ -1510,11 +1510,16 @@ function migrateV2ToV3(raw) {
       rapport: 0, captured: false, submitted: false, promisedFief: null
     });
   });
-  // 6. 骑士补 liegeLordId
-  migrated.knights = (migrated.knights || []).map(k => ({
-    ...k,
-    liegeLordId: k.liegeLordId !== undefined ? k.liegeLordId : (KNIGHT_LIEGE[k.id] || null)
-  }));
+  // 6. 骑士补 liegeLordId。必须以存档里的当前归属为准，不能无脑套用初始名册：
+  // 旧档里已被玩家招募的骑士只有 side === "player"，若照 KNIGHT_LIEGE 补成原主君，
+  // 日后处死该主君时会把玩家自己的骑士一并判成死敌。
+  migrated.knights = (migrated.knights || []).map(k => {
+    if (k.liegeLordId !== undefined) return { ...k };
+    const liegeLordId = k.side === "player" ? "player"
+      : k.side === "gone" ? null
+      : (KNIGHT_LIEGE[k.id] || null);
+    return { ...k, liegeLordId };
+  });
   migrated.migrationLog = [...(migrated.migrationLog || []), "v2-to-v3"];
   return migrated;
 }
