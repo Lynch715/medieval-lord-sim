@@ -164,4 +164,18 @@ assert.ok(executeState.officers.find(o => o.id === "otto").defiance < neighbourB
 // 死敌骑士不得再被招募
 assert.equal(game.knightAction("knight_13", "recruit", executeState), false, "死敌骑士不应还能被招募");
 
+// Task 9: selfCheck 必须能发现领主绑定被写坏
+const bad = game.createInitialState("自检测试", "oath", "standard");
+bad.territories.highpass.lordId = "nobody";
+const check = game.selfCheck(bad);
+assert.equal(check.ok, false);
+assert.ok(check.errors.some(e => e.includes("nobody")), `自检应报出无效 lordId，实际：${JSON.stringify(check.errors)}`);
+
+const bad2 = game.createInitialState("自检测试2", "oath", "standard");
+bad2.territories.ravenstone.lordId = "bran";
+assert.ok(game.selfCheck(bad2).errors.some(e => e.includes("ravenstone")), "玩家领地不应残留守将");
+
+// 金币直接招募领主的旧路线已随叛臣体系一并移除
+assert.equal(game.recruitOfficer, undefined, "recruitOfficer 已删除，收服领主只能靠打服/说服/收买");
+
 console.log("lords tests passed");

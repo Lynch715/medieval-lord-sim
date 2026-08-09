@@ -610,3 +610,5 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
+.city-lord { display: block; margin-bottom: 5px; color: #c6b98e; }
+.city-lord b { color: #efe6d1; font: 14px var(--serif); }

@@ -22,13 +22,11 @@ function resolveDecisions(state) {
     const view = game.decisionView(state, decision);
     if (!view) { state.pendingDecisions.shift(); continue; }
     const available = view.options.filter(option => !option.disabled);
-    const preferred = decision.type === "conquest"
-      ? available.find(option => option.name.includes("自治"))
-      : decision.type === "submission"
-        ? available.find(option => option.name.includes("接受效忠"))
-        : decision.type === "iron_crown"
-          ? available[0]
-          : available.find(option => !/[−-](?:2[5-9]|[3-9]\d)/.test(option.note));
+    const preferred = decision.type === "lord_capture"
+      ? available.find(option => option.name.startsWith("接受效忠"))
+      : decision.type === "iron_crown"
+        ? available[0]
+        : available.find(option => !/[−-](?:2[5-9]|[3-9]\d)/.test(option.note));
     (preferred || available.at(-1)).effect();
     state.pendingDecisions.shift();
   }
@@ -125,7 +123,8 @@ function run(seed) {
     territories: game.playableTerritoryIds().filter(id => state.territories[id].owner === "player").length,
     wins: state.wins, battles: state.battles, ending: state.endingReason, casualties: state.casualties,
     renown: Math.round(state.renown), army: game.armyTotal(state, "army_1"),
-    siegeTech: game.techCompleted(state, "war_engineering"), gold: Math.round(state.gold), grain: Math.round(state.grain)
+    siegeTech: game.techCompleted(state, "war_engineering"), gold: Math.round(state.gold), grain: Math.round(state.grain),
+    submittedLords: state.officers.filter(o => o.submitted).length
   };
 }
 
@@ -170,6 +169,7 @@ if (distinctEndings.length === 1) {
 }
 assert.ok(met("siegeTech") >= results.length * .9, "攻城工程应当是常规可达成的科技");
 assert.ok(Number(avg("renown")) >= 60, "威望门槛应当是常规可达成的");
+assert.ok(Number(avg("submittedLords")) > 0, "打服路线必须能实际收服到领主，否则整条路线在实战中不可用");
 console.log(JSON.stringify({
   runs: results.length, unified: unified.length, collapsed, medianTurn: median,
   range: completionTurns.length ? [completionTurns[0], completionTurns.at(-1)] : null,
@@ -177,6 +177,6 @@ console.log(JSON.stringify({
   平均威望: avg("renown"), 威望要求: 60,
   平均主力: avg("army"), 主力要求: 80,
   攻城工程达成局数: met("siegeTech"),
-  平均胜场: avg("wins"), 平均出征: avg("battles"), 平均结余金币: avg("gold"),
+  平均胜场: avg("wins"), 平均出征: avg("battles"), 平均结余金币: avg("gold"), 平均收服领主: avg("submittedLords"),
   结局分布: endingCounts, 崩溃局数: collapsed
 }, null, 2));

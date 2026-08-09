@@ -1666,6 +1666,11 @@ function selfCheck(s = S) {
   if (s && (!Number.isFinite(s.gold) || !Number.isFinite(s.grain))) errors.push("resources missing");
   if (s && !s.territories?.ravenstone) errors.push("ravenstone territory missing");
   if (s && armyTotal(s) !== Math.round(s.troops || 0)) errors.push("army total mismatch");
+  if (s && s.territories) Object.entries(s.territories).forEach(([id, t]) => {
+    if (t.lordId && !LORD_DEFS[t.lordId]) errors.push(`territory ${id} has unknown lordId ${t.lordId}`);
+    if (t.lordId && !officer(s, t.lordId)) errors.push(`territory ${id} lordId ${t.lordId} missing from roster`);
+    if (t.owner === "player" && t.lordId) errors.push(`player territory ${id} still has lordId ${t.lordId}`);
+  });
   return { ok: errors.length === 0, errors };
 }
 
@@ -3066,7 +3071,13 @@ function territorySummary(s, id, attackable = []) {
   const attack = attackable.includes(id) ? `<button class="city-attack-btn" data-city-attack="${id}">打开出征配置</button>` : "";
   const castlePlan = t.owner !== "player" && d.playable !== false ? castleExpeditionHtml(s, id) : "";
   const settlementType = d.type === "castle" || d.type === "capital" ? "城堡" : "附属镇";
-  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : "独立领地"}</b></div><p>${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
+  // 每块叛臣领地都有具名守将，地图是玩家挑目标的地方，必须能看见守的是谁。
+  const lord = lordAt(s, id);
+  const lordDef = lord ? LORD_DEFS[lord.id] : null;
+  const lordLine = lord
+    ? `<span class="city-lord"><b>${esc(lord.name)}</b> · ${esc(lordDef?.title || "")}<br>${esc(lordDef?.oldTie || "")} · 抵抗 ${Math.round(lord.defiance ?? 0)}${lordDef?.liege ? ` · 主君 ${esc(LORD_DEFS[lordDef.liege].name)}` : " · 独立割据"}</span><br>`
+    : "";
+  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
 }
 
 function terrainAdvice(targetId, composition) {
@@ -3194,26 +3205,6 @@ function talkOfficer(id) {
   saveGame(); renderAll();
 }
 
-function recruitOfficer(id) {
-  if (rejectDuringBattle(S)) return false;
-  const candidate = officer(S, id);
-  const job = getRunningJob(S, `officer:${id}`);
-  const cost = candidate?.recruitCost || 0;
-  if (!candidate || !candidate.recruitable || candidate.side !== "neutral" || job || S.gold < cost) {
-    toast(job ? "这名领主正在考虑你的封赏" : `招募需要${cost}金币`);
-    return false;
-  }
-  S.gold -= cost;
-  const record = startJob(S, {
-    type: "OFFICER_RECRUIT", startedAt: Date.now(), durationMs: JOB_CONFIG.OFFICER_RECRUIT.durationMs,
-    queueKey: `officer:${id}`, payload: { officerId: id, startingLoyalty: candidate.loyalty }
-  });
-  S.lastAction = { name: "领主招募排队", text: `${candidate.name}接受你的封赏，预计${formatDuration(JOB_CONFIG.OFFICER_RECRUIT.durationMs)}后抵达渡鸦堡。` };
-  log(S, "info", S.lastAction.text);
-  saveGame(); renderAll();
-  return !!record;
-}
-
 function knightAction(id, actionId, state = S) {
   if (!state || rejectDuringBattle(state)) return false;
   const knight = knightById(state, id);
@@ -3258,19 +3249,25 @@ function knightCard(knight) {
 function renderCourt() {
   const panel = $("panel");
   const own = ownedOfficers(S);
-  const others = S.officers.filter(o => !["player", "gone"].includes(o.side));
-  const candidates = others.filter(o => o.recruitable && o.side === "neutral");
-  const enemies = others.filter(o => ["wolf", "river", "crown"].includes(o.side));
-  const locked = others.filter(o => o.side === "locked");
+  const rebels = Object.entries(LORD_DEFS).filter(([, def]) => def.tier !== "loyal");
+  const enemies = rebels.map(([id]) => officer(S, id)).filter(o => o && o.side !== "player" && o.side !== "gone");
+  const captured = enemies.filter(o => o.captured);
   const averageLoyalty = own.length > 1 ? Math.round(own.filter(o => o.id !== "player").reduce((sum, o) => sum + o.loyalty, 0) / (own.length - 1)) : 100;
   const knights = S.knights || [];
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">COMMANDERS & KNIGHTS</span><h2>将领与骑士</h2><p>有立绘的人物是领主，负责封地与政务；无立绘人物是骑士，负责带领军团。只有加入你的骑士，才会出现在军队编制里。</p>${metrics([[own.length, "我方领主"], [activeKnights(S).length, "我方骑士"], [averageLoyalty, "平均忠诚"], [own.filter(o => o.fief).length, "已封领地"]])}</section>
-    <div class="section-head"><h2>我方领主</h2><span>治理封地、处理忠诚，不再直接占用军团指挥位</span></div><div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}</div>`).join("")}</div>
-    <div class="section-head"><h2>可招募领主</h2><span>金币预扣，招募需要${formatDuration(JOB_CONFIG.OFFICER_RECRUIT.durationMs)}</span></div><div class="officer-grid">${candidates.length ? candidates.map(o => { const job = getRunningJob(S, `officer:${o.id}`); const label = job ? `<span data-job-countdown="${job.id}" data-job-prefix="招募中 · ">招募中 · ${formatDuration(getJobRemainingMs(job))}</span>` : `招募 · ${o.recruitCost}金`; return `<div class="officer-slot">${officerCard(o, true)}<button class="secondary-btn" data-recruit-officer="${o.id}" ${job || S.gold < o.recruitCost ? "disabled" : ""}>${label}</button></div>`; }).join("") : `<div class="empty-state">当前没有可招募的领主。</div>`}</div>
-    <div class="section-head"><h2>骑士名册</h2><span>${activeKnights(S).length}名在列 · ${availableKnights(S).length}名可招募 · 俘虏可处置</span></div><div class="knight-grid">${knights.filter(k => !["gone", "executed", "released"].includes(k.status)).map(knightCard).join("") || `<div class="empty-state">暂时没有可处理的骑士。</div>`}</div>
-    <div class="section-head"><h2>敌方领主</h2><span>可在战场击败、招降或迫使其离场</span></div><div class="officer-grid">${enemies.length ? enemies.map(o => officerCard(o, true)).join("") : `<div class="empty-state">北境已经没有仍举着敌旗的领主。</div>`}</div>
-    ${locked.length ? `<div class="section-head"><h2>尚未归附</h2><span>${locked.length}名领主仍在观望</span></div><div class="empty-state">占领新的城堡或接受敌方领主投降后，才能解锁新的领主。</div>` : ""}`;
-  panel.querySelectorAll("[data-recruit-officer]").forEach(button => button.addEventListener("click", () => recruitOfficer(button.dataset.recruitOfficer)));
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">COMMANDERS & KNIGHTS</span><h2>将领与骑士</h2><p>父亲死后，旧日臣属各自独立。打下他们的最后一座城，才能决定其去留；骑士随主君进退，只有无主的游侠才能用金币直接招募。</p>${metrics([[own.length, "我方领主"], [enemies.length, "在野叛臣"], [captured.length, "待处置俘虏"], [activeKnights(S).length, "我方骑士"]])}</section>
+    <div class="section-head"><h2>我方领主</h2><span>平均忠诚 ${averageLoyalty} · 治理封地与政务</span></div><div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}</div>`).join("")}</div>
+    <div class="section-head"><h2>北境叛臣</h2><span>${enemies.length}名仍在野 · 打服后可处置</span></div>
+    <div class="officer-grid">${enemies.length ? enemies.map(lord => {
+      const def = LORD_DEFS[lord.id];
+      const holdings = lordHoldings(S, lord.id);
+      const liege = def.liege ? LORD_DEFS[def.liege].name : "独立";
+      const status = lord.captured ? "已被俘，等待处置" : holdings.length ? `据守${holdings.map(id => TERRITORY_DEFS[id].name).join("、")}` : "已失去全部辖地";
+      return `<article class="officer-card enemy">${def.portrait ? `<img src="${def.portrait}" alt="${esc(def.name)}">` : `<div class="knight-mark">${esc(def.name.slice(0, 1))}</div>`}
+        <div class="card-copy"><div class="role-line"><h3>${esc(def.name)}</h3><span>${esc(def.title)}</span></div>
+        <p>${esc(def.oldTie || "")}<br>主君：${esc(liege)} · 抵抗 ${Math.round(lord.defiance ?? def.defiance)}</p>
+        <div class="loyalty-line"><span>${esc(status)}</span><b>${holdings.length}座城</b></div></div></article>`;
+    }).join("") : `<div class="empty-state">北境已经没有仍举着旧旗的叛臣。</div>`}</div>
+    <div class="section-head"><h2>骑士名册</h2><span>${activeKnights(S).length}名在列 · ${availableKnights(S).length}名游侠可招募 · 俘虏可处置</span></div><div class="knight-grid">${knights.filter(k => !["gone", "executed", "released", "hostile"].includes(k.status)).map(knightCard).join("") || `<div class="empty-state">暂时没有可处理的骑士。</div>`}</div>`;
   panel.querySelectorAll("[data-knight-action]").forEach(button => button.addEventListener("click", () => knightAction(button.dataset.knightId, button.dataset.knightAction)));
 }
 
@@ -3460,7 +3457,7 @@ if (typeof module !== "undefined" && module.exports) {
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2, migrateV2ToV3,
-    migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, recruitOfficer, KNIGHT_LIEGE
+    migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, KNIGHT_LIEGE
   };
 }
 
