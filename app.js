@@ -1,7 +1,7 @@
 "use strict";
 
 const SAVE_KEY = "iron-crown-lord-save-v1";
-const VERSION = 3;
+const VERSION = 4;
 const MAX_TURNS = 48;
 const TIME_CONFIG = {
   seasonDurationMs: 5 * 60 * 1000,
@@ -1509,7 +1509,6 @@ function migrateV1ToV2(raw, now = Date.now()) {
   const migrated = clone(raw);
   migrated.version = 2;
   delete migrated.ap;
-  migrated.clock = makeClock((migrated.turn || 0) * TIME_CONFIG.seasonDurationMs, now);
   migrated.jobs = Array.isArray(migrated.jobs) ? migrated.jobs : [];
   migrated.tech ||= clone(TECH_DEFAULTS);
   migrated.factions ||= {};
@@ -1561,24 +1560,45 @@ function migrateV2ToV3(raw) {
   return migrated;
 }
 
+function migrateV3ToV4(raw, now = Date.now()) {
+  const migrated = clone(raw);
+  migrated.version = 4;
+  // 由旧的 turn 反推 elapsedMs，保证季节与年份不跳变
+  const turn = Math.max(0, Math.round(migrated.turn ?? migrated.clock?.seasonIndex ?? 0));
+  migrated.clock = {
+    startedAt: now - turn * TIME_CONFIG.seasonDurationMs,
+    elapsedMs: turn * TIME_CONFIG.seasonDurationMs,
+    lastProcessedAt: now
+  };
+  delete migrated.turn;
+  delete migrated.seasonLocks;
+  delete migrated.campaignCooldown;
+  migrated.cooldowns = migrated.cooldowns && typeof migrated.cooldowns === "object" ? migrated.cooldowns : {};
+  migrated.timers = {};
+  Object.entries(TIMER_DEFS).forEach(([key, def]) => { migrated.timers[key] = { nextAt: now + def.intervalMs }; });
+  migrated.migrationLog = [...(migrated.migrationLog || []), "v3-to-v4"];
+  return migrated;
+}
+
 function migrateSave(raw, now = Date.now()) {
   if (!raw) return null;
   let migrated = clone(raw);
   if (migrated.version === 1 || migrated.version == null) migrated = migrateV1ToV2(migrated, now);
   if (migrated.version === 2) migrated = migrateV2ToV3(migrated);
+  if (migrated.version === 3) migrated = migrateV3ToV4(migrated, now);
   if (migrated.version !== VERSION) return null;
-  return hydrateV3(migrated);
+  return hydrateV4(migrated);
 }
 
 function hydrateState(raw) {
   return migrateSave(raw);
 }
 
-function hydrateV3(raw) {
+function hydrateV4(raw) {
   if (!raw || raw.version !== VERSION) return null;
-  raw.turn ??= 0;
   raw.selectedTerritoryId ||= "ravenstone";
-  raw.clock ||= makeClock((raw.turn || 0) * TIME_CONFIG.seasonDurationMs);
+  raw.clock ||= makeClock(0);
+  raw.timers ||= initTimers(raw, Date.now());
   raw.pauseState ||= null;
   raw.jobs = Array.isArray(raw.jobs) ? raw.jobs : [];
   raw.knowledge ??= 12;
@@ -3480,7 +3500,7 @@ if (typeof module !== "undefined" && module.exports) {
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
-    migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
+    migrateSave, migrateV3ToV4, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
   };
 }
 

@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const game = require("../app.js");
 
-assert.equal(game.VERSION, 3, "存档版本应升到 3");
+// 版本链：v1 → v2 → v3 → v4，任何一档旧存档都应能一路迁到最新
 
 // 构造一份 v2 存档：含 locked 旧臣、已招募的 maelis、无 lordId、无 liegeLordId
 const v2 = JSON.parse(JSON.stringify(game.createInitialState("旧档", "oath", "standard")));
@@ -17,7 +17,7 @@ v2.officers.push({ id: "elian", name: "伊莲·鸦羽", side: "neutral", loyalty
 
 const m = game.hydrateState(v2);
 assert.ok(m, "v2 存档必须能迁移");
-assert.equal(m.version, 3);
+assert.equal(m.version, 4, "v2 存档应一路迁到最新版");
 
 // 规则 1：非玩家可占领地都补上了 lordId
 for (const id of game.playableTerritoryIds().filter(id => m.territories[id].owner !== "player")) {
@@ -51,7 +51,7 @@ assert.equal(game.selfCheck(m).ok, true, `迁移后 selfCheck 失败：${JSON.st
 const v1 = JSON.parse(JSON.stringify(v2));
 v1.version = 1; v1.ap = 3; delete v1.clock; delete v1.jobs; delete v1.tech;
 const m1 = game.migrateSave(v1);
-assert.ok(m1 && m1.version === 3, "v1 应能连续迁移到 v3");
+assert.ok(m1 && m1.version === 4, "v1 应能连续迁移到最新版");
 assert.ok(!("ap" in m1));
 
 // —— 中盘存档：真实玩家的存档不是刚开局的，下面这些情形只有中盘档才会暴露 ——
@@ -83,5 +83,42 @@ assert.equal(mm.knights.find(k => k.id === "knight_9").liegeLordId, "player",
 assert.equal(mm.knights.find(k => k.id === "knight_10").liegeLordId, null, "已离场的骑士不应挂在任何主君名下");
 // 幂等
 assert.deepEqual(game.hydrateState(JSON.parse(JSON.stringify(mm))), mm, "迁移必须幂等");
+
+assert.equal(game.VERSION, 4, "存档版本应升到 4");
+
+const SEASON_MS = game.TIME_CONFIG.seasonDurationMs;
+// v3 中盘存档：有 turn、有 seasonLocks、无 timers、无 cooldowns
+const v3 = JSON.parse(JSON.stringify(game.createInitialState("v3中盘", "oath", "standard")));
+v3.version = 3;
+v3.turn = 19;
+v3.clock = { seasonIndex: 19, seasonStartedAt: Date.now(), seasonEndsAt: Date.now() + SEASON_MS, lastProcessedAt: Date.now() };
+v3.seasonLocks = { "city_wolfden_scout": 1 };
+delete v3.timers; delete v3.cooldowns;
+
+const m4 = game.hydrateState(v3);
+assert.ok(m4, "v3 存档必须能迁移");
+assert.equal(m4.version, 4);
+assert.equal(game.turnOf(m4), 19, "迁移后派生 turn 应与迁移前一致");
+assert.equal(game.seasonOf(m4).id, game.SEASONS[19 % 4].id, "季节不应跳变");
+assert.equal(game.yearOf(m4), Math.floor(19 / 4) + 1, "年份不应跳变");
+assert.equal(m4.turn, undefined, "turn 不应再作为存储字段保留");
+assert.equal(m4.seasonLocks, undefined, "seasonLocks 应被删除");
+assert.deepEqual(Object.keys(m4.timers).sort(), ["aiCrown", "aiRiver", "aiWolf", "events", "season"]);
+assert.ok(m4.cooldowns && typeof m4.cooldowns === "object");
+assert.equal(game.selfCheck(m4).ok, true, `迁移后 selfCheck 失败：${JSON.stringify(game.selfCheck(m4).errors)}`);
+
+// 进行中的任务剩余时间不应因迁移而跳变
+const v3b = JSON.parse(JSON.stringify(v3));
+const futureEnd = Date.now() + 25000;
+v3b.jobs = [{ id: "job_x", type: "BUILD", territoryId: "ravenstone", startedAt: Date.now(), endAt: futureEnd, status: "running", queueKey: "build:ravenstone", payload: { buildingType: "fields", targetLevel: 2 } }];
+const m4b = game.hydrateState(v3b);
+assert.equal(m4b.jobs[0].endAt, futureEnd, "迁移不应改动进行中任务的完成时刻");
+
+// v1 仍能一路迁到 v4
+const v1b = JSON.parse(JSON.stringify(v3));
+v1b.version = 1; v1b.ap = 3; delete v1b.clock; delete v1b.jobs; delete v1b.tech;
+const m1b = game.migrateSave(v1b);
+assert.ok(m1b && m1b.version === 4, "v1 应能连续迁移到 v4");
+assert.ok(!("ap" in m1b));
 
 console.log("migration tests passed");
