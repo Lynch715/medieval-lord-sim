@@ -236,6 +236,11 @@ MINOR_LORD_ROWS.forEach(([id, name, seat, faction, liege, archetypeId, knights],
   };
 });
 
+// 主城 → 领主 的反查表。territory.lordId 是运行时真相源，这里只提供开局初值。
+const SEAT_TO_LORD = Object.fromEntries(
+  Object.entries(LORD_DEFS).filter(([, d]) => d.tier !== "loyal" && d.seat).map(([id, d]) => [d.seat, id])
+);
+
 const KNIGHT_NAMES = [
   "阿尔德里克·铁掌", "贝伦·灰盾", "科尔文·长矛", "德里克·鸦眼", "埃尔莎·白鬃", "法恩·磨石",
   "加雷特·断弦", "赫尔曼·冷泉", "伊沃·黑马", "贾斯珀·松针", "凯尔·旧门", "莱娜·红披风",
@@ -917,6 +922,21 @@ const officer = (s, id) => s.officers.find(o => o.id === id);
 const ownedOfficers = s => s.officers.filter(o => o.side === "player");
 const ownTerritoryIds = s => Object.keys(s.territories).filter(id => TERRITORY_DEFS[id]?.playable !== false && s.territories[id].owner === "player");
 const owns = (s, id) => s.territories[id]?.owner === "player";
+
+function lordAt(s, territoryId) {
+  const lordId = s?.territories?.[territoryId]?.lordId;
+  return lordId ? (officer(s, lordId) || null) : null;
+}
+
+// 辖地由 territories 派生，不单独存储，因此永远不会和地图对不上。
+function lordHoldings(s, lordId) {
+  return Object.keys(s?.territories || {}).filter(id => s.territories[id].lordId === lordId);
+}
+
+function lordVassals(s, lordId) {
+  return (s?.officers || []).filter(o => LORD_DEFS[o.id]?.liege === lordId && o.side !== "player" && o.side !== "gone");
+}
+
 const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= s.turn;
 
 function cityActionLockKey(id, action) { return `city_${id}_${action}`; }
@@ -1368,6 +1388,7 @@ function createInitialState(name, startingStyle, difficulty) {
       devastated: 0,
       fiefHolder: null,
       garrison: emptyComposition(),
+      lordId: d.owner === "player" ? null : (SEAT_TO_LORD[id] || null),
       buildings: { fields: id === "ravenstone" ? 1 : id === "westmarch" ? 2 : 0, market: id === "ravenstone" || id === "blackthorn" ? 1 : 0, barracks: id === "ravenstone" || id === "ironhill" ? 1 : 0, walls: id === "ravenstone" ? 1 : 0, granary: id === "ravenstone" || id === "westmarch" ? 1 : 0, academy: 0, workshop: id === "ironhill" ? 1 : 0, roads: 0, watchtower: 0, temple: 0 }
     };
   });
@@ -3353,7 +3374,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, accrueResources, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES,
+    finishBattle, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
