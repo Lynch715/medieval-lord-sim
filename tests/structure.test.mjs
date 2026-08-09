@@ -29,6 +29,7 @@ for (const [id, def] of Object.entries(game.LORD_DEFS)) {
   assert.ok(Number.isFinite(def.defiance), `${id} 缺少 defiance`);
   assert.ok(Array.isArray(def.knights), `${id} 缺少 knights 数组`);
   if (def.liege) assert.equal(game.LORD_DEFS[def.liege].tier, "liege", `${id} 的主君必须是大叛臣`);
+  assert.equal(def.side, undefined, `${id} 不应在静态表里保留 side，势力唯一来源是 faction`);
 }
 assert.equal(game.LORD_DEFS.regent.routes.persuade, 0, "摄政公爵不可说服");
 assert.equal(game.seasonOf(fresh).id, "spring");
