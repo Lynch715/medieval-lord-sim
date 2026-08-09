@@ -1,7 +1,7 @@
 "use strict";
 
 const SAVE_KEY = "iron-crown-lord-save-v1";
-const VERSION = 2;
+const VERSION = 3;
 const MAX_TURNS = 48;
 const TIME_CONFIG = {
   seasonDurationMs: 5 * 60 * 1000,
@@ -1470,7 +1470,7 @@ function createInitialState(name, startingStyle, difficulty) {
 
 function migrateV1ToV2(raw, now = Date.now()) {
   const migrated = clone(raw);
-  migrated.version = VERSION;
+  migrated.version = 2;
   delete migrated.ap;
   migrated.clock = makeClock(migrated.turn || 0, now);
   migrated.jobs = Array.isArray(migrated.jobs) ? migrated.jobs : [];
@@ -1480,19 +1480,59 @@ function migrateV1ToV2(raw, now = Date.now()) {
   return migrated;
 }
 
+function migrateV2ToV3(raw) {
+  const migrated = clone(raw);
+  migrated.version = 3;
+  // 1. 按名册给每块非玩家可占领地补守将
+  Object.keys(migrated.territories || {}).forEach(id => {
+    const t = migrated.territories[id];
+    t.lordId = t.owner === "player" ? null : (SEAT_TO_LORD[id] || t.lordId || null);
+  });
+  // 2/3/4/5. 整理领主名册
+  migrated.officers = (migrated.officers || []).filter(o => {
+    const def = LORD_DEFS[o.id];
+    if (def) return true;
+    return o.side === "player";               // 已招募的旧浪人保留，未招募的移除
+  }).map(o => {
+    const def = LORD_DEFS[o.id];
+    const next = { ...o, rapport: o.rapport ?? 0, captured: o.captured ?? false, submitted: o.submitted ?? false, promisedFief: o.promisedFief ?? null };
+    if (!def) return { ...next, tier: "loyal", faction: "player", seat: null, liege: null, defiance: 0, routes: { force: 0, persuade: 0, bribe: 0 }, knights: [] };
+    // locked 旧臣转为其座城的叛臣
+    if (next.side === "locked") next.side = def.faction;
+    return { ...next, tier: def.tier, faction: def.faction, seat: def.seat, liege: def.liege, defiance: def.defiance, routes: { ...def.routes } };
+  });
+  // 名册里新增而存档里没有的领主（如摄政公爵、13 名附庸）补进去
+  Object.entries(LORD_DEFS).forEach(([id, def]) => {
+    if (migrated.officers.some(o => o.id === id)) return;
+    migrated.officers.push({
+      id, ...clone(def), side: def.faction, recruitable: false,
+      grievance: 0, merit: 0, injured: 0, fief: null,
+      rapport: 0, captured: false, submitted: false, promisedFief: null
+    });
+  });
+  // 6. 骑士补 liegeLordId
+  migrated.knights = (migrated.knights || []).map(k => ({
+    ...k,
+    liegeLordId: k.liegeLordId !== undefined ? k.liegeLordId : (KNIGHT_LIEGE[k.id] || null)
+  }));
+  migrated.migrationLog = [...(migrated.migrationLog || []), "v2-to-v3"];
+  return migrated;
+}
+
 function migrateSave(raw, now = Date.now()) {
   if (!raw) return null;
   let migrated = clone(raw);
   if (migrated.version === 1 || migrated.version == null) migrated = migrateV1ToV2(migrated, now);
+  if (migrated.version === 2) migrated = migrateV2ToV3(migrated);
   if (migrated.version !== VERSION) return null;
-  return hydrateV2(migrated);
+  return hydrateV3(migrated);
 }
 
 function hydrateState(raw) {
   return migrateSave(raw);
 }
 
-function hydrateV2(raw) {
+function hydrateV3(raw) {
   if (!raw || raw.version !== VERSION) return null;
   raw.turn ??= 0;
   raw.selectedTerritoryId ||= "ravenstone";
@@ -1520,8 +1560,7 @@ function hydrateV2(raw) {
   const uniqueOfficers = new Map();
   raw.officers.forEach(o => { if (o?.id && !uniqueOfficers.has(o.id)) uniqueOfficers.set(o.id, o); });
   raw.officers = [...uniqueOfficers.values()];
-  // 旧存档把可招募领主标成 locked；迁移后统一放入中立候选区，避免人物页看不到可招募对象。
-  raw.officers.forEach(o => { if (LORD_DEFS[o.id]?.recruitable && o.side === "locked") o.side = "neutral"; });
+  // 注：locked → neutral 的转换已由 migrateV2ToV3 负责，此处不再重复。
   const defaultKnights = createKnightRoster();
   raw.knights = Array.isArray(raw.knights) ? raw.knights : [];
   const knightMap = new Map(raw.knights.filter(knight => knight?.id).map(knight => [knight.id, knight]));
@@ -3401,8 +3440,8 @@ if (typeof module !== "undefined" && module.exports) {
     applyEventEffects, handleOfficerPolitics, interactionLocked, advanceSeason, checkDefeat,
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
-    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2,
-    migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, recruitOfficer
+    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2, migrateV2ToV3,
+    migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, recruitOfficer, KNIGHT_LIEGE
   };
 }
 
