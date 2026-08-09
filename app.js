@@ -311,8 +311,10 @@ function knightBattleMultiplier(s, selectedIds = null) {
   return 1 + Math.min(.24, coefficient);
 }
 
+// 只有无主的游侠骑士可以直接用金币招募。仍效忠某位叛臣的骑士必须先收服其主君，
+// 否则玩家可以绕开整条「收服领主」路线，花几十金把敌方骑士团买空。
 function availableKnights(s) {
-  return (s?.knights || []).filter(knight => knight.status === "available" && knight.side === "neutral");
+  return (s?.knights || []).filter(knight => knight.status === "available" && knight.side === "neutral" && !knight.liegeLordId);
 }
 
 const STAT_LABELS = { force: "武力", command: "统率", scheme: "谋略", govern: "治理", charm: "魅力" };
@@ -577,6 +579,7 @@ function applyCompletedJob(s, job) {
     if (!knight) return false;
     if (action === "recruit" || action === "surrender") {
       knight.side = "player";
+      knight.liegeLordId = "player";
       knight.status = "active";
       knight.loyalty = clamp(Math.round(job.payload?.loyalty || (action === "surrender" ? 42 : 58)));
       knight.recruitedAt = s.turn;
@@ -588,6 +591,7 @@ function applyCompletedJob(s, job) {
     if (action === "execute") {
       knight.status = "executed";
       knight.side = "gone";
+      knight.liegeLordId = null;
       const text = `${knight.name}被处死，敌方骑士团士气受挫。`;
       s.lastAction = { name: "处死骑士", text };
       log(s, "warn", text);
@@ -596,6 +600,7 @@ function applyCompletedJob(s, job) {
     if (action === "release") {
       knight.status = "released";
       knight.side = "neutral";
+      knight.liegeLordId = null;
       knight.captured = false;
       const text = `${knight.name}获释离开，今后可能在别处重新出现。`;
       s.lastAction = { name: "释放骑士", text };
@@ -3156,7 +3161,8 @@ function knightAction(id, actionId, state = S) {
   const knight = knightById(state, id);
   if (!knight || getRunningJob(state, `knight:${id}`)) return false;
   const allowed = {
-    recruit: knight.status === "available" && knight.side === "neutral",
+    // 只招得动无主游侠；有主君的骑士要先收服其主君（见 availableKnights）
+    recruit: knight.status === "available" && knight.side === "neutral" && !knight.liegeLordId,
     surrender: knight.status === "captured" && knight.side !== "player",
     execute: knight.status === "captured" && knight.side !== "player",
     release: knight.status === "captured" || (knight.status === "active" && knight.side === "player")
@@ -3395,7 +3401,7 @@ if (typeof module !== "undefined" && module.exports) {
     applyEventEffects, handleOfficerPolitics, interactionLocked, advanceSeason, checkDefeat,
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, updateWorldTime, processCompletedJobs, startJob, cancelJob, finishJob,
-    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2,
+    getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, advanceSeasonAuto, migrateV1ToV2,
     migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, recruitOfficer
   };
 }

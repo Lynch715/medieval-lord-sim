@@ -50,4 +50,21 @@ const claimed = Object.values(game.LORD_DEFS).flatMap(d => d.knights);
 assert.equal(new Set(claimed).size, claimed.length, "同一名骑士不能被两名领主认领");
 assert.ok(claimed.every(id => ks.knights.some(k => k.id === id)), "名册引用了不存在的骑士");
 
+// 归属不变式：side 与 liegeLordId 必须同进同退，否则 Task 8「处死领主 → 其骑士转死敌」
+// 会按 liegeLordId 把玩家自己招募来的骑士也一并变成死敌。
+const inv = game.createInitialState("归属不变式", "oath", "standard");
+const rover = inv.knights.find(k => !k.liegeLordId && k.status === "available");
+assert.ok(rover, "应存在可直接招募的无主游侠");
+assert.ok(game.knightAction(rover.id, "recruit", inv));
+game.processCompletedJobs(inv, inv.jobs.at(-1).endAt);
+const hired = inv.knights.find(k => k.id === rover.id);
+assert.equal(hired.side, "player");
+assert.equal(hired.liegeLordId, "player", "招募后 liegeLordId 必须改指玩家，不能停留在旧主君");
+
+// 仍效忠叛臣的骑士不能被金币直接买走，否则整条「收服领主」路线可以被绕开
+const sworn = inv.knights.find(k => k.liegeLordId && k.liegeLordId !== "player" && k.status === "available");
+assert.ok(sworn, "应存在效忠于叛臣的骑士");
+assert.equal(game.knightAction(sworn.id, "recruit", inv), false, `${sworn.id} 效忠 ${sworn.liegeLordId}，不应能被直接招募`);
+assert.ok(game.availableKnights(inv).every(k => !k.liegeLordId), "可招募名单里不应出现有主君的骑士");
+
 console.log("lords tests passed");
