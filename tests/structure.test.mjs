@@ -130,7 +130,7 @@ assert.equal(game.ACTIONS, undefined, "领主行动系统已整体移除");
 assert.equal(game.POLICIES, undefined, "领地政策系统已整体移除");
 
 const saveRoundTrip = game.hydrateState(JSON.parse(JSON.stringify(battleState)));
-assert.equal(saveRoundTrip.version, 3);
+assert.equal(saveRoundTrip.version, game.VERSION, "存档往返后应为当前版本");
 assert.equal(saveRoundTrip.territories.ashfield.owner, "player");
 const clockState = game.createInitialState("时钟测试", "oath", "standard");
 const clockStart = clockState.clock.lastProcessedAt;
