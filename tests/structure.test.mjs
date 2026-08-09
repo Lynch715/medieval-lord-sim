@@ -17,6 +17,10 @@ assert.deepEqual(game.ownTerritoryIds ? game.ownTerritoryIds(fresh).sort() : ["b
 assert.equal(fresh.officers.filter(o => o.side === "player").length, 1, "开局只应有玩家一名领主");
 assert.equal(fresh.officers.find(o => o.id === "player").title, "渡鸦家的王子");
 assert.equal(fresh.officers.find(o => o.id === "renard").side, "locked");
+assert.equal(fresh.officers.find(o => o.id === "regent").portrait, "assets/regent-duke.webp");
+assert.equal(fresh.officers.find(o => o.id === "roderic").portrait, "assets/roderic.webp");
+assert.equal(game.OFFICER_DEFS.regent.age, 52);
+assert.equal(game.OFFICER_DEFS.roderic.age, 44);
 assert.equal(game.seasonOf(fresh).id, "spring");
 assert.equal(Object.keys(game.BUILDINGS).length, 10);
 assert.equal(game.BUILDING_MAX_LEVEL, 5);

@@ -184,6 +184,7 @@ const CITY_ACTION_DURATIONS = { scout: 20 * 1000 };
 
 const OFFICER_DEFS = {
   player: { name: "罗恩", title: "渡鸦家的王子", portrait: "assets/player.webp", side: "player", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "合法继承人", traitText: "亲自出战时，本场军心最低按45点计算；只有收复旧土后，才有资格重新戴上王冠。", loyalty: 100, ambition: 55 },
+  regent: { name: "摄政公爵", title: "篡位摄政 · 王冠谷", portrait: "assets/regent-duke.webp", side: "crown", age: 52, stats: { force: 62, command: 86, scheme: 72, govern: 78, charm: 64 }, trait: "铁冠法统", traitText: "守住王冠谷，拒绝承认渡鸦家的继承权。", loyalty: 100, ambition: 68 },
   oswin: { name: "奥斯温·维尔", title: "苔原领主", portrait: "assets/oswin.webp", side: "player", stats: { force: 27, command: 51, scheme: 78, govern: 88, charm: 69 }, trait: "旧账如山", traitText: "主持领地时收入更稳定；拒绝他的越冬警告会积累不满。", loyalty: 76, ambition: 18 },
   renard: { name: "雷纳德·霍尔特", title: "黑石领主", portrait: "assets/renard.webp", side: "player", stats: { force: 86, command: 83, scheme: 43, govern: 31, charm: 47 }, trait: "破阵者", traitText: "强攻和骑兵冲击更有力；占尽优势后撤退会激怒他。", loyalty: 70, ambition: 48 },
   ysabel: { name: "伊莎贝尔·马伦", title: "白麦领主", portrait: "assets/ysabel.webp", side: "player", stats: { force: 30, command: 48, scheme: 80, govern: 92, charm: 72 }, trait: "精确到一粒麦", traitText: "随军可降低补给与撤退损失；主持财税能减少盘剥。", loyalty: 68, ambition: 34 },
@@ -191,7 +192,7 @@ const OFFICER_DEFS = {
   aveline: { name: "艾芙琳·多尔", title: "河望领主", portrait: "assets/aveline.webp", side: "river", stats: { force: 71, command: 80, scheme: 75, govern: 74, charm: 78 }, trait: "河地之主", traitText: "熟悉河谷作战与治理。若被逼到绝境，她会选择一个值得效忠的人。", loyalty: 52, ambition: 65 },
   bran: { name: "布兰·狼牙", title: "狼牙领主", portrait: "assets/bran.webp", side: "wolf", stats: { force: 92, command: 80, scheme: 41, govern: 37, charm: 61 }, trait: "只服强者", traitText: "森林和山地作战极强；只会向正面击败自己的人低头。", loyalty: 48, ambition: 58 },
   maelis: { name: "梅利斯·灰帆", title: "灰帆领主", portrait: "assets/ysabel.webp", side: "neutral", recruitable: true, recruitCost: 32, stats: { force: 42, command: 55, scheme: 86, govern: 68, charm: 71 }, trait: "行军账册", traitText: "降低远征补给，并能主持商路。", loyalty: 58, ambition: 42 },
-  roderic: { name: "罗德里克·石手", title: "石手领主", portrait: "assets/renard.webp", side: "neutral", recruitable: true, recruitCost: 38, stats: { force: 82, command: 78, scheme: 48, govern: 46, charm: 53 }, trait: "守关", traitText: "守城和山地作战更稳，适合镇守新领地。", loyalty: 55, ambition: 47 },
+  roderic: { name: "罗德里克·石手", title: "石手领主", portrait: "assets/roderic.webp", side: "neutral", recruitable: true, recruitCost: 38, age: 44, stats: { force: 82, command: 78, scheme: 48, govern: 46, charm: 53 }, trait: "守关", traitText: "守城和山地作战更稳，适合镇守新领地。", loyalty: 55, ambition: 47 },
   elian: { name: "伊莲·鸦羽", title: "鸦羽领主", portrait: "assets/edmund.webp", side: "neutral", recruitable: true, recruitCost: 42, stats: { force: 64, command: 72, scheme: 76, govern: 52, charm: 81 }, trait: "招降", traitText: "出征时更容易瓦解敌军，适合外交与攻心。", loyalty: 52, ambition: 63 }
 };
 
@@ -1331,7 +1332,7 @@ function createInitialState(name, startingStyle, difficulty) {
     };
   });
   const officers = Object.entries(OFFICER_DEFS).map(([id, d]) => {
-    const enemy = ["aveline", "bran"].includes(id);
+    const enemy = ["aveline", "bran", "regent"].includes(id);
     const side = id === "player" ? "player" : enemy ? d.side : d.recruitable ? "neutral" : "locked";
     return {
       id, ...clone(d), side, recruitable: id !== "player" && !enemy,
@@ -2052,6 +2053,7 @@ function defenderLeader(s, targetId) {
   const owner = s.territories[targetId].owner;
   if (owner === "wolf" && officer(s, "bran")?.side === "wolf") return officer(s, "bran");
   if (owner === "river" && officer(s, "aveline")?.side === "river") return officer(s, "aveline");
+  if (owner === "crown" && officer(s, "regent")?.side === "crown") return officer(s, "regent");
   return null;
 }
 
