@@ -1478,7 +1478,7 @@ function createInitialState(name, startingStyle, difficulty) {
     legitimacy: 35,
     training: 0,
     warWeariness: 0,
-    crisis: { famine: 0, debt: 0, unrest: 0, checkedTurn: -1 },
+    crisis: { famineMs: 0, unrestMs: 0 },
     territories, officers, knights: createKnightRoster(),
     clock: null,
     pauseState: null,
@@ -1852,6 +1852,12 @@ function accrueTo(s, at) {
   const decayPerSeason = Math.max(0, 2 - Math.ceil(techLevel(s, "field_doctrine") / 2));
   s.training = Math.max(0, (s.training || 0) - decayPerSeason * seconds / seasonSeconds);
 
+  // 危机按持续时长累计：条件成立就攒时间，一旦解除立刻清零。
+  // 玩家因此能实时补救，而不是眼睁睁等季界宣判。
+  s.crisis ||= { famineMs: 0, unrestMs: 0 };
+  s.crisis.famineMs = s.grain <= 0 ? s.crisis.famineMs + deltaMs : 0;
+  s.crisis.unrestMs = s.support < 12 ? s.crisis.unrestMs + deltaMs : 0;
+
   s.clock.elapsedMs += deltaMs;
   s.clock.lastProcessedAt = at;
   return seconds;
@@ -2070,10 +2076,7 @@ function fireTimer(s, key, at, rng, options = {}) {
     s.officers.forEach(o => { o.injured = 0; });
     s.warWeariness = 0;
     handleOfficerPolitics(s);
-    if (!options.offline) {
-      queueSeasonEvents(s);
-      checkDefeat(s);
-    }
+    if (!options.offline) queueSeasonEvents(s);
     return true;
   }
   if (def.faction) { runFactionTurn(s, def.faction, rng, at); return true; }
@@ -2109,6 +2112,7 @@ function advanceWorld(s, now = Date.now(), options = {}) {
   }
   accrueTo(s, horizon);
   jobs += processCompletedJobs(s, horizon, rng);
+  if (!options.offline) checkDefeat(s);
   checkCampaignEnd(s);
   // 超出补算上限的部分直接跳过，不结算也不累积，避免离开一整天后被补算淹没
   if (horizon < now) {
@@ -2697,18 +2701,16 @@ function runFactionTurn(s, factionId, rng = Math.random, now = Date.now()) {
   return null;
 }
 
+// 危机阈值集中在这里，配平时只改这一处。
+const CRISIS_LIMITS = { famineMs: 15 * 60 * 1000, unrestMs: 10 * 60 * 1000 };
+
 function checkDefeat(s) {
   if (s.ended) return true;
   if (!owns(s, "ravenstone")) { s.ended = true; s.endingReason = "fallen"; return true; }
-  s.crisis ||= { famine: 0, debt: 0, unrest: 0, checkedTurn: -1 };
-  if (s.crisis.checkedTurn !== turnOf(s)) {
-    s.crisis.famine = s.grain <= 0 ? s.crisis.famine + 1 : 0;
-    // 债务不再作为危机机制；保留旧存档字段只是为了兼容读取。
-    s.crisis.debt = 0;
-    s.crisis.unrest = s.support < 12 ? s.crisis.unrest + 1 : 0;
-    s.crisis.checkedTurn = turnOf(s);
-  }
-  if (s.crisis.famine >= 3 || s.crisis.unrest >= 2 || (armyTotal(s) <= 0 && s.morale < 10)) {
+  s.crisis ||= { famineMs: 0, unrestMs: 0 };
+  const starved = (s.crisis.famineMs || 0) >= CRISIS_LIMITS.famineMs;
+  const revolted = (s.crisis.unrestMs || 0) >= CRISIS_LIMITS.unrestMs;
+  if (starved || revolted || (armyTotal(s) <= 0 && s.morale < 10)) {
     s.ended = true;
     s.endingReason = "collapsed";
     return true;
@@ -3523,7 +3525,7 @@ if (typeof module !== "undefined" && module.exports) {
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, checkDefeat,
-    enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
+    enemyGuardCap, CRISIS_LIMITS, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
     migrateSave, migrateV3ToV4, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE

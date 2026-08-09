@@ -181,4 +181,26 @@ game.advanceWorld(dv, dvBase + SEASON * 2, { rng: () => .99 });
 assert.ok(dv.territories.ravenstone.devastated < 3, "破坏度应随时间消退");
 assert.equal(dv.territories.ravenstone.devastated, Math.round(dv.territories.ravenstone.devastated), "破坏度必须保持整数");
 
+// 危机按持续时长判定，玩家有机会实时补救，而不是等季界宣判
+const cr = game.createInitialState("危机", "oath", "standard");
+assert.deepEqual(Object.keys(cr.crisis).sort(), ["famineMs", "unrestMs"], "危机改为毫秒累计");
+const crBase = cr.clock.lastProcessedAt;
+// 亏空到即使累积一段时间后仍然见底，才算真正的饥荒
+cr.grain = -100000;
+game.accrueTo(cr, crBase + 10 * 60 * 1000);
+game.checkDefeat(cr);
+assert.equal(cr.ended, false, "饥荒 10 分钟不应立即崩溃");
+assert.ok(cr.crisis.famineMs >= 10 * 60 * 1000 - 1, `饥荒时长应在累计，实际 ${cr.crisis.famineMs}`);
+// 补上粮食后计时清零 —— 玩家有实时补救的余地
+cr.grain = 500;
+game.accrueTo(cr, crBase + 11 * 60 * 1000);
+assert.equal(cr.crisis.famineMs, 0, "粮食补上后饥荒计时应清零");
+
+const cr2 = game.createInitialState("饥荒崩溃", "oath", "standard");
+cr2.crisis.famineMs = 15 * 60 * 1000;
+cr2.grain = 0;
+game.checkDefeat(cr2);
+assert.equal(cr2.ended, true);
+assert.equal(cr2.endingReason, "collapsed");
+
 console.log("clock tests passed");
