@@ -200,6 +200,8 @@ const CITY_ACTION_DEFS = {
   scout: { name: "派出斥候", note: "花2金币，记录守军与地形两季。", cost: { gold: 2 } }
 };
 const CITY_ACTION_DURATIONS = { scout: 20 * 1000 };
+// 冷却用绝对到期时刻，而不是「本季已用」——季不再是结算单位，锁也不该按季走。
+const CITY_ACTION_COOLDOWNS = { scout: 90 * 1000 };
 
 const LORD_DEFS = {
   player:  { name: "罗恩", title: "渡鸦家的王子", portrait: "assets/player.webp", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "合法继承人", traitText: "亲自出战时，本场军心最低按45点计算；只有收复旧土后，才有资格重新戴上王冠。", loyalty: 100, ambition: 55, tier: "loyal",  faction: "player",  seat: "ravenstone", liege: null,   oldTie: "先王之子",                     defiance: 0,  routes: { force: 0, persuade: 0, bribe: 0 },        knights: ["knight_2"] },
@@ -992,13 +994,13 @@ function lordVassals(s, lordId) {
 
 const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= turnOf(s);
 
-function cityActionLockKey(id, action) { return `city_${id}_${action}`; }
+function cityActionLockKey(id, action) { return `${action}:${id}`; }
 
 function cityActionAvailable(s, id, action) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
   if (!d || !t || !CITY_ACTION_DEFS[action] || s.battleSession) return false;
-  if (cityActionJob(s, id) || (s.seasonLocks?.[cityActionLockKey(id, action)] || 0) >= 1) return false;
+  if (cityActionJob(s, id) || (s.cooldowns?.[cityActionLockKey(id, action)] || 0) > Date.now()) return false;
   if (action === "scout") return !owns(s, id);
   return false;
 }
@@ -1019,8 +1021,8 @@ function cityAction(s, id, action) {
   const cost = CITY_ACTION_DEFS[action].cost;
   s.gold -= cost.gold || 0;
   s.grain -= cost.grain || 0;
-  s.seasonLocks ||= {};
-  s.seasonLocks[cityActionLockKey(id, action)] = 1;
+  s.cooldowns ||= {};
+  s.cooldowns[cityActionLockKey(id, action)] = Date.now() + (CITY_ACTION_COOLDOWNS[action] || 60000);
   const job = startJob(s, {
     type: "CITY_ACTION",
     territoryId: id,
@@ -1481,7 +1483,7 @@ function createInitialState(name, startingStyle, difficulty) {
     jobs: [],
     tech: clone(TECH_DEFAULTS),
     factions: {},
-    seasonLocks: {},
+    cooldowns: {},
     cityIntel: {},
     battles: 0, wins: 0, casualties: 0,
     lastAction: null,
@@ -1606,7 +1608,7 @@ function hydrateV3(raw) {
   const knightMap = new Map(raw.knights.filter(knight => knight?.id).map(knight => [knight.id, knight]));
   defaultKnights.forEach(knight => { if (!knightMap.has(knight.id)) knightMap.set(knight.id, knight); });
 raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight.status || "available", loyalty: Math.round(knight.loyalty || 50), force: Math.round(knight.force || 50), command: Math.round(knight.command || 45), scheme: Math.round(knight.scheme || 45) }));
-  raw.seasonLocks ||= {};
+  raw.cooldowns ||= {};
   raw.flags ||= {};
   raw.flags.firstWinter ??= false;
   raw.flags.cousinDemand ??= false;
@@ -3478,7 +3480,7 @@ if (typeof module !== "undefined" && module.exports) {
     enemyGuardCap, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
-    migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, KNIGHT_LIEGE
+    migrateSave, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
   };
 }
 

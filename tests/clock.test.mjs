@@ -125,4 +125,15 @@ for (let i = 0; i < firesPerSeason; i++) game.runFactionTurn(acc, "wolf", () => 
 const gained = acc.factions.wolf.gold - goldStart;
 assert.ok(Math.abs(gained - 10) < 0.5, `一季内累计增长应约为 10，实际 ${gained.toFixed(2)}`);
 
+// 冷却用时间戳，不再是「本季已用」
+const cd = game.createInitialState("冷却测试", "oath", "standard");
+assert.equal(cd.seasonLocks, undefined, "seasonLocks 应已删除");
+assert.deepEqual(cd.cooldowns, {}, "应改用 cooldowns");
+assert.ok(game.cityAction(cd, "wolfden", "scout"), "首次侦察应成功");
+game.processCompletedJobs(cd, cd.jobs.at(-1).endAt);
+assert.ok(cd.cooldowns["scout:wolfden"] > Date.now(), "侦察后应写入冷却到期时间");
+assert.equal(game.cityActionAvailable(cd, "wolfden", "scout"), false, "冷却期内不可再次侦察");
+cd.cooldowns["scout:wolfden"] = Date.now() - 1;
+assert.equal(game.cityActionAvailable(cd, "wolfden", "scout"), true, "冷却过期后应恢复");
+
 console.log("clock tests passed");
