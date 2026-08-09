@@ -1834,10 +1834,22 @@ function accrueTo(s, at) {
   const from = s.clock.lastProcessedAt;
   if (!Number.isFinite(at) || !(at > from)) return 0;
   const deltaMs = at - from;
-  const flow = resourceFlow(s, seasonOf(s));
   const seconds = deltaMs / 1000;
+  const seasonSeconds = TIME_CONFIG.seasonDurationMs / 1000;
+  const flow = resourceFlow(s, seasonOf(s));
   s.gold += flow.goldPerSecond * seconds;
+  // 仓储损耗已含在 netGrain 里（netGrain = 产出 − 消耗 − 损耗），
+  // 因此这里不能再单独扣一次，否则是重复计算。
   s.grain += flow.grainPerSecond * seconds;
+
+  // 知识：原本每季一次性 +（3 + 学宫总等级 + 驿站道路×2），改为按秒摊开
+  const academyLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.academy || 0), 0);
+  s.knowledge = (s.knowledge || 0) + (3 + academyLevels + techLevel(s, "relay_roads") * 2) * seconds / seasonSeconds;
+
+  // 训练度衰减
+  const decayPerSeason = Math.max(0, 2 - Math.ceil(techLevel(s, "field_doctrine") / 2));
+  s.training = Math.max(0, (s.training || 0) - decayPerSeason * seconds / seasonSeconds);
+
   s.clock.elapsedMs += deltaMs;
   s.clock.lastProcessedAt = at;
   return seconds;
@@ -2010,8 +2022,6 @@ function settleSeasonEconomy(s, options = {}) {
     s.gold += f.gold - f.goldCost;
     s.grain += f.grain - f.grainCost - f.spoilage;
   }
-  const academyLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.academy || 0), 0);
-  s.knowledge = Math.max(0, Math.round((s.knowledge || 0) + 3 + academyLevels + techLevel(s, "relay_roads") * 2));
   if (f.spoilage > 0) log(s, "warn", `粮仓容量只有${f.storageCap}，潮气、鼠害与转运损失吃掉了${f.spoilage}粮食。升级农田与磨坊可扩充仓储。`);
   if (s.grain < 0) { const deficit = Math.abs(s.grain); s.grain = 0; applyShortage(s, deficit); }
   if (s.support < 25) applyUnrest(s);
@@ -2042,7 +2052,6 @@ function fireTimer(s, key, at, rng, options = {}) {
     const endedSeason = SEASONS[(turnOf(s) + 3) % 4];
     settleSeasonEconomy(s, { resourcesAlreadyAccrued: true, season: endedSeason });
     s.officers.forEach(o => { o.injured = 0; });
-    s.training = Math.max(0, s.training - Math.max(0, 2 - Math.ceil(techLevel(s, "field_doctrine") / 2)));
     s.warWeariness = 0;
     handleOfficerPolitics(s);
     if (!options.offline) {
@@ -2900,7 +2909,7 @@ function renderAll() {
 
 function researchPanelHtml() {
   const queue = researchQueueJob(S);
-  return `<section class="research-panel"><div class="section-head"><h2>学堂与研究</h2><span>当前知识 ${Math.round(S.knowledge || 0)} · 全局仅限一个研究队列 · 每项科技三阶</span></div><div class="tech-grid">${Object.entries(TECH_DEFS).map(([branch, techs]) => `<article class="tech-branch"><div class="tech-branch-head"><b>${TECH_BRANCH_NAMES[branch]}</b><small>${techs.reduce((sum, tech) => sum + techLevel(S, tech.id), 0)} / ${techs.reduce((sum, tech) => sum + techMaxLevel(tech), 0)} 阶</small></div>${techs.map(tech => {
+  return `<section class="research-panel"><div class="section-head"><h2>学堂与研究</h2><span>当前知识 ${Math.floor(S.knowledge || 0)} · 全局仅限一个研究队列 · 每项科技三阶</span></div><div class="tech-grid">${Object.entries(TECH_DEFS).map(([branch, techs]) => `<article class="tech-branch"><div class="tech-branch-head"><b>${TECH_BRANCH_NAMES[branch]}</b><small>${techs.reduce((sum, tech) => sum + techLevel(S, tech.id), 0)} / ${techs.reduce((sum, tech) => sum + techMaxLevel(tech), 0)} 阶</small></div>${techs.map(tech => {
     const currentLevel = techLevel(S, tech.id);
     const maxLevel = techMaxLevel(tech);
     const nextLevel = currentLevel + 1;

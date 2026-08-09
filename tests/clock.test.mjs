@@ -136,4 +136,28 @@ assert.equal(game.cityActionAvailable(cd, "wolfden", "scout"), false, "冷却期
 cd.cooldowns["scout:wolfden"] = Date.now() - 1;
 assert.equal(game.cityActionAvailable(cd, "wolfden", "scout"), true, "冷却过期后应恢复");
 
+// 知识不再是季界一次性到账，而是按秒累积
+const kn = game.createInitialState("知识连续", "oath", "standard");
+const knBase = kn.clock.lastProcessedAt;
+const knStart = kn.knowledge;
+game.accrueTo(kn, knBase + SEASON / 2);
+assert.ok(kn.knowledge > knStart, "半季后知识应已增长，而不是等到季界");
+const halfGain = kn.knowledge - knStart;
+game.accrueTo(kn, knBase + SEASON);
+const fullGain = kn.knowledge - knStart;
+assert.ok(Math.abs(fullGain - halfGain * 2) < 0.01, `整季增量应约为半季的两倍，实际 ${halfGain} → ${fullGain}`);
+assert.ok(Math.abs(fullGain - 3) < 0.01, `开局每季知识应为 3，实际 ${fullGain.toFixed(3)}`);
+
+// 仓储损耗早已是连续的：forecast 的 netGrain 已经减去了 spoilage，
+// 而 grainPerSecond = netGrain / 季长。这里锁死它不得被重复扣第二次。
+const sp = game.createInitialState("损耗不重复扣", "oath", "standard");
+const spBase = sp.clock.lastProcessedAt;
+const spFlow = game.resourceFlow(sp);
+const spStart = sp.grain;
+game.accrueTo(sp, spBase + 10000);
+const spActual = sp.grain - spStart;
+const spExpected = spFlow.grainPerSecond * 10;
+assert.ok(Math.abs(spActual - spExpected) < 1e-6,
+  `粮食增量应恰好等于 grainPerSecond×秒数（损耗已含在其中），预期 ${spExpected.toFixed(4)} 实际 ${spActual.toFixed(4)}`);
+
 console.log("clock tests passed");
