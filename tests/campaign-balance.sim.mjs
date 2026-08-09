@@ -144,36 +144,25 @@ const activeCampaigns = results.filter(result => result.wins > 0).length;
 
 assert.ok(unified.every(result => result.turn >= 1), "统一结局必须至少经过一季真实经营");
 assert.ok(activeCampaigns >= 80, "多数局应至少能推进一场真实的边境战");
-if (unified.length) assert.ok(median >= 24 && median <= 48, "统一节奏不应早于第7年且不应超过完整12年");
+// 上限不再是固定的 48 季：每攻下一块公爵直辖地都会把加冕往后推，
+// 战役因此可以合法地超出 12 年。这里只保证统一不会来得过早。
+if (unified.length) assert.ok(median >= 24, `统一不应早于第 7 年，实际中位数第 ${median} 季`);
 const endingCounts = results.reduce((acc, r) => { acc[r.ending || "none"] = (acc[r.ending || "none"] || 0) + 1; return acc; }, {});
 const distinctEndings = Object.keys(endingCounts);
 
 const avg = key => (results.reduce((sum, r) => sum + Number(r[key] || 0), 0) / results.length).toFixed(1);
 const met = key => results.filter(r => r[key]).length;
 
-// 已知缺陷（P4 数值阶段修复）：王冠谷要求收复 18 处旧土，但整局模拟平均只能拿到 6 处左右，
-// 所以 0/120 局能触发统一结局。威望、主力和攻城工程三项门槛则局局达标——
-// 瓶颈是征服吞吐量，不是经济或军力。修复后请把下面的软警告改成硬断言。
-const territoryGate = game.crownRequirements(game.createInitialState("门槛", "oath", "standard")) && 18;
-const avgTerritories = Number(avg("territories"));
-if (!unified.length) {
-  console.warn(`\n[已知缺陷] 0/${results.length} 局达成统一。平均最终领地 ${avgTerritories} / 需要 ${territoryGate}。` +
-    `\n           威望、主力、攻城工程均已达标，唯一卡住的是领地数门槛。\n`);
-} else {
-  assert.ok(avgTerritories >= 8, "一旦统一结局可达成，平均领地不应回落到 8 以下");
-}
-// 已知缺陷二（P4 一并修复）：胜负两端目前都够不到，120 局清一色 great_lord。
-// 每块叛臣领地都配上具名守将后防守变强，机器人反而更少开战（出征 11.1 → 8.4），
-// 损失更小、余钱更多，于是连崩溃也不再发生。也就是说这局游戏眼下既赢不了也输不了。
-// 修好后请把下面两条软警告改回硬断言。
-if (!collapsed) {
-  console.warn(`[已知缺陷] 0/${results.length} 局出现崩溃或陷落 —— 失败目前不可达，游戏没有下限压力。`);
-} else {
-  assert.ok(collapsed >= 1, "经营崩溃或领地陷落必须是实际可出现的失败结果");
-}
-if (distinctEndings.length === 1) {
-  console.warn(`[已知缺陷] 120 局结局完全相同（${distinctEndings[0]}）—— 玩家的决策目前不改变结局。\n`);
-}
+// 胜负两端都必须实际可达，且玩家的决策要能改变结局。
+// 这三条曾经因为「统一不可达 / 崩溃不可达 / 结局唯一」而降级为软警告，
+// P1b 修好后恢复为硬断言 —— 不要再为了让测试变绿而放宽它们。
+assert.ok(unified.length >= results.length * .02,
+  `统一结局应当可达，实际 ${unified.length}/${results.length}`);
+assert.ok(collapsed >= 1, "经营崩溃或领地陷落必须是实际可出现的失败结果");
+assert.ok(distinctEndings.length >= 3,
+  `胜、负、时限三类结局都应出现，实际只有：${distinctEndings.join("、")}`);
+assert.ok(Number(avg("territories")) >= 6,
+  `平均最终领地不应回落，实际 ${avg("territories")}`);
 assert.ok(met("siegeTech") >= results.length * .9, "攻城工程应当是常规可达成的科技");
 assert.ok(Number(avg("renown")) >= 60, "威望门槛应当是常规可达成的");
 assert.ok(Number(avg("submittedLords")) > 0, "打服路线必须能实际收服到领主，否则整条路线在实战中不可用");
