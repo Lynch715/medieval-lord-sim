@@ -36,4 +36,18 @@ assert.deepEqual(game.lordVassals(s, null), [], "lordVassals(null) 不应返回�
 assert.deepEqual(game.lordVassals(s, undefined), [], "lordVassals(undefined) 不应返回独立叛臣");
 assert.deepEqual(game.lordHoldings(s, null), [], "lordHoldings(null) 不应返回玩家领地");
 
+const ks = game.createInitialState("骑士依附", "oath", "standard");
+const beren = ks.knights.find(k => k.id === "knight_2");
+assert.equal(beren.liegeLordId, "player", "开局死忠骑士效忠玩家");
+assert.equal(beren.side, "player");
+assert.equal(beren.status, "active");
+assert.equal(ks.knights.find(k => k.id === "knight_9").liegeLordId, "bran");
+assert.equal(ks.knights.find(k => k.id === "knight_17").liegeLordId, "regent");
+const free = ks.knights.filter(k => k.liegeLordId === null);
+assert.deepEqual(free.map(k => k.id).sort(), ["knight_1", "knight_8"], "两名游侠骑士不依附任何领主");
+// 名册里每个 knights 条目都必须对应真实骑士，且不重复
+const claimed = Object.values(game.LORD_DEFS).flatMap(d => d.knights);
+assert.equal(new Set(claimed).size, claimed.length, "同一名骑士不能被两名领主认领");
+assert.ok(claimed.every(id => ks.knights.some(k => k.id === id)), "名册引用了不存在的骑士");
+
 console.log("lords tests passed");

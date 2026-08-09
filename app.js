@@ -248,17 +248,24 @@ const KNIGHT_NAMES = [
   "塞德里克·狼徽", "托马斯·铁钉", "乌尔里克·深林", "瓦尔德·白塔", "威尔·窄桥", "约恩·麦穗"
 ];
 
-const KNIGHT_DEFS = KNIGHT_NAMES.map((name, index) => ({
-  id: `knight_${index + 1}`,
-  name,
-  side: index < 8 ? "neutral" : index < 16 ? "wolf" : "river",
-  status: "available",
-  force: 48 + (index % 7) * 5,
-  command: 42 + (index % 6) * 6,
-  scheme: 38 + (index % 8) * 6,
-  loyalty: 52 + (index % 5) * 4,
-  recruitCost: 8 + (index % 4) * 3
-}));
+// 骑士归属由 LORD_DEFS[].knights 决定；liegeLordId 是运行时可变状态（可被招降、释放）。
+const KNIGHT_LIEGE = {};
+Object.entries(LORD_DEFS).forEach(([lordId, def]) => (def.knights || []).forEach(knightId => { KNIGHT_LIEGE[knightId] = lordId; }));
+
+const KNIGHT_DEFS = KNIGHT_NAMES.map((name, index) => {
+  const id = `knight_${index + 1}`;
+  const liegeLordId = KNIGHT_LIEGE[id] || null;
+  return {
+    id, name, liegeLordId,
+    side: liegeLordId ? LORD_DEFS[liegeLordId].faction : "neutral",
+    status: liegeLordId === "player" ? "active" : "available",
+    force: 48 + (index % 7) * 5,
+    command: 42 + (index % 6) * 6,
+    scheme: 38 + (index % 8) * 6,
+    loyalty: 52 + (index % 5) * 4,
+    recruitCost: 8 + (index % 4) * 3
+  };
+});
 
 function createKnightRoster() {
   return KNIGHT_DEFS.map(def => ({ ...clone(def), captured: false, recruitedAt: 0 }));
