@@ -2651,30 +2651,46 @@ function decisionView(s, decision) {
     const event = NPC_ARCS.find(item => item.id === decision.eventId);
     return event ? scriptedEventView(s, event, event.officerId) : null;
   }
-  if (decision.type === "conquest") {
-    const t = s.territories[decision.territoryId];
+  if (decision.type === "lord_capture") {
+    const lord = officer(s, decision.lordId);
     const d = TERRITORY_DEFS[decision.territoryId];
-    const hero = officer(s, decision.heroId);
+    if (!lord) return null;
+    const ransom = Math.round((lord.defiance || 0) * 4);
+    // 赎金与放逐都让他离场，但离场理由不同，正统性代价也不同。
+    const sendAway = () => { lord.captured = false; lord.side = "gone"; lord.liegeLordId = null; };
     return {
-      kicker: "战后处置", title: `${d.name}已经换了旗帜，接下来由谁收税？`, portrait: hero?.portrait || "assets/player.webp",
-      body: `<p>${d.name}已经换旗，但原有官员、村长和俘虏仍在等待新的管理安排。</p><p>你可以直接管理这块领地，获得全部收入；也可以交给家臣，只获得七成收入；还可以让当地村镇自己管理，快速提高稳定度。</p>`,
+      kicker: "战后处置", title: `${lord.name}被押到你面前`, portrait: lord.portrait || "assets/player.webp",
+      body: `<p>${esc(d.name)}已经换旗。${esc(lord.name)}——${esc(lord.oldTie || "父亲旧部")}——在城下被俘，等待你的处置。</p><p>他名下的骑士也在等同一个结果。</p>`,
       options: [
-        { name: "由你直接管理", note: "获得全部收入；稳定 +7，王室认可 +2，高功劳家臣可能不满", effect() { t.fiefHolder = null; t.stability = clamp(t.stability + 7); s.legitimacy = clamp(s.legitimacy + 2); if (hero && hero.merit >= 20) hero.grievance = clamp(hero.grievance + 6); s.style.wealth++; log(s, "info", `${d.name}改由你直接管理。`); } },
-        ...(hero && hero.side === "player" && hero.id !== "player" && !hero.fief ? [{ name: `交给${hero.name}管理`, note: "该家臣忠诚 +14；领地上缴七成收入，稳定 +13", effect() { t.fiefHolder = hero.id; t.stability = clamp(t.stability + 13); hero.fief = decision.territoryId; hero.loyalty = clamp(hero.loyalty + 14); hero.grievance = 0; hero.merit = Math.max(0, hero.merit - 12); s.legitimacy = clamp(s.legitimacy + (hero.id === "edmund" ? -2 : 1)); s.style.oath++; log(s, "good", `${hero.name}开始管理${d.name}。`); } }] : []),
-        { name: "让当地村镇自己管理", note: "领地上缴约八成收入；稳定 +18，民心 +5，王室认可 −2", effect() { t.fiefHolder = "charter"; t.stability = clamp(t.stability + 18); s.support = clamp(s.support + 5); s.legitimacy = clamp(s.legitimacy - 2); s.style.oath += 2; log(s, "good", `${d.name}开始由当地村镇自行管理。`); } }
-      ]
-    };
-  }
-  if (decision.type === "submission") {
-    const leader = officer(s, decision.faction === "wolf" ? "bran" : "aveline");
-    const isBran = leader.id === "bran";
-    return {
-      kicker: "敌方领主投降", title: `${leader.name}请求成为你的家臣`, portrait: leader.portrait,
-      body: `<p>${isBran ? "“你拿走了我的渡口和山关。狼牙不会向城墙下跪，但会跟随真正打赢我们的人。”" : "“河望家的旗已经落下。我可以把河地的账册和渡船交给你，也可以带着我的名字离开北境。”"}</p><p>接受投降可提高新领地稳定并获得一名家臣。收取赎金或放逐会让该人物永久离开。</p>`,
-      options: [
-        { name: "接受投降，让他成为家臣", note: "加入家臣；之前的事件会影响忠诚；长矛兵 +6，新领地稳定 +8", effect() { const original = LORD_DEFS[leader.id].loyalty; const base = 67; const relation = clamp(Math.round((leader.loyalty - original) * .75 - leader.grievance / 4), -12, 12); leader.side = "player"; leader.loyalty = clamp(base + relation); leader.grievance = Math.max(0, Math.round(leader.grievance * .35)); addUnits(s, "levy", 6); factionTerritories(s, "player").forEach(id => { if (TERRITORY_DEFS[id].owner === decision.faction) s.territories[id].stability = clamp(s.territories[id].stability + 8); }); s.style.oath++; log(s, "good", `${leader.name}加入渡鸦家，当前忠诚为${leader.loyalty}。`); } },
-        { name: "收取26金币，放他离开", note: "金币 +26，威望 +2；该人物永久离开", effect() { leader.side = "gone"; s.gold += 26; s.renown = clamp(s.renown + 2); s.style.wealth += 2; log(s, "info", `${leader.name}支付赎金后离开北境。`); } },
-        { name: "放逐他，禁止再次返回", note: "王室认可 +3，军心 +4；民心 −3", effect() { leader.side = "gone"; s.legitimacy = clamp(s.legitimacy + 3); s.morale = clamp(s.morale + 4); s.support = clamp(s.support - 3); s.style.iron += 2; log(s, "warn", `${leader.name}被放逐，旧旗帜在城门外烧成灰。`); } }
+        { name: "接受效忠，让他重新宣誓", note: "加入你的领主议会，忠诚 45；王室正统性 +4", effect() {
+          lord.side = "player"; lord.captured = false; lord.loyalty = 45;
+          lord.grievance = clamp((lord.grievance || 0) + 10); lord.submitted = true;
+          s.legitimacy = clamp(s.legitimacy + 4); s.style.oath++;
+          (s.knights || []).filter(k => k.liegeLordId === lord.id && k.status === "captured").forEach(k => {
+            k.status = "active"; k.side = "player"; k.liegeLordId = "player"; k.captured = false;
+          });
+          log(s, "good", `${lord.name}重新向渡鸦家宣誓效忠。`);
+        } },
+        { name: `收取赎金 ${ransom} 金币`, note: `金币 +${ransom}；王室正统性 −2；该领主离场`, effect() {
+          sendAway(); s.gold += ransom; s.legitimacy = clamp(s.legitimacy - 2); s.style.wealth += 2;
+          log(s, "info", `${lord.name}付清赎金后离开北境。`);
+        } },
+        { name: "放逐他，禁止再次返回", note: "军心 +5；王室正统性 −3", effect() {
+          sendAway(); s.morale = clamp(s.morale + 5); s.legitimacy = clamp(s.legitimacy - 3); s.style.iron++;
+          log(s, "warn", `${lord.name}被逐出北境。`);
+        } },
+        { name: "处死他，立威于北境", note: "邻近领主抵抗 −5；王室正统性 −10；其骑士永为死敌", effect() {
+          lord.captured = false; lord.side = "gone";
+          s.legitimacy = clamp(s.legitimacy - 10); s.style.iron += 2;
+          (s.knights || []).filter(k => k.liegeLordId === lord.id && k.status !== "gone").forEach(k => {
+            k.status = "hostile"; k.side = "gone"; k.captured = false;
+          });
+          (TERRITORY_DEFS[decision.territoryId].adj || []).forEach(id => {
+            const neighbour = lordAt(s, id);
+            if (neighbour) neighbour.defiance = Math.max(0, (neighbour.defiance || 0) - 5);
+          });
+          log(s, "bad", `${lord.name}在${d.name}城前被处死。消息传遍北境。`);
+        } }
       ]
     };
   }

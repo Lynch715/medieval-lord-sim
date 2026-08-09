@@ -117,4 +117,51 @@ assert.ok(!ms.pendingDecisions.some(d => d.type === "lord_capture" && d.lordId =
 const warnLogs = ms.log.filter(l => l.kind === "warn" && l.text.includes("布兰"));
 assert.ok(warnLogs.length > 0, "仍有辖地的领主应有退走日志");
 
+// Task 8: 被俘领主的四选一处置
+const cs = game.createInitialState("处置测试", "oath", "standard");
+cs.officers.find(o => o.id === "selma").captured = true;
+cs.territories.ashfield.owner = "player";
+cs.territories.ashfield.lordId = null;
+const capture = { type: "lord_capture", lordId: "selma", territoryId: "ashfield" };
+const view = game.decisionView(cs, capture);
+assert.ok(view, "应能渲染领主处置视图");
+assert.equal(view.options.length, 4, "应有四个处置选项");
+assert.equal(game.decisionView(cs, { type: "lord_capture", lordId: "查无此人" }), null, "找不到领主时应返回 null 而非崩溃");
+
+const fork = () => JSON.parse(JSON.stringify(cs));
+
+// 选项一：接受效忠。被俘的骑士随之归入麾下，且 liegeLordId 必须改指玩家
+const submitState = fork();
+submitState.knights.find(k => k.id === "knight_13").status = "captured";
+game.decisionView(submitState, capture).options[0].effect();
+const joined = submitState.officers.find(o => o.id === "selma");
+assert.equal(joined.side, "player");
+assert.equal(joined.loyalty, 45, "打服的忠诚基线为 45");
+assert.equal(joined.captured, false);
+assert.equal(joined.submitted, true);
+const freedKnight = submitState.knights.find(k => k.id === "knight_13");
+assert.equal(freedKnight.side, "player");
+assert.equal(freedKnight.liegeLordId, "player", "随主君归降的骑士必须改挂玩家");
+
+// 选项二：收赎金，金额随抵抗值而定
+const ransomState = fork();
+const goldBefore = ransomState.gold;
+const expectedRansom = Math.round(ransomState.officers.find(o => o.id === "selma").defiance * 4);
+game.decisionView(ransomState, capture).options[1].effect();
+assert.equal(ransomState.gold, goldBefore + expectedRansom, "赎金应为抵抗值×4");
+assert.equal(ransomState.officers.find(o => o.id === "selma").side, "gone");
+
+// 选项四：处死 —— 正统性重挫，其骑士永为死敌，邻近领主抵抗下降
+const executeState = fork();
+executeState.knights.find(k => k.id === "knight_13").status = "captured";
+const legitBefore = executeState.legitimacy;
+const neighbourBefore = executeState.officers.find(o => o.id === "otto").defiance;
+game.decisionView(executeState, capture).options[3].effect();
+assert.equal(executeState.officers.find(o => o.id === "selma").side, "gone");
+assert.equal(executeState.legitimacy, legitBefore - 10, "处死扣 10 正统性");
+assert.equal(executeState.knights.find(k => k.id === "knight_13").status, "hostile", "其骑士转为死敌");
+assert.ok(executeState.officers.find(o => o.id === "otto").defiance < neighbourBefore, "相邻领主的抵抗值应下降");
+// 死敌骑士不得再被招募
+assert.equal(game.knightAction("knight_13", "recruit", executeState), false, "死敌骑士不应还能被招募");
+
 console.log("lords tests passed");
