@@ -173,6 +173,15 @@ TERRITORY_DEFS.blackthorn.gold = 7; TERRITORY_DEFS.blackthorn.grain = 16;
 TERRITORY_DEFS.westmarch.gold = 5; TERRITORY_DEFS.westmarch.grain = 30;
 TERRITORY_DEFS.ironhill.gold = 15; TERRITORY_DEFS.ironhill.grain = 8;
 
+// 邻接必须对称。EXTRA_TERRITORIES 里的节点各自声明了邻居，但 7 个原始核心节点
+// 的 adj 从未反向补回；而 attackableTerritories 读的是出发地的 adj，
+// 结果是从核心领地打不到任何扩展领地——24 块可占领地里只有 10 块真正可达。
+Object.entries(TERRITORY_DEFS).forEach(([id, d]) => {
+  d.adj.forEach(nb => {
+    if (TERRITORY_DEFS[nb] && !TERRITORY_DEFS[nb].adj.includes(id)) TERRITORY_DEFS[nb].adj.push(id);
+  });
+});
+
 const playableTerritoryIds = () => Object.keys(TERRITORY_DEFS).filter(id => TERRITORY_DEFS[id].playable !== false);
 
 // 侦察是当前唯一的城市行动。使者、商站、断粮道和城约属于「说服路线」，

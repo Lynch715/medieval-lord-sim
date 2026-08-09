@@ -157,4 +157,28 @@ assert.equal(game.LORD_ARCHETYPES.loyalist.routes.force, 1.1, "routes 不应与�
 assert.equal(game.LORD_DEFS.harald.routes.force, 1.1, "同原型的其他领主不应被污染");
 game.LORD_DEFS.gilbert.routes.force -= 99;
 
+// 邻接必须对称：attackableTerritories 读的是出发地的 adj，
+// 单向声明会让目标永远无法被进攻。
+const asymmetric = [];
+for (const [id, d] of Object.entries(game.TERRITORY_DEFS)) {
+  for (const nb of d.adj) {
+    assert.ok(game.TERRITORY_DEFS[nb], `${id} 的邻居 ${nb} 不存在`);
+    if (!game.TERRITORY_DEFS[nb].adj.includes(id)) asymmetric.push(`${id}→${nb}`);
+  }
+}
+assert.deepEqual(asymmetric, [], `存在单向邻接，这些目标将永远无法被进攻：${asymmetric.join("、")}`);
+
+// 全部可占领地都必须从开局位置可达
+const reachable = new Set(["ravenstone", "blackthorn", "westmarch", "ironhill"]);
+for (let grew = true; grew; ) {
+  grew = false;
+  for (const id of [...reachable]) {
+    for (const nb of game.TERRITORY_DEFS[id].adj) {
+      if (!reachable.has(nb) && game.TERRITORY_DEFS[nb].playable !== false) { reachable.add(nb); grew = true; }
+    }
+  }
+}
+const unreachable = game.playableTerritoryIds().filter(id => !reachable.has(id));
+assert.deepEqual(unreachable, [], `这些可占领地从开局位置永远打不到：${unreachable.join("、")}`);
+
 console.log("structure tests passed");
