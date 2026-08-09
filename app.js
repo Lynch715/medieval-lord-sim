@@ -2,7 +2,9 @@
 
 const SAVE_KEY = "iron-crown-lord-save-v1";
 const VERSION = 4;
-const MAX_TURNS = 48;
+// 加冕记在游戏时间（elapsedMs）上而非真实时间，这样暂停与离线都不会让公爵偷跑。
+const CORONATION_AT_MS = 48 * 5 * 60 * 1000;      // 12 游戏年
+const CORONATION_DELAY_MS = 20 * 60 * 1000;       // 每拿下一块公爵直辖地推迟 20 分钟
 const TIME_CONFIG = {
   seasonDurationMs: 5 * 60 * 1000,
   logicTickMs: 1000,
@@ -1501,6 +1503,7 @@ function createInitialState(name, startingStyle, difficulty) {
     training: 0,
     warWeariness: 0,
     crisis: { famineMs: 0, unrestMs: 0 },
+    coronation: { atElapsedMs: CORONATION_AT_MS, delayedMs: 0, delayedBy: [] },
     territories, officers, knights: createKnightRoster(),
     clock: null,
     pauseState: null,
@@ -2107,13 +2110,31 @@ function fireTimer(s, key, at, rng, options = {}) {
   return false;
 }
 
-// 终局判定必须独立于任何计时器：turnOf 由 elapsedMs 派生，
-// 可能在两次计时器触发之间越过阈值，挂在 season 分支上会漏判。
+function coronationDeadlineMs(s) {
+  return (s?.coronation?.atElapsedMs ?? CORONATION_AT_MS) + (s?.coronation?.delayedMs || 0);
+}
+
+function coronationRemainingMs(s) {
+  return Math.max(0, coronationDeadlineMs(s) - (s?.clock?.elapsedMs || 0));
+}
+
+// 拿下公爵的直辖地会把加冕往后推。同一块地只算一次。
+function delayCoronation(s, territoryId) {
+  if (!s?.coronation || !DUCHY_HOLDINGS.includes(territoryId)) return false;
+  s.coronation.delayedBy ||= [];
+  if (s.coronation.delayedBy.includes(territoryId)) return false;
+  s.coronation.delayedBy.push(territoryId);
+  s.coronation.delayedMs = (s.coronation.delayedMs || 0) + CORONATION_DELAY_MS;
+  log(s, "good", `${TERRITORY_DEFS[territoryId].name}易主，摄政公爵的加冕大典被迫推迟。`);
+  return true;
+}
+
+// 终局判定必须独立于任何计时器：elapsedMs 会在两次计时器触发之间越过阈值。
 function checkCampaignEnd(s) {
   if (!s || s.ended) return false;
-  if (turnOf(s) < MAX_TURNS) return false;
+  if (coronationRemainingMs(s) > 0) return false;
   s.ended = true;
-  s.endingReason = ownTerritoryIds(s).length >= 5 ? "great_lord" : "minor_lord";
+  s.endingReason = "crowned";
   return true;
 }
 
@@ -2576,6 +2597,7 @@ function finishBattle(s, outcome, rng = Math.random) {
       Object.keys(UNIT_DEFS).forEach(type => { territoryGarrison(s, targetId)[type] += moved[type]; });
     }
     t.owner = "player";
+    delayCoronation(s, targetId);
     t.stability = 45;
     t.guard = Math.max(10, 8 + garrisoned);
     t.devastated = 2;
@@ -2913,7 +2935,7 @@ function renderTop() {
   const f = forecast(S);
   const flow = resourceFlow(S, season);
   $("chapterText").textContent = `第${yearOf(S)}年 · ${season.name}季`;
-  $("turnText").textContent = `${Math.min(turnOf(S) + 1, MAX_TURNS)} / ${MAX_TURNS}`;
+  $("turnText").textContent = formatDuration(coronationRemainingMs(S));
   $("goldText").textContent = Math.round(S.gold);
   $("grainText").textContent = Math.round(S.grain);
   if ($("knowledgeText")) $("knowledgeText").textContent = Math.round(S.knowledge || 0);
@@ -3379,8 +3401,7 @@ function endingCopy(s) {
   const style = currentStyle(s);
   if (s.endingReason === "fallen") return { title: "渡鸦堡陷落", text: "清晨，敌军从东门进入渡鸦堡。城墙上的守军已经不足一队，渡鸦旗在午前被扯下。" };
   if (s.endingReason === "collapsed") return { title: "领地崩溃", text: "没有敌军攻破城墙。军饷拖欠后，士兵先散去；冬粮见底后，村民开始逃亡。最后一次议事，没有家臣到场。" };
-  if (s.endingReason === "minor_lord") return { title: "守住渡鸦堡", text: "十二年结束时，渡鸦堡仍在你手中。你没有得到铁冠，但城墙得到了修补，四个村庄也熬过了最后一个冬天。" };
-  if (s.endingReason === "great_lord") return { title: "北境大领主", text: "十二年结束时，你已控制北境大半土地。王冠谷仍由摄政公爵占据，但王室的税吏和使者已经不敢绕过渡鸦堡行事。" };
+  if (s.endingReason === "crowned") return { title: "铁冠加于他人之头", text: "钟声从王冠谷传来时，你还在自己的城墙上。摄政公爵完成了加冕，渡鸦家的继承权从此只是一段无人过问的旧事。" };
   if (style === "oath") return { title: "守信领主统一北境", text: "王冠谷陷落后，旧领主、村镇代表和渡鸦家的功臣在大厅宣誓效忠。你曾答应保留的土地、旧规矩和封赏，大多得到了兑现。" };
   if (style === "iron") return { title: "强硬领主统一北境", text: "最后一面敌旗落下后，各地守军被重新编制，税册和军令统一送往渡鸦堡。北境很少再发生公开反抗，城堡地牢却始终没有空过。" };
   return { title: "经营领主统一北境", text: "战争结束后，七领使用了同一套税册和度量。商路重新开放，磨坊和集市按季向渡鸦堡纳税，你的金库足以维持一支常备军。" };
@@ -3410,7 +3431,7 @@ function showEnding(s) {
   $("endingPortrait").src = visual.src;
   $("endingPortrait").alt = visual.alt;
   const victory = s.endingReason === "unified";
-  $("endingBody").innerHTML = `<span class="eyebrow">${victory ? "THE IRON CROWN" : "THE CHRONICLE CLOSES"}</span><h1>${copy.title}</h1><div class="story-body"><p>${copy.text}</p><p class="ending-style"><b>本局统治风格：${STYLES[currentStyle(s)].short}</b></p></div><div class="ending-stats"><div><b>${Math.min(turnOf(s) + 1, MAX_TURNS)}</b><span>经过季度</span></div><div><b>${ownTerritoryIds(s).length}</b><span>最终领地</span></div><div><b>${s.wins}</b><span>胜场</span></div><div><b>${ownedOfficers(s).length}</b><span>最终家臣</span></div></div><button id="endingRestart" class="primary-btn" type="button">重新继承渡鸦堡</button>`;
+  $("endingBody").innerHTML = `<span class="eyebrow">${victory ? "THE IRON CROWN" : "THE CHRONICLE CLOSES"}</span><h1>${copy.title}</h1><div class="story-body"><p>${copy.text}</p><p class="ending-style"><b>本局统治风格：${STYLES[currentStyle(s)].short}</b></p></div><div class="ending-stats"><div><b>${turnOf(s) + 1}</b><span>经过季度</span></div><div><b>${ownTerritoryIds(s).length}</b><span>最终领地</span></div><div><b>${s.wins}</b><span>胜场</span></div><div><b>${ownedOfficers(s).length}</b><span>最终家臣</span></div></div><button id="endingRestart" class="primary-btn" type="button">重新继承渡鸦堡</button>`;
   $("endingRestart").addEventListener("click", () => {
     if (confirm("删除当前存档并重新开始？")) { deleteSave(); S = null; showMenu(); }
   });
@@ -3552,7 +3573,7 @@ if (typeof module !== "undefined" && module.exports) {
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, checkDefeat,
-    enemyGuardCap, CRISIS_LIMITS, DUCHY_HOLDINGS, CROWN_GATE_HOLDING, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
+    enemyGuardCap, CRISIS_LIMITS, DUCHY_HOLDINGS, CROWN_GATE_HOLDING, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, coronationRemainingMs, delayCoronation, CORONATION_AT_MS, CORONATION_DELAY_MS, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, researchCapacity, runningResearchJobs, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
     migrateSave, migrateV3ToV4, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE

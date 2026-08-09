@@ -221,4 +221,34 @@ const rsJobs = rs2.jobs.filter(j => j.status === "running" && j.type === "RESEAR
 assert.equal(rsJobs.length, 2);
 assert.equal(new Set(rsJobs.map(j => j.queueKey)).size, 2, "并发研究必须各自占用不同的队列键");
 
+// 加冕倒计时记在游戏时间上，暂停与离线都不会让公爵偷跑
+const co = game.createInitialState("加冕", "oath", "standard");
+assert.equal(co.coronation.atElapsedMs, 48 * SEASON, "初值为 12 游戏年");
+assert.equal(co.coronation.delayedMs, 0);
+assert.equal(game.coronationRemainingMs(co), 48 * SEASON, "开局剩余全部时长");
+
+const co2 = game.createInitialState("加冕到点", "oath", "standard");
+co2.clock.elapsedMs = 48 * SEASON;
+game.checkCampaignEnd(co2);
+assert.equal(co2.ended, true);
+assert.equal(co2.endingReason, "crowned", "到点未收复应为法统旁落");
+
+// 攻下公爵直辖地可推迟加冕
+const co3 = game.createInitialState("推迟加冕", "oath", "standard");
+game.delayCoronation(co3, "duchyroad");
+assert.equal(co3.coronation.delayedMs, 20 * 60 * 1000, "每块公爵直辖地推迟 20 分钟");
+game.delayCoronation(co3, "duchyroad");
+assert.equal(co3.coronation.delayedMs, 20 * 60 * 1000, "同一块地不应重复推迟");
+game.delayCoronation(co3, "ashfield");
+assert.equal(co3.coronation.delayedMs, 20 * 60 * 1000, "非公爵直辖地不推迟加冕");
+assert.ok(game.coronationRemainingMs(co3) > 48 * SEASON, "推迟后剩余时长应变长");
+
+// 旧的「打满 48 季」结局已删除
+assert.equal(game.MAX_TURNS, undefined, "MAX_TURNS 应已删除");
+const co4 = game.createInitialState("无 great_lord", "oath", "standard");
+co4.clock.elapsedMs = 48 * SEASON;
+game.checkCampaignEnd(co4);
+assert.notEqual(co4.endingReason, "great_lord");
+assert.notEqual(co4.endingReason, "minor_lord");
+
 console.log("clock tests passed");

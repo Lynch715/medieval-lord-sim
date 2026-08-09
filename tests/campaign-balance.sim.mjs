@@ -104,7 +104,7 @@ function run(seed) {
   let now = Date.now();
   Math.random = random;
   try {
-    while (!state.ended && game.turnOf(state) < 48) {
+    while (!state.ended && game.coronationRemainingMs(state) > 0) {
       game.processCompletedJobs(state, now);
       resolveDecisions(state);
       if (state.ended) break;
@@ -126,7 +126,7 @@ function run(seed) {
     Math.random = originalRandom;
   }
   return {
-    turn: Math.min(48, game.turnOf(state) + 1),
+    turn: game.turnOf(state) + 1,
     territories: game.playableTerritoryIds().filter(id => state.territories[id].owner === "player").length,
     wins: state.wins, battles: state.battles, ending: state.endingReason, casualties: state.casualties,
     renown: Math.round(state.renown), army: game.armyTotal(state, "army_1"),
