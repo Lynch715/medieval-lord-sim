@@ -63,8 +63,12 @@ function bestDraft(state) {
   const officers = state.officers.filter(o => o.side === "player" && !o.injured);
   const leaders = officers.sort((a, b) => (b.command + b.scheme) - (a.command + a.scheme)).slice(0, 3).map(o => o.id);
   const troops = game.armyTotal(state, "army_1");
+  const targets = game.attackableTerritories(state);
+  // 公爵直辖地是开城的前提，也能推迟加冕，够得着就优先打
+  const priority = targets.filter(id => game.DUCHY_HOLDINGS.includes(id));
+  const pool = priority.length ? priority : targets;
   let best = null;
-  for (const targetId of game.attackableTerritories(state)) {
+  for (const targetId of pool) {
     for (const plan of Object.keys(game.PLANS)) {
       const estimate = game.battleEstimate(state, targetId, leaders, troops, plan, "army_1");
       if (!best || estimate.ratio > best.ratio) best = { targetId, leaderIds: leaders, troops, plan, ratio: estimate.ratio };

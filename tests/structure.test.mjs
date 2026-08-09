@@ -181,4 +181,21 @@ for (let grew = true; grew; ) {
 const unreachable = game.playableTerritoryIds().filter(id => !reachable.has(id));
 assert.deepEqual(unreachable, [], `这些可占领地从开局位置永远打不到：${unreachable.join("、")}`);
 
+// 更严的可达性：王冠谷是终点，必须满足开城条件才能打。
+// 只能经由王冠谷抵达的领地，实际上永远打不到 —— 而开城条件又要求先拿下它们，
+// 就会形成死锁。这里排除 final 节点重新做一次 BFS。
+const openReach = new Set(["ravenstone", "blackthorn", "westmarch", "ironhill"]);
+for (let grew = true; grew; ) {
+  grew = false;
+  for (const id of [...openReach]) {
+    if (game.TERRITORY_DEFS[id].final) continue;          // 终点不能作为跳板
+    for (const nb of game.TERRITORY_DEFS[id].adj) {
+      const d = game.TERRITORY_DEFS[nb];
+      if (!openReach.has(nb) && d.playable !== false) { openReach.add(nb); grew = true; }
+    }
+  }
+}
+const gateBlocked = game.DUCHY_HOLDINGS.filter(id => !openReach.has(id));
+assert.deepEqual(gateBlocked, [], `开城条件要求的领地只能经由王冠谷抵达，形成死锁：${gateBlocked.join("、")}`);
+
 console.log("structure tests passed");

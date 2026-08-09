@@ -178,4 +178,22 @@ assert.ok(game.selfCheck(bad2).errors.some(e => e.includes("ravenstone")), "玩�
 // 金币直接招募领主的旧路线已随叛臣体系一并移除
 assert.equal(game.recruitOfficer, undefined, "recruitOfficer 已删除，收服领主只能靠打服/说服/收买");
 
+// 开城条件：先拔掉公爵的三块直辖地，而不是凑够任意数量的领地
+const cw = game.createInitialState("开城条件", "oath", "standard");
+cw.renown = 100;
+cw.tech.military.levels = { refined_iron: 1, longbow: 1, war_engineering: 1 };
+cw.tech.military.completed = ["refined_iron", "longbow", "war_engineering"];
+cw.armies[0].composition = { levy: 90, archers: 0, knights: 0, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 };
+game.syncTroops(cw);
+assert.equal(game.crownAccessMet(cw), false, "尚未切断公爵大道时不应开城");
+assert.ok(game.crownRequirementText(cw).includes("公爵大道"), `提示应点明缺的是公爵大道，实际：${game.crownRequirementText(cw)}`);
+
+cw.territories[game.CROWN_GATE_HOLDING].owner = "player";
+cw.territories[game.CROWN_GATE_HOLDING].lordId = null;
+assert.equal(game.crownAccessMet(cw), true, "切断公爵大道后应开城");
+
+// 另外两块直辖地不是开城前提，但仍应留在名册里用于推迟加冕
+assert.ok(game.DUCHY_HOLDINGS.includes(game.CROWN_GATE_HOLDING));
+assert.equal(game.DUCHY_HOLDINGS.length, 3, "三块直辖地仍是加冕推迟的目标");
+
 console.log("lords tests passed");

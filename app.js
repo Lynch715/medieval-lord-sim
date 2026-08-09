@@ -138,11 +138,13 @@ const EXTRA_TERRITORIES = {
   saltbridge: ["盐桥", "riverlands", 86, 73, "river", ["riverwatch", "crownvale"]],
   ashgate: ["灰门", "northern_lords", 64, 58, "plains", ["ashfield", "crossford"]],
   frostfield: ["霜原", "northern_lords", 78, 15, "plains", ["highpass", "crownvale"]],
-  crowstep: ["鸦阶", "northern_lords", 91, 27, "mountain", ["crownvale"]],
+  crowstep: ["鸦阶", "northern_lords", 91, 27, "mountain", ["crownvale", "frostfield"]],
   barrowhill: ["冢丘", "northern_lords", 8, 18, "hills", ["pineford", "ravenstone"]],
   greywood: ["灰林", "northern_lords", 92, 55, "forest", ["crownvale", "riverwatch"]],
   duchyroad: ["公爵大道", "royal_crown", 70, 37, "plains", ["crownvale", "highpass"]],
-  crownfield: ["王冠田", "royal_crown", 91, 38, "plains", ["crownvale"]],
+  // 王冠田与鸦阶原本只与王冠谷相邻，而王冠谷是必须先满足开城条件才能打的终点，
+  // 于是这两块地在任何设计下都永远打不到。各补一条通往最近的可达邻居的路。
+  crownfield: ["王冠田", "royal_crown", 91, 38, "plains", ["crownvale", "greywood"]],
   kingsford: ["王渡", "royal_crown", 92, 84, "river", ["crownvale", "riverwatch"]],
   ironhill: ["铁溪镇", "raven_march", 39, 58, "mountain", ["ravenstone", "ashfield"]],
   westmarch: ["麦田镇", "raven_march", 11, 72, "plains", ["ravenstone", "crossford"]],
@@ -485,9 +487,16 @@ function canResearch(s, branch, techId) {
   return s.knowledge >= cost.knowledge && s.gold >= cost.gold;
 }
 
+// 公爵的三块直辖地。三块分处三个方向、各自躲在一条长廊后面，
+// 要求全部到手等于三场独立的远征——实测机器人平均只能拿到 0.39 块。
+// 因此开城只卡「公爵大道」这条通往王城的路（叙事上也最顺），
+// 另外两块仍然有用：每拿下一块都会推迟加冕。
+const DUCHY_HOLDINGS = ["duchyroad", "crownfield", "kingsford"];
+const CROWN_GATE_HOLDING = "duchyroad";
+
 function crownRequirements(s) {
   return {
-    territories: ownTerritoryIds(s).length >= 18,
+    duchy: owns(s, CROWN_GATE_HOLDING),
     renown: (s?.renown || 0) >= 60,
     siege: techCompleted(s, "war_engineering"),
     army: armyTotal(s, "army_1") >= 80
@@ -502,7 +511,7 @@ function crownAccessMet(s) {
 function crownRequirementText(s) {
   const requirements = crownRequirements(s);
   const missing = [];
-  if (!requirements.territories) missing.push("收复18处旧土");
+  if (!requirements.duchy) missing.push(`切断${TERRITORY_DEFS[CROWN_GATE_HOLDING].name}`);
   if (!requirements.renown) missing.push("威望60");
   if (!requirements.siege) missing.push("完成攻城工程");
   if (!requirements.army) missing.push("王国主力80人");
@@ -2635,7 +2644,10 @@ function finishBattle(s, outcome, rng = Math.random) {
   const report = { targetId, targetName, outcome, losses: session.playerLoss, lossesByType, composition: clone(session.composition), enemyLoss: session.enemyLoss, persistentEnemyLoss, garrisoned, lostGold, lostGrain, history: clone(session.history), momentum: session.momentum, injured };
   s.lastBattle = report;
   s.battleSession = null;
-  if (ownTerritoryIds(s).length === playableTerritoryIds().length) s.pendingDecisions.push({ type: "iron_crown" });
+  // 攻下王冠谷就是胜利。原本要求「拥有全部 24 块可占领地」——
+  // 那与开城条件是两套完全不同的门槛，实测 7/120 局打进了王城却没人触发统一，
+  // 因为没人能把整张地图涂满。铁冠在王冠谷里，拿到它就是复国成功。
+  if (outcome === "win" && TERRITORY_DEFS[targetId]?.final) s.pendingDecisions.push({ type: "iron_crown" });
   checkDefeat(s);
   saveGame();
   return { ended: true, report };
@@ -3540,7 +3552,7 @@ if (typeof module !== "undefined" && module.exports) {
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, checkDefeat,
-    enemyGuardCap, CRISIS_LIMITS, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
+    enemyGuardCap, CRISIS_LIMITS, DUCHY_HOLDINGS, CROWN_GATE_HOLDING, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, researchCapacity, runningResearchJobs, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
     migrateSave, migrateV3ToV4, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
