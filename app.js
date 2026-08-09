@@ -203,6 +203,8 @@ const LORD_ARCHETYPES = {
 };
 
 // [id, 姓名, 主城, 势力, 主君, 原型, 初始骑士]
+// 位置元组，列顺序敏感。knight_1 与 knight_8 刻意不分配给任何领主——
+// 它们是无主的游侠骑士，测试会锁定这一点，不要当成漏填补上。
 const MINOR_LORD_ROWS = [
   ["gilbert", "吉尔伯特·铺石", "duchyroad",   "crown",   "regent",  "loyalist", ["knight_21"]],
   ["alwin",   "阿尔文·麦茬",   "crownfield",  "crown",   "regent",  "garrison", ["knight_22"]],
@@ -3351,7 +3353,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, accrueResources, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS,
+    finishBattle, enemyPressure, runAiTurn, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,

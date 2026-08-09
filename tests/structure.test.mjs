@@ -146,5 +146,15 @@ const seats = rebels.map(([, d]) => d.seat);
 assert.equal(new Set(seats).size, 20, "每名叛臣占据不同的主城");
 assert.ok(seats.every(id => game.TERRITORY_DEFS[id] && game.TERRITORY_DEFS[id].playable !== false), "叛臣主城必须是可占领地");
 assert.ok(!seats.includes("ravenstone"), "祖堡不能被叛臣占据");
+// MINOR_LORD_ROWS 是位置元组，列错位不抛错、只会静默产生错数据，所以逐行校验生成结果
+for (const [id, def] of rebels) {
+  assert.ok(def.knights.every(k => /^knight_\d+$/.test(k)), `${id} 的 knights 列疑似与其他列错位：${JSON.stringify(def.knights)}`);
+  if (def.archetype) assert.ok(game.LORD_ARCHETYPES[def.archetype], `${id} 的 archetype「${def.archetype}」不在原型表中`);
+}
+// routes 必须是原型的独立副本，否则改一名领主会污染同原型的其他领主
+game.LORD_DEFS.gilbert.routes.force += 99;
+assert.equal(game.LORD_ARCHETYPES.loyalist.routes.force, 1.1, "routes 不应与原型共享引用");
+assert.equal(game.LORD_DEFS.harald.routes.force, 1.1, "同原型的其他领主不应被污染");
+game.LORD_DEFS.gilbert.routes.force -= 99;
 
 console.log("structure tests passed");
