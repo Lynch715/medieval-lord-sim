@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import game, { bundledSource } from "./_game.mjs";
+import game, { bundledSource, sourceFiles } from "./_game.mjs";
 import { fileURLToPath } from "node:url";
 
 // 黑名单检查的是拼接后的全部源码，拆分后依然覆盖每一个文件
@@ -212,5 +212,23 @@ for (let grew = true; grew; ) {
 }
 const gateBlocked = game.DUCHY_HOLDINGS.filter(id => !openReach.has(id));
 assert.deepEqual(gateBlocked, [], `开城条件要求的领地只能经由王冠谷抵达，形成死锁：${gateBlocked.join("、")}`);
+
+// 文件清单出现在三处（sources.json / index.html / 打包脚本），必须完全一致。
+// 这正是本项目反复吃亏的那类「多处手工同步」，用断言钉死：少一个、多一个、
+// 顺序错了都会红，而不是等到浏览器里报 X is not defined 才发现。
+const scriptSrcs = [...html.matchAll(/<script src="([^"?]+)[^"]*"><\/script>/g)].map(m => m[1]);
+assert.deepEqual(scriptSrcs, sourceFiles,
+  `index.html 的 script 标签必须与 sources.json 完全一致（含顺序）。\n  标签：${scriptSrcs.join("、")}\n  清单：${sourceFiles.join("、")}`);
+
+const buildScript = readFileSync(fileURLToPath(new URL("../build_single.py", import.meta.url)), "utf8");
+assert.ok(buildScript.includes("sources.json"),
+  "build_single.py 必须从 sources.json 读取文件清单，不得自己写死一份");
+
+for (const file of sourceFiles) {
+  const text = readFileSync(fileURLToPath(new URL("../" + file, import.meta.url)), "utf8");
+  assert.ok(text.startsWith('"use strict";'),
+    `${file} 缺少 "use strict"：严格模式在经典脚本里逐脚本生效，漏一个会让该文件在浏览器里退回宽松模式，而拼接出的单文件版仍是严格的 —— 两条路径就此分叉`);
+  assert.equal(/^(import|export)\s/m.test(text), false, `${file} 不得含模块语法，浏览器是按经典脚本加载的`);
+}
 
 console.log("structure tests passed");
