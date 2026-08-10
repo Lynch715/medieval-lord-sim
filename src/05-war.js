@@ -476,7 +476,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
     t.stability = 42;
     t.guard = Math.max(18, Math.round(attack * .34));
     t.devastated = 2;
-    log(s, "bad", `${FACTIONS[faction].name}的${army.name}攻占${TERRITORY_DEFS[targetId].name}。`);
+    log(s, "bad", `${army.name}攻占${TERRITORY_DEFS[targetId].name}。`);
     if (targetId === "ravenstone") { s.ended = true; s.endingReason = "fallen"; }
     return "captured";
   }
@@ -485,7 +485,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
   s.grain -= grainLoss; s.gold -= goldLoss;
   t.stability = clamp(t.stability - 5);
   t.devastated = Math.max(t.devastated, 1);
-  log(s, "warn", `${FACTIONS[faction].name}的${army.name}袭扰${TERRITORY_DEFS[targetId].name}，抢走${grainLoss}粮食和${goldLoss}金币。`);
+  log(s, "warn", `${army.name}袭扰${TERRITORY_DEFS[targetId].name}，抢走${grainLoss}粮食和${goldLoss}金币。`);
   army.locationId = originId || army.locationId;
   return attack > defense * .92 ? "raided" : "repulsed";
 }
@@ -522,7 +522,10 @@ function runFactionTurn(s, factionId, rng = Math.random, now = Date.now()) {
   if (!army || turnOf(s) < 2) return null;
   const targets = aiTargets(s, factionId);
   if (!targets.length) return null;
-  const base = def.personality === "aggressive" ? .23 : def.personality === "cautious" ? .1 : .16;
+  // 出兵概率是这套 AI 里最敏感的旋钮：目标改按版图边界取之后，摄政与河望
+  // 从「几乎永远没有目标、根本不掷骰」变成每次决策都掷，实际出兵频率翻了几倍。
+  // 原值 .23/.1/.16 会把机器人胜率从 38% 压到 17%，这里按 0.7 折回来。
+  const base = def.personality === "aggressive" ? .16 : def.personality === "cautious" ? .07 : .11;
   // 先按「打玩家」的概率掷一次；选中中立小领时再按更低的概率掷第二次，
   // 于是蚕食中立地是长期的背景进程，而边境压力仍主要冲着玩家来。
   if (rng() > base * share) return null;
