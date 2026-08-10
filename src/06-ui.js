@@ -345,7 +345,9 @@ function territorySummary(s, id, attackable = []) {
   const lordLine = lord
     ? `<span class="city-lord"><b>${esc(lord.name)}</b> · ${esc(lordDef?.title || "")}<br>${esc(lordDef?.oldTie || "")} · 抵抗 ${Math.round(lord.defiance ?? 0)} · 说服阻力 ${Math.max(0, Math.ceil(lordResistance(s, lord.id)))}${lordDef?.liege ? ` · 主君 ${esc(LORD_DEFS[lordDef.liege].name)}` : " · 独立割据"}</span><br>`
     : "";
-  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br><span class="city-role">${territoryRoleHint(s, id)}</span><br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
+  const brief = `<div class="city-brief"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br><span class="city-role">${territoryRoleHint(s, id)}</span><br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${actionHtml}</div>`;
+  const ops = attack || castlePlan ? `<div class="city-ops">${attack}${castlePlan}</div>` : "";
+  return `<article class="${ops ? "has-ops" : ""}" style="--owner-color:${faction.color}">${brief}${ops}</article>`;
 }
 
 function terrainAdvice(targetId, composition) {

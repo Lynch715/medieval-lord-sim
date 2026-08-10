@@ -281,7 +281,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .city-inspector-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .city-relation { color: var(--gold-light); font-size: 12px; white-space: nowrap; }
 .city-intel { color: var(--green); }
-.city-actions { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-top: 9px; }
+.city-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 7px; margin-top: 9px; }
 .city-actions button { min-height: 54px; padding: 7px 8px; text-align: left; border: 1px solid var(--line-strong); background: rgba(200,169,106,.07); color: var(--gold-light); cursor: pointer; }
 .city-actions button:hover { background: rgba(200,169,106,.16); }
 .city-actions button:disabled { cursor: not-allowed; opacity: .42; filter: grayscale(.7); }
@@ -654,4 +654,14 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   /* 只藏领地那串「核心城堡 · 丘陵城堡 · 由你管理」，它在窄屏会把标题挤没；
      科技分支的 small 是「0 / 15 阶」进度，短而有用，必须留着。 */
   [data-fold-group="territory"] .fold-title small { display: none; }
+}
+
+/* 地图检视区：城情与出征配置并排，别把两块都摊成一条长条压在地图下面。
+   有出征配置时才分两栏；我方领地没有出征块，单栏即可。 */
+.map-inspector article.has-ops { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.1fr); gap: 12px; align-items: start; }
+.city-brief, .city-ops { min-width: 0; }
+.city-ops .castle-plan { margin-top: 0; }
+.city-ops .city-attack-btn { margin-bottom: 8px; }
+@media (max-width: 900px) {
+  .map-inspector article.has-ops { grid-template-columns: 1fr; }
 }
