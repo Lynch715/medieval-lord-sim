@@ -179,4 +179,17 @@ const resetDraft = () => {
   assert.equal(game.redeployArmy(s, "army_1", target, 1000), null, "整补中的军团不能调动");
 }
 
+// ── 驻扎军团：只算停在本地且不在移动中的 ──────────────────────────────
+{
+  resetDraft();
+  const s = fresh("驻扎");
+  const main = game.armyEntity(s, "army_1");
+  const here = main.locationId;
+  assert.equal(game.stationedArmies(s, here).length, 1, "待命的主力应算作驻扎");
+  main.status = "recovering";
+  assert.equal(game.stationedArmies(s, here).length, 1, "整补中的军团人还在本地，应算驻扎");
+  main.status = "marching";
+  assert.equal(game.stationedArmies(s, here).length, 0, "行军中的军团不在本地，不算驻扎");
+}
+
 console.log("army tests passed");

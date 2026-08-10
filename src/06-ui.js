@@ -218,6 +218,11 @@ function renderMap() {
     S.selectedTerritoryId = button.dataset.cityAttack;
     saveGame(); renderMap();
   }));
+  panel.querySelectorAll("[data-redeploy-army]").forEach(button => button.addEventListener("click", () => {
+    if (rejectDuringBattle(S)) return;
+    if (!redeployArmy(S, button.dataset.redeployArmy, button.dataset.redeployTarget)) { toast("该军团当前无法调动"); return; }
+    saveGame(); renderAll();
+  }));
   panel.querySelectorAll("[data-castle-launch]").forEach(button => button.addEventListener("click", () => {
     const targetId = button.dataset.castleLaunch;
     const army = armyEntity(S, "army_1");
@@ -365,6 +370,20 @@ function castleExpeditionHtml(s, id) {
     <button class="city-attack-btn" data-expedition-launch="${id}" ${disabled ? "disabled" : ""}>${locked ? "王冠谷 · 条件未满足" : !eligible.length ? "没有可出征军团" : s.grain < required ? "粮食不足" : `出征 · ${d.name}`}</button></section>`;
 }
 
+// 自家领地的调军入口。驻防信息也在这里显示 —— 玩家要能一眼看出
+// 这座城现在有没有野战部队撑着。
+function armyRedeployHtml(s, id) {
+  const stationed = stationedArmies(s, id);
+  const stationedLine = stationed.length
+    ? `<p class="redeploy-stationed">驻防：${stationed.map(army => `${esc(army.name)} ${compositionTotal(army.composition)}人${army.status === "recovering" ? "（整补中）" : ""}`).join("、")}</p>`
+    : `<p class="redeploy-stationed">当前没有军团驻防，只有守军把守。</p>`;
+  const movable = playerArmies(s).filter(army => army.status === "idle" && army.locationId !== id);
+  const buttons = movable.length
+    ? `<div class="expedition-army-list">${movable.map(army => `<button class="secondary-btn" data-redeploy-army="${army.id}" data-redeploy-target="${id}">调「${esc(army.name)}」来此 · ${compositionTotal(army.composition)}人 · 预计${formatDuration(marchDurationForDistance(s, army.locationId, id))}</button>`).join("")}</div>`
+    : "";
+  return `<section class="castle-plan"><div class="castle-plan-head"><b>调军驻防</b><span>${movable.length ? `${movable.length}支待命军团可调来` : "没有可调动的待命军团"}</span></div>${stationedLine}${buttons}</section>`;
+}
+
 function territorySummary(s, id, attackable = []) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
@@ -378,6 +397,7 @@ function territorySummary(s, id, attackable = []) {
   const actionHtml = cityJob ? `<div class="city-queue"><b>斥候行动进行中</b><span data-job-countdown="${cityJob.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(cityJob))}</span><small>完成后会记录这座城的基础军情。</small></div>` : actions.length ? `<div class="city-actions">${actions.map(action => `<button data-city-action="${action.id}" data-city-id="${id}" ${action.disabled ? "disabled" : ""}><b>${action.name}</b><small>${action.note}</small></button>`).join("")}</div>` : "";
   const attack = attackable.includes(id) ? `<button class="city-attack-btn" data-city-attack="${id}">打开出征配置</button>` : "";
   const castlePlan = t.owner !== "player" && d.playable !== false ? castleExpeditionHtml(s, id) : "";
+  const redeployPlan = t.owner === "player" ? armyRedeployHtml(s, id) : "";
   const settlementType = territoryRoleName(d.type);
   // 每块叛臣领地都有具名守将，地图是玩家挑目标的地方，必须能看见守的是谁。
   const lord = lordAt(s, id);
@@ -391,7 +411,7 @@ function territorySummary(s, id, attackable = []) {
   const seenGuard = reportedGuard(s, id);
   const guardLine = t.owner === "player" ? `守军 ${t.guard}` : `守军 ${seenGuard.text}`;
   const brief = `<div class="city-brief"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · ${guardLine} · 民心 ${Math.round(S.support)}<br><span class="city-role">${territoryRoleHint(s, id)}</span><br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${actionHtml}</div>`;
-  const ops = attack || castlePlan ? `<div class="city-ops">${attack}${castlePlan}</div>` : "";
+  const ops = attack || castlePlan || redeployPlan ? `<div class="city-ops">${attack}${castlePlan}${redeployPlan}</div>` : "";
   return `<article class="${ops ? "has-ops" : ""}" style="--owner-color:${faction.color}">${brief}${ops}</article>`;
 }
 
@@ -447,9 +467,10 @@ function armyCorpsHtml(s = S) {
   const draft = newArmyDraftView(s);
   const main = draft.main;
   const commanderOptions = draft.options;
+  const home = primaryTerritoryId(s);
   const canCreate = main?.status === "idle" && compositionTotal(main.composition) >= 20 && commanderOptions.length > 0;
   return `<section class="corps-panel"><div class="section-head"><h2>军团编制</h2><span>${armies.length}支军团 · 每支由王子或骑士带领</span></div>
-    <div class="corps-grid">${armies.map(army => { const commander = armyCommander(s, army); const canDisband = army.id !== "army_1" && army.status === "idle"; return `<article class="corps-card ${army.id === "army_1" ? "primary" : ""}"><div class="corps-card-head"><b>${esc(army.name)}</b><span>${army.id === "army_1" ? "主军" : "独立军团"}</span></div><p><strong>${esc(commander.person?.name || "未任命")}</strong> · ${commander.isKnight ? "骑士" : "王子"}<br>${TERRITORY_DEFS[army.locationId]?.name || "未知地点"} · ${armyStatusText(s, army)}</p><div class="stat-chips"><span>${compositionTotal(army.composition)}人</span><span>${compositionText(army.composition)}</span></div>${canDisband ? `<button class="ghost-btn" data-disband-army="${army.id}">解散军团</button>` : `<small class="corps-note">${army.id === "army_1" ? "主军不可解散" : "行军或交战中"}</small>`}</article>`; }).join("")}</div>
+    <div class="corps-grid">${armies.map(army => { const commander = armyCommander(s, army); const canDisband = army.id !== "army_1" && army.status === "idle"; return `<article class="corps-card ${army.id === "army_1" ? "primary" : ""}"><div class="corps-card-head"><b>${esc(army.name)}</b><span>${army.id === "army_1" ? "主军" : "独立军团"}</span></div><p><strong>${esc(commander.person?.name || "未任命")}</strong> · ${commander.isKnight ? "骑士" : "王子"}<br>${TERRITORY_DEFS[army.locationId]?.name || "未知地点"} · ${armyStatusText(s, army)}</p><div class="stat-chips"><span>${compositionTotal(army.composition)}人</span><span>${compositionText(army.composition)}</span></div>${army.status === "idle" && army.locationId !== home ? `<button class="ghost-btn" data-redeploy-army="${army.id}" data-redeploy-target="${home}">调回${TERRITORY_DEFS[home]?.name || "主城"}</button>` : ""}${canDisband ? `<button class="ghost-btn" data-disband-army="${army.id}">解散军团</button>` : `<small class="corps-note">${army.id === "army_1" ? "主军不可解散" : "行军或交战中"}</small>`}</article>`; }).join("")}</div>
     <div class="corps-create"><div><h3>组建新军团</h3><p>从渡鸦第一军团抽调兵力，至少留下10人。组建完成后，地图上可以单独出征或合军。</p></div>
       <div class="corps-create-grid"><label>军团名称<input id="newArmyName" maxlength="18" value="${esc(draft.name)}" placeholder="例如：黑棘骑士团"></label><label>带队指挥官<select id="newArmyCommander">${commanderOptions.map(option => `<option value="${option.id}" ${option.id === draft.commanderId ? "selected" : ""}>${esc(option.name)}</option>`).join("")}</select></label></div>
       <div class="corps-unit-picks">${Object.entries(UNIT_DEFS).map(([type, unit]) => `<label><span>${unit.name} · 主军${main?.composition[type] || 0}</span><input type="number" min="0" max="${main?.composition[type] || 0}" value="${draft.units[type]}" data-new-army-unit="${type}"></label>`).join("")}</div>
@@ -475,6 +496,11 @@ function bindArmyControls(panel) {
   }));
   panel.querySelectorAll("[data-disband-army]").forEach(button => button.addEventListener("click", () => {
     if (!disbandArmy(S, button.dataset.disbandArmy)) { toast("军团行军或交战中，暂时不能解散"); return; }
+    saveGame(); renderAll();
+  }));
+  panel.querySelectorAll("[data-redeploy-army]").forEach(button => button.addEventListener("click", () => {
+    if (rejectDuringBattle(S)) return;
+    if (!redeployArmy(S, button.dataset.redeployArmy, button.dataset.redeployTarget)) { toast("该军团当前无法调动"); return; }
     saveGame(); renderAll();
   }));
 }

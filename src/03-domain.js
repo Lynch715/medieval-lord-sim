@@ -444,6 +444,12 @@ function playerArmies(s) {
   return (s?.armies || []).filter(army => army.owner === "player");
 }
 
+// 驻扎在某地的玩家军团。行军中与交战中不算 —— 它们人不在这里。
+// 整补中算：疲兵也是兵，只是战力要打折（见 05-war.js 的 stationedPower）。
+function stationedArmies(s, territoryId) {
+  return (s?.armies || []).filter(army => army.owner === "player" && army.locationId === territoryId && ["idle", "recovering"].includes(army.status));
+}
+
 function nextArmyId(s) {
   const used = new Set((s?.armies || []).map(army => army.id));
   let index = 1;
