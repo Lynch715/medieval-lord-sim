@@ -5,7 +5,7 @@
 
 ## 一句话
 
-让主力能在自有版图内自由调动、让「驻扎」真的参与守城、让六个兵种各自排一条征兵队列。
+先修掉「表单每 5 秒被渲染抹掉」这个 bug，再让主力能在自有版图内自由调动、让「驻扎」真的参与守城、让六个兵种各自排一条征兵队列。
 
 ## 为什么现在改
 
@@ -16,6 +16,8 @@
 - 一次只能训练一个兵种，六种兵的编成实际上是「一种一种慢慢攒」
 
 结果是：中盘之后玩家在两次出征之间**无事可做**，而战线又是脆的。这次改动补上这段空白。
+
+第零部分是另一回事 —— 它是玩家在报上面三条时顺带报出的 bug：组建第二军团填不进兵力。查下来是每 5 秒一次的全面板重建抹掉了表单状态。**它必须排在最前**：后三部分要往同样这两个面板加 UI，地基不修好，新加的东西会踩同一个坑。
 
 ## 现状
 
@@ -49,6 +51,82 @@ defense = t.guard + walls*8 + watchtower*4 + stability*.2
 ### 征兵
 
 `canRecruitUnit()`（`src/04-state.js:583`）用 `getRunningJob(s, \`recruit:${territoryId}\`)` 判占用，`queueRecruitment()` 用同一个 key 建任务。同一块地同时只能有一条训练线，其余兵种卡显示「训练队列占用」。
+
+## 零、修掉表单被渲染抹掉（先做）
+
+### 症状与根因
+
+玩家报告：组建第二军团时兵力填进去就变 0，新招募的骑士也选不上。
+
+根因是**每 5 秒一次的全面板重建冲掉了只存在于 DOM 的表单状态**：
+
+```
+fireTimer(drift) 无条件 return true（04-state.js:773，间隔 5 秒）
+  → advanceWorld 返回 steps: 1
+  → updateWorldTime 见 steps 为真调 renderAll()（04-state.js:872）
+  → panel.innerHTML 整块重写，表单按硬编码默认值重新生成
+```
+
+实测（隔离到只让 drift 到期，手动调一次 `updateWorldTime`）：
+
+| 控件 | 触发前 | 一次 tick 后 |
+|---|---|---|
+| `[data-new-army-unit]` × 6 | `12,4,2,0,0,0` | `0,0,0,0,0,0` |
+| `#newArmyName` | 黑棘骑士团 | 第二军团 |
+| `#newArmyCommander` | knight_2 | knight_1 |
+
+**骑士列表本身没有 bug。** 新招募的骑士 `side="player"`、`status="active"`，`activeKnights()` 与 `canUseCommander()` 都正常，它确实在下拉框里 —— 只是 `<select>` 渲染时不带 `selected`，5 秒内被打回第一项。最后提交时兵力已归零，`createArmyFromMain()` 返回 false，toast 又同时提到「兵力、指挥官」，于是看起来像两个毛病。
+
+### 波及范围
+
+两个表单，同一个根因：
+
+1. **组建军团**（`armyCorpsHtml`）—— `#newArmyName`、`#newArmyCommander`、`[data-new-army-unit]` × 6
+2. **地图出征配置**（`castleExpeditionHtml`）—— `[data-expedition-army]` 勾选框、`[data-expedition-plan]`、`[data-expedition-grain]`。**这个没被报告，但它在核心循环里**：勾选每 5 秒回到「只勾第一支」，携带粮食回到最低值
+
+### 修法：沿用 `foldState` 的既定做法
+
+这个项目已经为 `<details>` 折叠解决过同一类问题。`02-core.js:15` 的注释就是在讲这个坑：
+
+> 必须存在渲染之外 —— 每次建造或研究都会 renderAll() 重建整个面板，
+> 状态若只留在 DOM 上，玩家一点建造，刚展开的那块地就自己合上了。
+
+当初只应用到了折叠，没应用到表单。照同一个形状加一个模块级 `uiDraft`，放 `src/02-core.js` 紧挨 `foldState`：
+
+```js
+const uiDraft = {
+  newArmy:    { name: "第二军团", commanderId: null, units: {} },
+  expedition: { targetId: null, armyIds: null, plan: null, grain: null }
+};
+```
+
+**不进存档**，与 `foldState` 同理：这是「界面上填了什么」，不是游戏进度，不该占存档字段、也不该有迁移。
+
+模板从 `uiDraft` 取值（number input 的 `value`、option 的 `selected`、checkbox 的 `checked`），控件的 `input` / `change` 事件写回 `uiDraft`。提交成功后清回默认值。
+
+### 读取时必须夹取
+
+草稿是上一秒的意图，世界这一秒可能已经变了。**渲染时一律按当前真实状态夹取，不能直接信草稿**：
+
+| 情况 | 处理 |
+|---|---|
+| 某兵种草稿数 > 主军现有数（打完仗掉了兵） | 夹到现有数 |
+| `commanderId` 指向的骑士已阵亡 / 已带别的军团 | 回退到选项列表第一项 |
+| `expedition.armyIds` 里的军团已不是 `idle` | 剔除；全空则回退到「勾选第一支合格军团」 |
+| `expedition.grain` 低于本次所需 / 高于现有存粮 | 夹进 `[所需, 现有存粮]` |
+| `expedition.targetId` 与当前查看的目标不同 | 整块草稿视为过期，用默认值 |
+
+不夹取的话，主力打完仗掉了兵，草稿里的旧数字会变成一次非法提交。
+
+### 为什么不用别的办法
+
+- **通用地在 renderAll 前后快照/还原 DOM 值** —— 代码更少，还能顺带覆盖以后新增的表单，但它会把「过期草稿」原样塞回去，上面那张夹取表里的每一种情况都会变成静默的非法提交
+- **降低渲染频率 / 表单获得焦点时跳过渲染** —— 只是让它更罕见，没有消除；而且 drift 改的守军与破坏度确实要显示，不渲染是另一个 bug
+- **把草稿存进 `S`** —— 会污染存档并需要迁移，`foldState` 当初就是为了避免这个才放在运行时
+
+### 可测性
+
+`armyCorpsHtml()` 与 `castleExpeditionHtml()` 都只返回字符串、不碰 DOM，导出后可以直接在 Node 里断言渲染结果。这是选这个方案而不是 DOM 快照方案的另一个理由 —— 后者只能靠浏览器验证。
 
 ## 一、军团调动
 
@@ -213,6 +291,12 @@ job.status === "running" && job.type === "RECRUIT"
 
 | 断言 | 覆盖 |
 |---|---|
+| 草稿设了兵力后，`armyCorpsHtml()` 渲染出 `value="12"` 而非 `value="0"` | 零 · 草稿存活 |
+| 草稿的 `commanderId` 在渲染结果里带 `selected` | 零 · 草稿存活 |
+| 草稿兵力超过主军现有数 → 渲染值被夹到现有数 | 零 · 夹取 |
+| 草稿指向的骑士已不可选 → 回退到第一项，不产出无效 `selected` | 零 · 夹取 |
+| 出征草稿的 `targetId` 与当前目标不符 → 用默认值 | 零 · 夹取 |
+| 出征草稿里已非 idle 的军团被剔除 | 零 · 夹取 |
 | 调往不相邻的自有领地 → 放行，时长按距离 | 一 · 放行规则 |
 | 调往敌方领地（无 battlePlan）→ 拒绝 | 一 · 放行规则 |
 | 调动任务不扣粮 | 一 · 成本 |
@@ -232,12 +316,12 @@ job.status === "running" && job.type === "RECRUIT"
 
 | 文件 | 改动 |
 |---|---|
-| `src/02-core.js` | 新增 `runningRecruitJob()`（与 `getRunningJob()` 为邻） |
+| `src/02-core.js` | 新增 `uiDraft`（紧挨 `foldState`）；新增 `runningRecruitJob()`（与 `getRunningJob()` 为邻） |
 | `src/03-domain.js` | 新增 `stationedArmies()` |
 | `src/04-state.js` | `startMarch()` 放行 redeploy；新增 `redeployArmy()`；`canRecruitUnit()` 与 `queueRecruitment()` 改用按兵种的占用判定 |
 | `src/05-war.js` | 新增 `STATIONED_DEFENSE_FACTOR` / `STATIONED_RECOVERING_FACTOR` 常量与 `stationedPower()`；`resolveAIAttack()` 并入驻扎战力、结算驻扎伤亡、城破后撤离 |
-| `src/06-ui.js` | `territorySummary()` 加驻防信息与调动入口；`armyCorpsHtml()` 加「调回渡鸦堡」；`armyRosterHtml()` 改为每兵种独立倒计时；绑定新按钮 |
-| `src/07-exports.js` | 导出 `redeployArmy`、`stationedArmies`、`stationedPower`、`runningRecruitJob` |
+| `src/06-ui.js` | `armyCorpsHtml()` / `castleExpeditionHtml()` 改为读写 `uiDraft` 并夹取；`territorySummary()` 加驻防信息与调动入口；`armyCorpsHtml()` 加「调回渡鸦堡」；`armyRosterHtml()` 改为每兵种独立倒计时；绑定新按钮与草稿事件 |
+| `src/07-exports.js` | 导出 `uiDraft`、`armyCorpsHtml`、`castleExpeditionHtml`、`redeployArmy`、`stationedArmies`、`stationedPower`、`runningRecruitJob` |
 | `tests/army.test.mjs` | 新建 |
 | `README.md` | 「已实现」补三条；「检查与封装」补 `tests/army.test.mjs` |
 
@@ -250,3 +334,4 @@ job.status === "running" && job.type === "RECRUIT"
 - **选择征兵城市** —— 主力调动已经覆盖了这个需求
 - **驻军影响 `battleEstimate`** —— 那是算敌方城池的防御，与玩家驻防无关
 - **AI 军团驻防加成** —— AI 只有一支军团且几乎总在移动，加了也看不出来；等 AI 有多军团再说
+- **删掉 `data-castle-launch` 死代码** —— 调查第零部分时发现 `renderMap()` 里 `[data-castle-launch]` 那整个处理器（`src/06-ui.js:221-241`）绑定的 `data-castle-unit` / `data-castle-knight` / `data-castle-plan` / `data-castle-grain` 在任何模板里都不存在，是旧城堡出征 UI 被 `castleExpeditionHtml()` 取代后忘了删的残留。已单独开任务，不混进这轮改动
