@@ -16,6 +16,15 @@ let hiddenAt = 0;
 // 状态若只留在 DOM 上，玩家一点建造，刚展开的那块地就自己合上了。
 const foldState = { territories: new Set(), branches: new Set(), sections: new Set(["own"]), seeded: false };
 
+// 表单草稿。与 foldState 同理放在运行时而不是存档里：这是「界面上填了什么」，
+// 不是游戏进度，不该占存档字段、也不该有迁移。
+// 同样必须存在渲染之外 —— drift 计时器每 5 秒让 renderAll() 重建整个面板，
+// 状态若只留在 DOM 上，玩家填到一半的组建军团表单就自己清零了。
+const uiDraft = {
+  newArmy: { name: "第二军团", commanderId: null, units: {} },
+  expedition: { targetId: null, armyIds: null, plan: null, grain: null }
+};
+
 const $ = id => typeof document === "undefined" ? null : document.getElementById(id);
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));
 const esc = value => String(value ?? "").replace(/[&<>'"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
