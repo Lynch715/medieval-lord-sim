@@ -299,7 +299,8 @@ function mapNode(id, attackable) {
   const locked = d.final && !crownAccessMet(S);
   const minor = d.playable === false;
   const settlementType = territoryRoleName(d.type);
-  const status = canAttack ? "可出征" : mine ? `我方${settlementType} · 守军${t.guard}` : minor ? "道路节点 · 可侦察" : locked ? "条件未满足" : `守军 ${t.guard}`;
+  const seen = reportedGuard(S, id);
+  const status = canAttack ? "可出征" : mine ? `我方${settlementType} · 守军${t.guard}` : minor ? "道路节点 · 可侦察" : locked ? "条件未满足" : `守军 ${seen.text}`;
   return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${minor ? "minor" : ""} ${canAttack ? "attackable" : ""} ${locked ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%">${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${status}</small></span></button>`;
 }
 
@@ -319,7 +320,11 @@ function castleExpeditionHtml(s, id) {
   // 实际战力会高于这里的下限，所以文案标注为「按当前预选」。
   const est = previewTroops ? battleEstimate(s, id, leaders, previewTroops, "steady", previewIds[0], preview) : null;
   const risk = previewTroops ? casualtyForecast(s, id, leaders, previewTroops, "steady", previewIds[0]) : null;
-  const forecastHtml = est ? `<div class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测（按当前预选）：<b>${est.label}</b><br>${battlePowerText(est.ratio)}${battleBreakdownText(est)}。预计伤亡${risk.low}—${risk.high}人。${battleMoraleText(est.effectiveMorale, s.morale)}<br>${terrainAdvice(id, preview)}${seasonOf(s).id === "winter" ? " 严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>` : "";
+  const planLevel = intelLevel(s, id);
+  const forecastHtml = !est ? ""
+    : planLevel === FOG_LEVELS.dark
+      ? `<div class="battle-estimate unknown">胜算预测：<b>情况不明</b><br>没有斥候回报，无法判断城内守军与布防。硬打要冒全军折在城下的风险 —— 先派一队斥候。<br>${terrainAdvice(id, preview)}</div>`
+      : `<div class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测（按当前预选${planLevel === FOG_LEVELS.border ? "，情报粗略" : ""}）：<b>${est.label}</b><br>${battlePowerText(est.ratio)}${battleBreakdownText(est)}。预计伤亡${risk.low}—${risk.high}人。${battleMoraleText(est.effectiveMorale, s.morale)}<br>${terrainAdvice(id, preview)}${seasonOf(s).id === "winter" ? " 严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>`;
   return `<section class="castle-plan"><div class="castle-plan-head"><b>从这里配置远征</b><span>${eligible.length ? `可用${eligible.length}支军团 · 预计${formatDuration(Math.min(...eligible.map(army => marchDurationForDistance(s, army.locationId, id))))}` : "没有在途或待命军团"}</span></div>
     <p class="expedition-note">选择一支军团单独出征，或勾选多支军团合军。每支军团会保留自己的兵种和指挥官。</p>
     ${forecastHtml}
@@ -334,7 +339,10 @@ function territorySummary(s, id, attackable = []) {
   const faction = FACTIONS[t.owner];
   const actions = cityActionOptions(s, id);
   const cityJob = cityActionJob(s, id);
-  const intel = cityIntelActive(s, id) ? "斥候情报有效" : "情报会随季节过时";
+  const intel = t.owner === "player" ? "自家领地"
+    : cityIntelActive(s, id) ? "斥候情报有效（两季后过期）"
+    : intelLevel(s, id) === FOG_LEVELS.border ? "与我方接壤，只能远远望见个大概"
+    : "未侦察 · 城内情况不明";
   const actionHtml = cityJob ? `<div class="city-queue"><b>斥候行动进行中</b><span data-job-countdown="${cityJob.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(cityJob))}</span><small>完成后会记录这座城的基础军情。</small></div>` : actions.length ? `<div class="city-actions">${actions.map(action => `<button data-city-action="${action.id}" data-city-id="${id}" ${action.disabled ? "disabled" : ""}><b>${action.name}</b><small>${action.note}</small></button>`).join("")}</div>` : "";
   const attack = attackable.includes(id) ? `<button class="city-attack-btn" data-city-attack="${id}">打开出征配置</button>` : "";
   const castlePlan = t.owner !== "player" && d.playable !== false ? castleExpeditionHtml(s, id) : "";
@@ -342,10 +350,15 @@ function territorySummary(s, id, attackable = []) {
   // 每块叛臣领地都有具名守将，地图是玩家挑目标的地方，必须能看见守的是谁。
   const lord = lordAt(s, id);
   const lordDef = lord ? LORD_DEFS[lord.id] : null;
-  const lordLine = lord
+  const level = intelLevel(s, id);
+  const lordLine = lord && level === FOG_LEVELS.dark
+    ? `<span class="city-lord city-fogged">城头挂着旗号，但看不清是谁在守 —— 派一队斥候过去。</span><br>`
+    : lord
     ? `<span class="city-lord"><b>${esc(lord.name)}</b> · ${esc(lordDef?.title || "")}<br>${esc(lordDef?.oldTie || "")} · 抵抗 ${Math.round(lord.defiance ?? 0)} · 说服阻力 ${Math.max(0, Math.ceil(lordResistance(s, lord.id)))}${lordDef?.liege ? ` · 主君 ${esc(LORD_DEFS[lordDef.liege].name)}` : " · 独立割据"}</span><br>`
     : "";
-  const brief = `<div class="city-brief"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br><span class="city-role">${territoryRoleHint(s, id)}</span><br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${actionHtml}</div>`;
+  const seenGuard = reportedGuard(s, id);
+  const guardLine = t.owner === "player" ? `守军 ${t.guard}` : `守军 ${seenGuard.text}`;
+  const brief = `<div class="city-brief"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · ${guardLine} · 民心 ${Math.round(S.support)}<br><span class="city-role">${territoryRoleHint(s, id)}</span><br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${actionHtml}</div>`;
   const ops = attack || castlePlan ? `<div class="city-ops">${attack}${castlePlan}</div>` : "";
   return `<article class="${ops ? "has-ops" : ""}" style="--owner-color:${faction.color}">${brief}${ops}</article>`;
 }

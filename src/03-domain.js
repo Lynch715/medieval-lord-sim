@@ -214,6 +214,38 @@ function bribeLord(s, lordId, promisedFief) {
 
 const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= turnOf(s);
 
+// 战争迷雾。此前 cityIntel 只控制一句「斥候情报有效／会过时」的文案，守军数字
+// 和守将资料始终可见 —— 斥候是纯装饰，派不派都一样。
+//
+// 现在只有三种情况看得见一座城的底细：
+//   1. 是自己的地
+//   2. 斥候情报还没过期（侦察后管两季）
+//   3. 与自家版图接壤 —— 边境上的城墙和旗号是瞒不住的，但只给个大概
+// 其余一律遮蔽。这样斥候才真正是「打之前先花 20 秒摸一摸」的决策。
+const FOG_LEVELS = { clear: "clear", border: "border", dark: "dark" };
+
+function intelLevel(s, id) {
+  if (!s || !TERRITORY_DEFS[id]) return FOG_LEVELS.dark;
+  if (s.territories?.[id]?.owner === "player") return FOG_LEVELS.clear;
+  if (cityIntelActive(s, id)) return FOG_LEVELS.clear;
+  const mine = new Set(ownTerritoryIds(s));
+  if ((TERRITORY_DEFS[id].adj || []).some(nb => mine.has(nb))) return FOG_LEVELS.border;
+  return FOG_LEVELS.dark;
+}
+
+// 遮蔽后对外给出的守军读数。接壤时给一个粗略区间，全黑时什么都不给。
+function reportedGuard(s, id) {
+  const level = intelLevel(s, id);
+  const guard = s.territories?.[id]?.guard ?? 0;
+  if (level === FOG_LEVELS.clear) return { known: true, text: String(Math.round(guard)) };
+  if (level === FOG_LEVELS.border) {
+    const step = 15;
+    const low = Math.max(0, Math.floor(guard / step) * step);
+    return { known: false, text: `约 ${low}–${low + step}` };
+  }
+  return { known: false, text: "未知" };
+}
+
 function cityActionLockKey(id, action) { return `${action}:${id}`; }
 
 function cityActionAvailable(s, id, action) {

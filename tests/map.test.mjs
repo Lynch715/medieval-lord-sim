@@ -113,4 +113,34 @@ const fresh = () => game.createInitialState("地图测试", "oath", "standard");
   }
 }
 
+
+
+// ── 战争迷雾：斥候必须真的有用 ────────────────────────────────────────
+// 此前 cityIntel 只控制一句「情报有效／会过时」的文案，守军数字和守将资料
+// 始终可见 —— 派不派斥候玩起来完全一样。这几条钉死三档可见度。
+{
+  const fog = game.createInitialState("迷雾", "oath", "standard");
+  const mine = Object.keys(fog.territories).filter(id => fog.territories[id].owner === "player");
+  assert.equal(game.intelLevel(fog, mine[0]), game.FOG_LEVELS.clear, "自己的地当然看得清");
+
+  // 与自家版图接壤：看得见个大概，但读数不是精确值
+  const border = game.attackableTerritories(fog)[0];
+  assert.equal(game.intelLevel(fog, border), game.FOG_LEVELS.border, `${border} 与我方接壤，应为粗略可见`);
+  const rough = game.reportedGuard(fog, border);
+  assert.equal(rough.known, false, "接壤只能看个大概，不该给精确守军");
+  assert.notEqual(rough.text, String(fog.territories[border].guard), "粗略读数不能恰好等于真实值");
+
+  // 远处全黑
+  assert.equal(game.intelLevel(fog, "crownvale"), game.FOG_LEVELS.dark, "隔着大半张图的王冠谷应当全黑");
+  assert.equal(game.reportedGuard(fog, "crownvale").text, "未知");
+
+  // 侦察之后转为精确，且会过期
+  fog.cityIntel.crownvale = game.turnOf(fog) + 2;
+  assert.equal(game.intelLevel(fog, "crownvale"), game.FOG_LEVELS.clear, "侦察后应当看得清");
+  assert.equal(game.reportedGuard(fog, "crownvale").text, String(fog.territories.crownvale.guard),
+    "侦察后给的必须是真实守军，否则斥候等于白派");
+  fog.cityIntel.crownvale = game.turnOf(fog) - 1;
+  assert.equal(game.intelLevel(fog, "crownvale"), game.FOG_LEVELS.dark, "情报过期后应当重新变黑");
+}
+
 console.log("map tests passed");
