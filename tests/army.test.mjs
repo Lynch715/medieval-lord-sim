@@ -297,4 +297,45 @@ const resetDraft = () => {
   assert.equal(main.status, "recovering", "撤离后应进入整补");
 }
 
+// ── 六个兵种各排各的队 ────────────────────────────────────────────────
+// 此前 queueKey 是 recruit:${领地}，同一块地同时只能训练一个兵种，
+// 其余兵种卡显示「训练队列占用」。放开后唯一的闸门是金币和粮食。
+{
+  resetDraft();
+  const s = fresh("并行征兵");
+  s.gold = 9999; s.grain = 9999;
+  const territoryId = game.recruitmentTerritoryId(s);
+  const first = game.queueRecruitment(s, "levy", territoryId, 1000);
+  assert.ok(first, "第一个兵种应能排队");
+  const second = game.queueRecruitment(s, "archers", territoryId, 1000);
+  assert.ok(second, "第二个兵种不该被第一个占用");
+  assert.notEqual(first.queueKey, second.queueKey, "两个兵种的 queueKey 必须不同");
+}
+
+// ── 同一兵种不能重复排队 ──────────────────────────────────────────────
+{
+  resetDraft();
+  const s = fresh("重复排队");
+  s.gold = 9999; s.grain = 9999;
+  const territoryId = game.recruitmentTerritoryId(s);
+  assert.ok(game.queueRecruitment(s, "levy", territoryId, 1000), "第一次应成功");
+  assert.equal(game.queueRecruitment(s, "levy", territoryId, 1000), null, "同一兵种不能同时排两条");
+}
+
+// ── 旧存档里的 RECRUIT 任务仍要能正确判占用 ────────────────────────────
+// 占用判定按任务内容匹配而不是按 queueKey，因此不需要写迁移代码。
+{
+  resetDraft();
+  const s = fresh("旧存档");
+  s.gold = 9999; s.grain = 9999;
+  const territoryId = game.recruitmentTerritoryId(s);
+  s.jobs = s.jobs || [];
+  s.jobs.push({
+    id: "legacy_job", type: "RECRUIT", territoryId, startedAt: 0, endAt: Date.now() + 99999,
+    status: "running", payload: { unitType: "levy", amount: 8 }, queueKey: `recruit:${territoryId}`
+  });
+  assert.equal(game.canRecruitUnit(s, "levy", territoryId), false, "旧格式的在跑任务也要挡住同兵种重复排队");
+  assert.equal(game.canRecruitUnit(s, "archers", territoryId), true, "旧格式任务不该挡住别的兵种");
+}
+
 console.log("army tests passed");

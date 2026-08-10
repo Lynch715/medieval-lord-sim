@@ -153,6 +153,13 @@ function getRunningJob(s, queueKey) {
   return (s?.jobs || []).find(job => job.status === "running" && job.queueKey === queueKey) || null;
 }
 
+// 按任务内容匹配而不是按 queueKey：旧存档里在跑的 RECRUIT 任务
+// queueKey 还是 recruit:${领地}，按内容匹配一样能识别，因此不需要迁移代码。
+function runningRecruitJob(s, territoryId, type) {
+  return (s?.jobs || []).find(job => job.status === "running" && job.type === "RECRUIT"
+    && job.territoryId === territoryId && job.payload?.unitType === type) || null;
+}
+
 function techDefinition(branch, techId) {
   return (TECH_DEFS[branch] || []).find(tech => tech.id === techId) || null;
 }

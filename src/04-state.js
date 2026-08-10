@@ -583,7 +583,7 @@ function upgradeBuilding(id, type) {
 function canRecruitUnit(s, type, territoryId = recruitmentTerritoryId(s)) {
   const unit = UNIT_DEFS[type];
   const territory = s?.territories?.[territoryId];
-  if (!unit || !territory || territory.owner !== "player" || getRunningJob(s, `recruit:${territoryId}`) || s.gold < unit.gold || s.grain < unit.grain) return false;
+  if (!unit || !territory || territory.owner !== "player" || runningRecruitJob(s, territoryId, type) || s.gold < unit.gold || s.grain < unit.grain) return false;
   if (unit.unlockTech && !techCompleted(s, unit.unlockTech)) return false;
   if (["knights", "heavy_infantry", "light_cavalry"].includes(type)) {
     const barracks = territory.buildings.barracks || 0;
@@ -603,7 +603,7 @@ function queueRecruitment(s, type, territoryId = recruitmentTerritoryId(s), now 
     territoryId,
     startedAt: now,
     durationMs: JOB_CONFIG.RECRUIT.durationMs,
-    queueKey: `recruit:${territoryId}`,
+    queueKey: `recruit:${territoryId}:${type}`,
     payload: { unitType: type, amount, gold: unit.gold, grain: unit.grain }
   });
 }
