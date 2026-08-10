@@ -141,6 +141,20 @@ for (const legacyField of ["cityTradeposts", "cityRelations"]) {
 assert.ok(!source.includes("AudioContext") && !source.includes("soundBtn") && !html.includes("soundBtn"));
 assert.ok(!/^html[^{}]*touch-action/m.test(css) && !/^body[^{}]*touch-action/m.test(css));
 assert.ok(css.includes("html, body { touch-action: pan-x pan-y; overscroll-behavior: none; }") || css.includes("touch-action: pan-x pan-y"));
+
+// 检视区只渲染一个 article（当前选中的领地），所以任何把 .map-inspector 分成
+// 多列的规则都会把那张唯一的卡片挤到半宽、右边空一半。
+// 这个 bug 真实发生过：窄屏下有一条 repeat(2,1fr)，桌面看着正常、手机上一半是黑的。
+// 分栏是 article 内部的事（.has-ops），容器必须始终单列。
+{
+  const inspectorColumnRules = [...css.matchAll(/\.map-inspector\s*\{[^}]*grid-template-columns:\s*([^;}]+)/g)]
+    .map(m => m[1].trim());
+  assert.ok(inspectorColumnRules.length > 0, "前置条件：应当能找到 .map-inspector 的列定义");
+  for (const value of inspectorColumnRules) {
+    assert.equal(value, "1fr",
+      `.map-inspector 必须始终单列，实际出现 "${value}"。分栏请写在 .map-inspector article.has-ops 上。`);
+  }
+}
 assert.equal(game.ACTIONS, undefined, "领主行动系统已整体移除");
 assert.equal(game.POLICIES, undefined, "领地政策系统已整体移除");
 
