@@ -3328,9 +3328,9 @@ function renderMap() {
   const selectedId = S.selectedTerritoryId || "ravenstone";
   const controlled = ownTerritoryIds(S).length;
   const interactiveCount = Object.keys(TERRITORY_DEFS).length;
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE RESTORATION MAP</span><h2>把父亲的旧领土夺回来</h2><p>每个城堡和城镇都是复国路线上的一站。点击敌方城堡，查看守军、侦察情报并直接配置远征。<br><b>${mapArmyStatus}</b></p>${metrics([[`${controlled} / ${playableTerritoryIds().length}`, "已收复"], [attackable.length, "邻近目标"], [playableTerritoryIds().length, "可占领地点"], [interactiveCount, "地图地点"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE RESTORATION MAP</span><h2>把父亲的旧领土夺回来</h2><p>每个城堡和城镇都是复国路线上的一站。点击敌方城堡，查看守军、侦察情报并直接配置远征。<br><b>${mapArmyStatus}</b></p>${metrics([[`${controlled} / ${playableTerritoryIds().length}`, "已收复"], [attackable.length, "可攻目标"], [playableTerritoryIds().length, "可占领地点"], [interactiveCount, "地图地点"]])}</section>
     <div class="unification-track"><div><b>复国进度</b><span>收复父亲留下的旧土，逐步逼近王冠谷</span></div><strong>${Math.round(controlled / playableTerritoryIds().length * 100)}%</strong><i style="width:${Math.round(controlled / playableTerritoryIds().length * 100)}%"></i></div>
-    <div class="section-head"><h2>北境地图</h2><span>城堡统辖附近附属镇 · 金边为军团可达目标 · 点击目标配置远征</span></div>
+    <div class="section-head"><h2>北境地图</h2><span>城堡统辖附近附属镇 · 金边为可攻目标（与自家版图接壤即可，越远行军越久） · 点击目标配置远征</span></div>
     <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}<span class="map-legend-note">金边目标可直接配置远征 · 斥候情报按季更新 · 手机左右滑动地图</span></div><div class="map-viewport" tabindex="0" aria-label="可横向浏览的北境地图"><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div></div><div class="map-inspector">${territorySummary(S, selectedId, attackable)}</div></div>`;
   panel.querySelectorAll("[data-map-territory]").forEach(button => button.addEventListener("click", () => {
     const id = button.dataset.mapTerritory;
