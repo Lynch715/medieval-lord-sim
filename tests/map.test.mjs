@@ -143,4 +143,12 @@ const fresh = () => game.createInitialState("地图测试", "oath", "standard");
   assert.equal(game.intelLevel(fog, "crownvale"), game.FOG_LEVELS.dark, "情报过期后应当重新变黑");
 }
 
+// 能出征的目标必然与自家版图接壤，所以出征面板里不可能遇到「全黑」的目标。
+// 这条挡住的是一类具体的退步：给出征预测写一个针对 dark 的分支，它永远走不到。
+{
+  const reach = game.createInitialState("可达", "oath", "standard");
+  const dark = game.attackableTerritories(reach).filter(id => game.intelLevel(reach, id) === game.FOG_LEVELS.dark);
+  assert.deepEqual(dark, [], "可攻目标不可能是全黑的——若为真，说明可攻判定与迷雾判定用了两套邻接规则");
+}
+
 console.log("map tests passed");

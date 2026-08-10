@@ -322,9 +322,9 @@ function castleExpeditionHtml(s, id) {
   const risk = previewTroops ? casualtyForecast(s, id, leaders, previewTroops, "steady", previewIds[0]) : null;
   const planLevel = intelLevel(s, id);
   const forecastHtml = !est ? ""
-    : planLevel === FOG_LEVELS.dark
-      ? `<div class="battle-estimate unknown">胜算预测：<b>情况不明</b><br>没有斥候回报，无法判断城内守军与布防。硬打要冒全军折在城下的风险 —— 先派一队斥候。<br>${terrainAdvice(id, preview)}</div>`
-      : `<div class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测（按当前预选${planLevel === FOG_LEVELS.border ? "，情报粗略" : ""}）：<b>${est.label}</b><br>${battlePowerText(est.ratio)}${battleBreakdownText(est)}。预计伤亡${risk.low}—${risk.high}人。${battleMoraleText(est.effectiveMorale, s.morale)}<br>${terrainAdvice(id, preview)}${seasonOf(s).id === "winter" ? " 严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>`;
+    : planLevel === FOG_LEVELS.border
+      ? `<div class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测（未侦察）：<b>${est.label}</b><br>只是从边境远远望过去的判断，具体守军编成、预计伤亡与战力拆解都要斥候回报才有。<br>${terrainAdvice(id, preview)}</div>`
+      : `<div class="battle-estimate ${battleRiskClass(est.ratio)}">胜算预测（按当前预选）：<b>${est.label}</b><br>${battlePowerText(est.ratio)}${battleBreakdownText(est)}。预计伤亡${risk.low}—${risk.high}人。${battleMoraleText(est.effectiveMorale, s.morale)}<br>${terrainAdvice(id, preview)}${seasonOf(s).id === "winter" ? " 严冬会额外削弱骑士并增加军粮消耗。" : ""}</div>`;
   return `<section class="castle-plan"><div class="castle-plan-head"><b>从这里配置远征</b><span>${eligible.length ? `可用${eligible.length}支军团 · 预计${formatDuration(Math.min(...eligible.map(army => marchDurationForDistance(s, army.locationId, id))))}` : "没有在途或待命军团"}</span></div>
     <p class="expedition-note">选择一支军团单独出征，或勾选多支军团合军。每支军团会保留自己的兵种和指挥官。</p>
     ${forecastHtml}
