@@ -408,4 +408,77 @@ assert.equal(duke.persuade.available, false);
 assert.equal(duke.bribe.available, false);
 assert.ok(duke.persuade.detail.includes("篡位"), `公爵应明说不可说服，实际：${duke.persuade.detail}`);
 
+// ── 封地承诺：收买时许下的地，到期要么兑现要么背弃 ────────────────────
+// 此前 promisedFief 只被写入、迁移里维护，没有任何地方读它；
+// keepPromise(+6) / breakPromise(−8) 两个正统性档位也定义了却从未触发。
+{
+  const pledge = () => {
+    const s = game.createInitialState("封地承诺", "wealth", "standard");
+    s.gold = 9999;
+    const seat = game.lordHoldings(s, "roderic")[0];
+    assert.ok(seat, "前置条件：罗德里克应当有辖地");
+    assert.ok(game.bribeLord(s, "roderic", seat), "前置条件：收买应当成功");
+    return { s, seat, lord: s.officers.find(o => o.id === "roderic") };
+  };
+
+  // 刚收买完不该立刻催债，要过一段时间才来讨封地
+  const fresh = pledge();
+  assert.equal(fresh.lord.promisedFief, fresh.seat, "收买应记下承诺的那块地");
+  assert.ok(Number.isFinite(fresh.lord.promisedAt), "收买应记下许诺的时刻");
+  game.queueSeasonEvents(fresh.s);
+  assert.equal(fresh.s.pendingDecisions.some(d => d.type === "fief_promise"), false,
+    "承诺当下不应立刻触发讨封地的决策");
+
+  // 到期后应当排入决策，且只排一次
+  const due = pledge();
+  due.s.clock.elapsedMs = due.lord.promisedAt + game.FIEF_PROMISE_DUE_MS;
+  game.queueSeasonEvents(due.s);
+  game.queueSeasonEvents(due.s);
+  const queued = due.s.pendingDecisions.filter(d => d.type === "fief_promise" && d.lordId === "roderic");
+  assert.equal(queued.length, 1, `到期应当排入一条讨封地的决策，实际 ${queued.length} 条`);
+
+  const view = game.decisionView(due.s, queued[0]);
+  assert.ok(view && view.options.length >= 2, "讨封地的决策应当至少有兑现与背弃两个选项");
+
+  // 兑现：领地交给他管理（收入下降），正统性上升
+  const keep = pledge();
+  keep.s.clock.elapsedMs = keep.lord.promisedAt + game.FIEF_PROMISE_DUE_MS;
+  game.queueSeasonEvents(keep.s);
+  const keepView = game.decisionView(keep.s, keep.s.pendingDecisions.at(-1));
+  const goldBefore = game.territoryOutput(keep.s, keep.seat).gold;
+  const legitBefore = keep.s.legitimacy;
+  keepView.options[0].effect();
+  assert.equal(keep.s.territories[keep.seat].fiefHolder, "roderic", "兑现后该地应由他管理");
+  assert.equal(keep.s.legitimacy, game.clamp(legitBefore + game.LEGITIMACY_DELTAS.keepPromise),
+    "兑现应当按 keepPromise 提高正统性");
+  assert.ok(game.territoryOutput(keep.s, keep.seat).gold < goldBefore,
+    "封出去的地只能收到一部分税，兑现必须有真实代价");
+  assert.equal(keep.lord.promisedFief, null, "兑现后承诺应当结清");
+
+  // 背弃：保住全额收入，但正统性下跌、他记恨
+  const brk = pledge();
+  brk.s.clock.elapsedMs = brk.lord.promisedAt + game.FIEF_PROMISE_DUE_MS;
+  game.queueSeasonEvents(brk.s);
+  const brkView = game.decisionView(brk.s, brk.s.pendingDecisions.at(-1));
+  const brkGold = game.territoryOutput(brk.s, brk.seat).gold;
+  const brkLegit = brk.s.legitimacy;
+  const brkGrievance = brk.lord.grievance;
+  brkView.options[1].effect();
+  assert.equal(brk.s.territories[brk.seat].fiefHolder, null, "背弃后该地仍归你直辖");
+  assert.equal(game.territoryOutput(brk.s, brk.seat).gold, brkGold, "背弃不该损失收入");
+  assert.equal(brk.s.legitimacy, game.clamp(brkLegit + game.LEGITIMACY_DELTAS.breakPromise),
+    "背弃应当按 breakPromise 扣正统性");
+  assert.ok(brk.lord.grievance > brkGrievance, "背弃应当让他记恨");
+  assert.equal(brk.lord.promisedFief, null, "背弃后承诺同样结清，不该反复来讨");
+
+  // 没许诺封地的收买（一纸空头承诺）不该凭空冒出讨封地的决策
+  const empty = game.createInitialState("空头承诺", "wealth", "standard");
+  empty.gold = 9999;
+  assert.ok(game.bribeLord(empty, "roderic", null));
+  empty.clock.elapsedMs = 10 * game.FIEF_PROMISE_DUE_MS;
+  game.queueSeasonEvents(empty);
+  assert.equal(empty.pendingDecisions.some(d => d.type === "fief_promise"), false,
+    "没有指定封地时不该触发讨封地");
+}
+
 console.log("lords tests passed");

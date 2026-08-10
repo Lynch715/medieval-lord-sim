@@ -82,7 +82,17 @@ assert.equal(mm.knights.find(k => k.id === "knight_10").liegeLordId, null, "已�
 // 幂等
 assert.deepEqual(game.hydrateState(JSON.parse(JSON.stringify(mm))), mm, "迁移必须幂等");
 
-assert.equal(game.VERSION, 6, "存档版本应升到 6");
+// 迁移链必须没有断档：从 1 到 VERSION，每一档都要能被下一档接走。
+// 这条取代了原先写死的「版本号应等于 6」—— 那条每次升版都得手改一次，
+// 本项目已经因为写死版本号红过四回，而它其实什么都没保证：
+// 真正要保证的是「任意旧档都能一路迁到最新」，也就是下面这个循环。
+for (let from = 1; from < game.VERSION; from++) {
+  const old = JSON.parse(JSON.stringify(game.createInitialState(`v${from}存档`, "oath", "standard")));
+  old.version = from;
+  const migrated = game.migrateSave(old);
+  assert.ok(migrated, `v${from} 存档应当能迁移到 v${game.VERSION}，实际拿到 null`);
+  assert.equal(migrated.version, game.VERSION, `v${from} 迁移后应当是最新版`);
+}
 
 const SEASON_MS = game.TIME_CONFIG.seasonDurationMs;
 // v3 中盘存档：有 turn、有 seasonLocks、无 timers、无 cooldowns

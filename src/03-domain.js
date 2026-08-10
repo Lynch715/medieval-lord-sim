@@ -173,6 +173,9 @@ function lordRouteStatus(s, lordId) {
 }
 
 const BRIBE_LEGITIMACY_COST = 4;
+// 收买时许下的封地，过一季才来讨。留出这段间隔，是为了让「承诺」有分量：
+// 玩家先拿到人和地，一季之后才要为当初随口应下的条件付账。
+const FIEF_PROMISE_DUE_MS = 5 * 60 * 1000;
 // 说服的正统性收益必须低于攻城拔寨（收复一块地 +3、会战胜利 +2，合计 +5）。
 // 原本是 +6：说服比打仗更能涨正统性，而正统性又是说服公式里的加成项 ——
 // 说服因此自我供能，每成功一次下一次更容易，滚起来就停不下来。
@@ -201,6 +204,8 @@ function bribeLord(s, lordId, promisedFief) {
   s.gold -= cost;
   if (!submitLord(s, lordId, "bribe")) { s.gold += cost; return false; }
   lord.promisedFief = promisedFief || null;
+  // 记下许诺的时刻：他不会当场催债，要过一季才来讨这块地。
+  lord.promisedAt = lord.promisedFief ? (s.clock?.elapsedMs || 0) : null;
   s.legitimacy = clamp(s.legitimacy - BRIBE_LEGITIMACY_COST);
   s.style.wealth += 2;
   log(s, "warn", `${lord.name}收下${cost}金币与${promisedFief ? TERRITORY_DEFS[promisedFief]?.name || "一块封地" : "一纸空头承诺"}的许诺，换下了旧旗。`);

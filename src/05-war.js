@@ -480,6 +480,41 @@ function decisionView(s, decision) {
     const event = NPC_ARCS.find(item => item.id === decision.eventId);
     return event ? scriptedEventView(s, event, event.officerId) : null;
   }
+  if (decision.type === "fief_promise") {
+    const lord = officer(s, decision.lordId);
+    const fiefId = lord?.promisedFief;
+    const d = TERRITORY_DEFS[fiefId];
+    if (!lord || !d || !s.territories[fiefId]) return null;
+    // 承诺结清后不再重复来讨，两条路都要把 promisedFief 清掉。
+    const settle = () => { lord.promisedFief = null; lord.promisedAt = null; };
+    const share = techLevel(s, "provincial_offices") ? "约四分之三" : "七成";
+    return {
+      kicker: "旧账", title: `${lord.name}来讨当初许下的${d.name}`,
+      portrait: lord.portrait || "assets/player.webp",
+      body: `<p>收下金币换旗的时候，你答应把${esc(d.name)}交给他打理。他今天带着随从来了，站在厅上没有坐下。</p>`
+        + `<p>“殿下当时说的话，北境都听见了。”</p>`,
+      options: [
+        { name: `兑现承诺，把${d.name}封给他`, note: `该地税收降到${share}；王室正统性 +${LEGITIMACY_DELTAS.keepPromise}；他死心塌地`, effect() {
+          s.territories[fiefId].fiefHolder = lord.id;
+          lord.fief = fiefId;
+          lord.loyalty = clamp((lord.loyalty || 0) + 30);
+          lord.grievance = clamp((lord.grievance || 0) - 20);
+          gainLegitimacy(s, "keepPromise");
+          s.style.oath++;
+          settle();
+          log(s, "good", `${d.name}正式封给${lord.name}。消息传开，北境记住了渡鸦家说话算数。`);
+        } },
+        { name: "食言，这块地留在自己手里", note: `保住全额税收；王室正统性 ${LEGITIMACY_DELTAS.breakPromise}；他记恨，可能带兵出走`, effect() {
+          lord.loyalty = clamp((lord.loyalty || 0) - 30);
+          lord.grievance = clamp((lord.grievance || 0) + 45);
+          gainLegitimacy(s, "breakPromise");
+          s.style.iron++;
+          settle();
+          log(s, "bad", `${lord.name}空手离开大厅。他没有争辩，只是记下了这一笔。`);
+        } }
+      ]
+    };
+  }
   if (decision.type === "lord_capture") {
     const lord = officer(s, decision.lordId);
     const d = TERRITORY_DEFS[decision.territoryId];

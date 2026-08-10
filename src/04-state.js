@@ -1,6 +1,6 @@
 "use strict";
 
-// 建档、存档迁移 v1→v6、自检、日志与存盘、任务推进、世界推进、可攻目标与守军。
+// 建档、存档迁移 v1→v7、自检、日志与存盘、任务推进、世界推进、可攻目标与守军。
 
 function createInitialState(name, startingStyle, difficulty) {
   const territories = {};
@@ -189,6 +189,16 @@ function migrateV5ToV6(raw) {
   return migrated;
 }
 
+function migrateV6ToV7(raw) {
+  const migrated = clone(raw);
+  migrated.version = 7;
+  // 封地承诺现在会到期。老档里已经许下但没有时刻的承诺，按「立刻到期」处理：
+  // 玩家读档后马上会被讨这块地，这正是当初答应的事，不该因为换版本就一笔勾销。
+  (migrated.officers || []).forEach(o => { o.promisedAt = o.promisedFief ? 0 : null; });
+  migrated.migrationLog = [...(migrated.migrationLog || []), "v6-to-v7"];
+  return migrated;
+}
+
 function migrateSave(raw, now = Date.now()) {
   if (!raw) return null;
   let migrated = clone(raw);
@@ -197,15 +207,16 @@ function migrateSave(raw, now = Date.now()) {
   if (migrated.version === 3) migrated = migrateV3ToV4(migrated, now);
   if (migrated.version === 4) migrated = migrateV4ToV5(migrated, now);
   if (migrated.version === 5) migrated = migrateV5ToV6(migrated);
+  if (migrated.version === 6) migrated = migrateV6ToV7(migrated);
   if (migrated.version !== VERSION) return null;
-  return hydrateV6(migrated);
+  return hydrateLatest(migrated);
 }
 
 function hydrateState(raw) {
   return migrateSave(raw);
 }
 
-function hydrateV6(raw) {
+function hydrateLatest(raw) {
   if (!raw || raw.version !== VERSION) return null;
   raw.selectedTerritoryId ||= "ravenstone";
   raw.clock ||= makeClock(0);
@@ -286,7 +297,7 @@ raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight
   delete raw.crisis.debt;
   delete raw.crisis.unrest;
   delete raw.crisis.checkedTurn;
-  raw.officers.forEach(o => { o.grievance ??= 0; o.merit ??= 0; o.injured ??= 0; o.fief ??= null; o.rapport ??= 0; o.promisedFief ??= null; if (o.liege === undefined) o.liege = LORD_DEFS[o.id]?.liege ?? null; });
+  raw.officers.forEach(o => { o.grievance ??= 0; o.merit ??= 0; o.injured ??= 0; o.fief ??= null; o.rapport ??= 0; o.promisedFief ??= null; o.promisedAt ??= (o.promisedFief ? 0 : null); if (o.liege === undefined) o.liege = LORD_DEFS[o.id]?.liege ?? null; });
   // 旧存档曾把玩家称为“主将”。迁移时同步为领主称谓，避免旧文案继续污染新界面。
   const playerOfficer = raw.officers.find(o => o.id === "player");
   if (playerOfficer) {
@@ -840,6 +851,14 @@ function handleOfficerPolitics(s) {
 
 function queueSeasonEvents(s) {
   const season = seasonOf(s);
+  // 收买时许下的封地到期了：他来讨那块地。
+  // 用 pendingDecisions 里是否已有同一条来去重，就不必再多存一个「已排队」标志位。
+  (s.officers || []).forEach(o => {
+    if (o.side !== "player" || !o.promisedFief || !s.territories[o.promisedFief]) return;
+    if ((s.clock?.elapsedMs || 0) - (o.promisedAt ?? 0) < FIEF_PROMISE_DUE_MS) return;
+    if (s.pendingDecisions.some(d => d.type === "fief_promise" && d.lordId === o.id)) return;
+    s.pendingDecisions.push({ type: "fief_promise", lordId: o.id });
+  });
   if (season.id === "winter" && !s.flags.firstWinter) {
     s.flags.firstWinter = true;
     s.pendingDecisions.push({ type: "first_winter" });
