@@ -2507,17 +2507,27 @@ function queueSeasonEvents(s) {
   }
 }
 
+// 能打哪里，取决于自家版图的边界，而不是大军此刻站在哪一格。
+//
+// 原先这里只返回「与大军所在地相邻」的敌方领地。附庸成片归附之后，大军会被自家
+// 领地整个包住：全图还剩六七块敌领（含公爵大道与王冠谷），可攻列表却是空的，战役
+// 就此静默停摆 —— 没有失败提示，只是再也打不了任何一仗，一路空转到加冕倒计时归零。
+// 确定性平衡模拟里 120 局全是这样：统一 0 局，结局只剩「铁冠加于他人之头」。
+//
+// startMarch 早就实现了「长征」（带作战计划打非我方领地时跳过相邻检查），
+// marchDurationForDistance 也按图上直线距离拉长行军时间；但所有调用点都先经过这里
+// 过滤，那套机制从来没被触发过。改按版图边界取目标后长征随之生效：越远的目标行军
+// 越久，扩张仍必须连成一片，地图重新完整可争。
 function attackableTerritories(s, armyId = "army_1") {
   const mine = new Set(ownTerritoryIds(s));
   const army = armyEntity(s, armyId);
   if (!army || army.owner !== "player" || army.status !== "idle") return [];
-  const origin = TERRITORY_DEFS[army.locationId];
   return Object.keys(TERRITORY_DEFS).filter(id => {
     const d = TERRITORY_DEFS[id];
     if (d.playable === false) return false;
     if (mine.has(id)) return false;
     if (d.final && !crownAccessMet(s)) return false;
-    return origin?.adj?.includes(id) && !mine.has(id);
+    return d.adj.some(neighbour => mine.has(neighbour));
   });
 }
 

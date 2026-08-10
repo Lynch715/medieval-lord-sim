@@ -37,7 +37,23 @@ assert.equal(Object.keys(game.BUILDINGS).length, 10);
 assert.equal(game.BUILDING_MAX_LEVEL, 5);
 assert.equal(Object.values(game.TECH_DEFS).length, 5);
 assert.ok(Object.values(game.TECH_DEFS).every(branch => branch.length === 5), "五条科技分支各有五项科技");
-assert.deepEqual(game.attackableTerritories(fresh).sort(), ["ashfield", "blackthorn", "ironhill", "pineford", "westmarch"].filter(id => id !== "blackthorn" && id !== "ironhill" && id !== "westmarch").sort());
+// 可攻目标取自「自家版图的边界」，不是「大军脚下那一格」。
+assert.deepEqual(game.attackableTerritories(fresh).sort(), ["ashfield", "crossford", "pineford"],
+  "开局可攻的是与渡鸦堡版图接壤、且可占领的三块地");
+{
+  // 大军被自家领地包住时仍必须有仗可打。
+  // 旧写法只看大军所在地的邻居：附庸成片归附后大军陷在版图内部，全图还剩六七块敌领
+  // （含公爵大道与王冠谷）却一块都进不去，战役没有任何提示地停摆，统一结局 0/120。
+  const boxed = game.createInitialState("困守", "oath", "standard");
+  const army = boxed.armies.find(a => a.id === "army_1");
+  game.TERRITORY_DEFS[army.locationId].adj.forEach(id => {
+    if (boxed.territories[id]) boxed.territories[id].owner = "player";
+  });
+  assert.equal(game.TERRITORY_DEFS[army.locationId].adj.every(id => !boxed.territories[id] || boxed.territories[id].owner === "player"), true,
+    "前置条件：大军所在地的邻居这时应当全部归玩家");
+  assert.ok(game.attackableTerritories(boxed).length > 0,
+    "大军被自家领地包围时仍应能发起长征，否则战役会静默停摆");
+}
 assert.deepEqual(game.cityActionOptions(fresh, "ashfield").map(o => o.id).sort(), ["envoy", "scout"], "叛臣领地可侦察也可派使者");
 assert.deepEqual(Object.keys(game.CITY_ACTION_DEFS).sort(), ["envoy", "scout"], "说服路线已接线；不应残留未接线的行动定义");
 assert.ok(game.UNIT_DEFS.heavy_infantry.counters.includes("knights"));

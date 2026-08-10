@@ -32,10 +32,10 @@ function resolveDecisions(state) {
   }
 }
 
-function recruit(state, type) {
+function recruit(state, type, now) {
   const def = game.UNIT_DEFS[type];
   if (state.gold < def.gold + 18 || state.grain < def.grain + 18) return false;
-  const job = game.queueRecruitment(state, type, undefined, Date.now());
+  const job = game.queueRecruitment(state, type, undefined, now);
   if (!job) return false;
   game.processCompletedJobs(state, job.endAt);
   game.deployGarrison(state, job.territoryId);
@@ -119,13 +119,25 @@ function fight(state, random) {
   return true;
 }
 
+// 固定的模拟纪元。取一个具体常量而不是 Date.now()，是为了让整份模拟
+// 与真实时钟彻底脱钩 —— 见下面 run() 里接管 Date.now 的说明。
+const EPOCH = 1767225600000; // 2026-01-01T00:00:00Z
+
 function run(seed) {
   const random = rngFor(seed);
   const diploTally = { envoy: 0, persuade: 0, bribe: 0 };
-  const state = game.createInitialState(`模拟${seed}`, ["oath", "iron", "wealth"][seed % 3], "standard");
   const originalRandom = Math.random;
-  let now = Date.now();
+  const originalNow = Date.now;
+  let now = EPOCH;
+  // 游戏里有四十多处把 Date.now() 当默认参数（冷却、排队、建档、开局时钟）。
+  // 模拟的虚拟时钟一局要走几个小时，真实时钟却只走几毫秒，两个时间源混在
+  // 一起的直接后果是：「使者冷却到期了吗」实际取决于测试进程已经跑了多少秒。
+  // 这就是这份模拟此前每次运行都给出不同结局分布的原因（同一份代码连跑三次
+  // 得到统一 9/6/6、崩溃 4/1/2）。这里把 Date.now 与 Math.random 一起接管，
+  // 让模拟成为一个完全确定的测试台。
   Math.random = random;
+  Date.now = () => now;
+  const state = game.createInitialState(`模拟${seed}`, ["oath", "iron", "wealth"][seed % 3], "standard");
   try {
     while (!state.ended && game.coronationRemainingMs(state) > 0) {
       game.processCompletedJobs(state, now);
@@ -140,7 +152,7 @@ function run(seed) {
       if (game.turnOf(state) >= 4) researchNext(state, now);
       if (game.armyTotal(state, "army_1") < 72 || game.turnOf(state) >= 20) {
         const t = game.turnOf(state);
-        recruit(state, t % 3 === 0 ? "levy" : t % 3 === 1 ? "archers" : "knights");
+        recruit(state, t % 3 === 0 ? "levy" : t % 3 === 1 ? "archers" : "knights", now);
       }
       now += game.TIME_CONFIG.seasonDurationMs;
       // 不设补算上限：上限是为了保护真实玩家离开很久后不被洪水般的结算淹没，
@@ -149,6 +161,7 @@ function run(seed) {
     }
   } finally {
     Math.random = originalRandom;
+    Date.now = originalNow;
   }
   return {
     turn: game.turnOf(state) + 1,
@@ -168,17 +181,29 @@ const median = completionTurns.length ? completionTurns[Math.floor(completionTur
 const collapsed = results.filter(result => ["collapsed", "fallen"].includes(result.ending) || (result.ending === "minor_lord" && result.territories < 5)).length;
 const activeCampaigns = results.filter(result => result.wins > 0).length;
 
-assert.ok(unified.every(result => result.turn >= 1), "统一结局必须至少经过一季真实经营");
-assert.ok(activeCampaigns >= 80, "多数局应至少能推进一场真实的边境战");
-// 上限不再是固定的 48 季：每攻下一块公爵直辖地都会把加冕往后推，
-// 战役因此可以合法地超出 12 年。这里只保证统一不会来得过早。
-if (unified.length) assert.ok(median >= 24, `统一不应早于第 7 年，实际中位数第 ${median} 季`);
 const endingCounts = results.reduce((acc, r) => { acc[r.ending || "none"] = (acc[r.ending || "none"] || 0) + 1; return acc; }, {});
 const distinctEndings = Object.keys(endingCounts);
 
 const avg = key => (results.reduce((sum, r) => sum + Number(r[key] || 0), 0) / results.length).toFixed(1);
 const met = key => results.filter(r => r[key]).length;
 
+console.log(JSON.stringify({
+  runs: results.length, unified: unified.length, collapsed, medianTurn: median,
+  range: completionTurns.length ? [completionTurns[0], completionTurns.at(-1)] : null,
+  平均最终领地: avg("territories"), 领地上限要求: 18,
+  平均威望: avg("renown"), 威望要求: 60,
+  平均主力: avg("army"), 主力要求: 80,
+  攻城工程达成局数: met("siegeTech"),
+  平均胜场: avg("wins"), 平均出征: avg("battles"), 平均结余金币: avg("gold"), 平均收服领主: avg("submittedLords"),
+  平均说服归附: avg("persuaded"), 平均收买归附: avg("bribed"), 平均派出使者: avg("envoys"),
+  结局分布: endingCounts, 崩溃局数: collapsed
+}, null, 2));
+
+assert.ok(unified.every(result => result.turn >= 1), "统一结局必须至少经过一季真实经营");
+assert.ok(activeCampaigns >= 80, "多数局应至少能推进一场真实的边境战");
+// 上限不再是固定的 48 季：每攻下一块公爵直辖地都会把加冕往后推，
+// 战役因此可以合法地超出 12 年。这里只保证统一不会来得过早。
+if (unified.length) assert.ok(median >= 24, `统一不应早于第 7 年，实际中位数第 ${median} 季`);
 // 胜负两端都必须实际可达，且玩家的决策要能改变结局。
 // 这三条曾经因为「统一不可达 / 崩溃不可达 / 结局唯一」而降级为软警告，
 // P1b 修好后恢复为硬断言 —— 不要再为了让测试变绿而放宽它们。
@@ -195,14 +220,4 @@ assert.ok(Number(avg("submittedLords")) > 0, "打服路线必须能实际收服�
 // 三条路线都必须在实战中确实可走，否则说明某条路线只是摆设。
 assert.ok(results.some(r => r.persuaded > 0), "说服路线必须至少在部分局中成立");
 assert.ok(results.some(r => r.bribed > 0), "收买路线必须至少在部分局中成立");
-console.log(JSON.stringify({
-  runs: results.length, unified: unified.length, collapsed, medianTurn: median,
-  range: completionTurns.length ? [completionTurns[0], completionTurns.at(-1)] : null,
-  平均最终领地: avg("territories"), 领地上限要求: 18,
-  平均威望: avg("renown"), 威望要求: 60,
-  平均主力: avg("army"), 主力要求: 80,
-  攻城工程达成局数: met("siegeTech"),
-  平均胜场: avg("wins"), 平均出征: avg("battles"), 平均结余金币: avg("gold"), 平均收服领主: avg("submittedLords"),
-  平均说服归附: avg("persuaded"), 平均收买归附: avg("bribed"), 平均派出使者: avg("envoys"),
-  结局分布: endingCounts, 崩溃局数: collapsed
-}, null, 2));
+
