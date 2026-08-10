@@ -125,4 +125,58 @@ const resetDraft = () => {
   assert.ok(html.includes("checked"), "默认应勾选第一支合格军团");
 }
 
+// ── 调动：自有领地不要求相邻 ──────────────────────────────────────────
+// 此前 startMarch 只放行「相邻」或「带 battlePlan 打敌城」两条路径，
+// UI 上两个调用点又都带 battlePlan —— 于是根本没有「单纯移动」这个操作，
+// 主力打下一块地就钉死在那里。
+{
+  resetDraft();
+  const s = fresh("调动");
+  const main = game.armyEntity(s, "army_1");
+  // 开局四块地全与渡鸦堡相邻，构造不出「不相邻的自有领地」，
+  // 因此显式收下一块远地——这正是打下新城之后的真实局面。
+  const far = game.playableTerritoryIds().find(id =>
+    id !== main.locationId && !game.TERRITORY_DEFS[main.locationId].adj.includes(id));
+  assert.ok(far, "地图上应存在与主力驻地不相邻的可占领地");
+  s.territories[far].owner = "player";
+  const job = game.redeployArmy(s, "army_1", far, 1000);
+  assert.ok(job, "调往不相邻的自有领地应当放行");
+  assert.equal(job.payload.destinationId, far);
+  assert.equal(main.status, "marching");
+  assert.equal(job.endAt - job.startedAt, game.marchDurationForDistance(s, job.payload.originId, far),
+    "行军时长应按距离算");
+}
+
+// ── 调动不扣粮 ────────────────────────────────────────────────────────
+// 回防是被动动作，再收补给等于惩罚防守；距离换来的等待本身已经是代价。
+{
+  resetDraft();
+  const s = fresh("不扣粮");
+  const before = s.grain;
+  const own = game.ownTerritoryIds(s);
+  const main = game.armyEntity(s, "army_1");
+  const target = own.find(id => id !== main.locationId);
+  game.redeployArmy(s, "army_1", target, 1000);
+  assert.equal(s.grain, before, "调动不应消耗粮食");
+}
+
+// ── 调往敌方领地必须拒绝 ──────────────────────────────────────────────
+// 调动只是移动，不该变成一条绕过出征配置的偷袭路径。
+{
+  resetDraft();
+  const s = fresh("拒绝敌地");
+  const enemy = game.attackableTerritories(s)[0];
+  assert.equal(game.redeployArmy(s, "army_1", enemy, 1000), null, "调往敌方领地应当拒绝");
+}
+
+// ── 非待命军团不能调动 ────────────────────────────────────────────────
+{
+  resetDraft();
+  const s = fresh("非待命");
+  const main = game.armyEntity(s, "army_1");
+  main.status = "recovering";
+  const target = game.ownTerritoryIds(s).find(id => id !== main.locationId);
+  assert.equal(game.redeployArmy(s, "army_1", target, 1000), null, "整补中的军团不能调动");
+}
+
 console.log("army tests passed");

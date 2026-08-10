@@ -628,7 +628,10 @@ function startMarch(s, armyId, destinationId, now = Date.now(), payload = {}) {
   const army = armyEntity(s, armyId);
   const originId = army?.locationId;
   const longExpedition = payload?.battlePlan && s.territories[destinationId]?.owner !== "player";
-  if (!army || army.owner !== "player" || army.status !== "idle" || !TERRITORY_DEFS[destinationId] || TERRITORY_DEFS[destinationId].playable === false || (!longExpedition && !TERRITORY_DEFS[originId]?.adj.includes(destinationId)) || getRunningJob(s, `march:${armyId}`)) return null;
+  // 调防：目标是自有领地时既不要求相邻，也不需要战斗计划。
+  // 没有这条，「把主力调回自己城里驻防」这个动作在游戏里根本不存在。
+  const redeploy = !payload?.battlePlan && s.territories[destinationId]?.owner === "player";
+  if (!army || army.owner !== "player" || army.status !== "idle" || !TERRITORY_DEFS[destinationId] || TERRITORY_DEFS[destinationId].playable === false || (!longExpedition && !redeploy && !TERRITORY_DEFS[originId]?.adj.includes(destinationId)) || getRunningJob(s, `march:${armyId}`)) return null;
   const job = startJob(s, {
     type: "MARCH",
     armyId,
@@ -658,6 +661,21 @@ function startArmyGroupMarch(s, armyIds, destinationId, now = Date.now(), payloa
     army.status = "marching";
     army.jobId = job.id;
   });
+  return job;
+}
+
+// 调动只做单军团。合军是出征专用概念（多支军团合成一场战斗会话），
+// 调防没有这个需求，两支军团各点一次即可。
+function redeployArmy(s, armyId, destinationId, now = Date.now()) {
+  if (!s || s.battleSession) return null;
+  if (s.territories?.[destinationId]?.owner !== "player") return null;
+  const army = armyEntity(s, armyId);
+  if (!army || army.locationId === destinationId) return null;
+  const job = startMarch(s, armyId, destinationId, now);
+  if (!job) return null;
+  const text = `${army.name}从${TERRITORY_DEFS[job.payload.originId]?.name || "驻地"}调往${TERRITORY_DEFS[destinationId].name}驻防，预计${formatDuration(job.endAt - job.startedAt)}后抵达。`;
+  s.lastAction = { name: "军团调动", text };
+  log(s, "info", text);
   return job;
 }
 
