@@ -31,4 +31,55 @@ const resetDraft = () => {
   assert.ok(html.includes("data-new-army-unit"), "组建军团表单应包含兵种输入框");
 }
 
+// ── 草稿要活过一次渲染 ────────────────────────────────────────────────
+{
+  resetDraft();
+  const s = fresh("草稿");
+  const main = game.armyEntity(s, "army_1");
+  main.composition.levy = 30;
+  game.uiDraft.newArmy.units = { levy: 12 };
+  game.uiDraft.newArmy.name = "黑棘骑士团";
+  const html = game.armyCorpsHtml(s);
+  assert.ok(html.includes(`value="12"`), "草稿里的兵力必须渲染进 value，否则每 5 秒被清零");
+  assert.ok(html.includes("黑棘骑士团"), "草稿里的军团名必须渲染进 value");
+}
+
+// ── 草稿是上一秒的意图，必须按当前真实状态夹取 ────────────────────────
+// 主力打完仗掉了兵，草稿里的旧数字若原样渲染，就会变成一次非法提交。
+{
+  resetDraft();
+  const s = fresh("夹取");
+  const main = game.armyEntity(s, "army_1");
+  main.composition.levy = 5;
+  game.uiDraft.newArmy.units = { levy: 12 };
+  const view = game.newArmyDraftView(s);
+  assert.equal(view.units.levy, 5, "草稿数超过主军现有数时必须夹到现有数");
+}
+
+// ── 指挥官失效要回退，不能产出指向不存在选项的 selected ────────────────
+{
+  resetDraft();
+  const s = fresh("指挥官");
+  game.uiDraft.newArmy.commanderId = "knight_不存在";
+  const view = game.newArmyDraftView(s);
+  assert.notEqual(view.commanderId, "knight_不存在", "失效的指挥官必须回退");
+  if (view.options.length) {
+    assert.equal(view.commanderId, view.options[0].id, "应回退到选项列表第一项");
+  }
+}
+
+// ── 选中的指挥官要带 selected，否则每次渲染都被打回第一项 ──────────────
+// 这就是「新招募的骑士选不上」的真相：骑士一直在列表里，
+// 只是 select 不带 selected，5 秒内被渲染打回第一项。
+{
+  resetDraft();
+  const s = fresh("选中");
+  const knights = game.activeKnights(s);
+  assert.ok(knights.length >= 1, "开局应至少有一名在列骑士");
+  game.uiDraft.newArmy.commanderId = knights[0].id;
+  const html = game.armyCorpsHtml(s);
+  assert.ok(new RegExp(`value="${knights[0].id}"\\s+selected`).test(html),
+    "草稿选中的指挥官必须带 selected 渲染");
+}
+
 console.log("army tests passed");

@@ -390,28 +390,55 @@ function armyRosterHtml() {
   return `<div class="army-roster"><div class="section-note">王国主力：${compositionText(main)} · ${compositionTotal(main)}人；${place}待编驻军：${compositionText(garrison)}。训练完成后先进入驻军，再由主力驻扎时编入。</div>${deployable ? `<button class="secondary-btn" data-deploy-garrison="${territoryId}">把${place}驻军编入王国主力</button>` : ""}${Object.entries(UNIT_DEFS).map(([type, unit]) => { const queued = recruitJob?.payload?.unitType === type; const label = queued ? `训练中 · ${formatDuration(getJobRemainingMs(recruitJob))}` : recruitJob ? "训练队列占用" : unitUnlockLabel(S, type, territoryId); const count = garrison[type] || 0; const mainCount = main[type] || 0; const equipment = unitEquipment(S, type); return `<article class="unit-card"><div class="unit-head"><b>${glyphSvg(type)}${unit.name}</b><strong>${mainCount}<small>主力 · ${count}待编</small></strong></div><p>${unitDisplayHint(type)}<br>装备等级 ${equipment.level}</p><button data-recruit-unit="${type}" ${!canRecruitUnit(S, type, territoryId) ? "disabled" : ""}>${queued ? `<span data-job-countdown="${recruitJob.id}" data-job-prefix="训练中 · ">${label}</span>` : label}</button></article>`; }).join("")}</div>`;
 }
 
+// 把草稿折算成「这一刻真正能用的值」。草稿是玩家上一秒的意图，世界这一秒
+// 可能已经变了 —— 主力打完仗掉了兵、骑士阵亡或去带了别的军团。
+// 一律按当前真实状态夹取，不能直接信草稿，否则会变成一次静默的非法提交。
+function newArmyDraftView(s) {
+  const main = armyEntity(s, "army_1");
+  const comp = main?.composition || emptyComposition();
+  const assigned = assignedCommanderIds(s);
+  const options = [{ id: "player", name: `${s.playerName} · 王子亲征` }]
+    .filter(option => canUseCommander(s, option.id))
+    .concat(activeKnights(s).filter(knight => !assigned.has(knight.id)).map(knight => ({ id: knight.id, name: `${knight.name} · 骑士` })));
+  const units = {};
+  Object.keys(UNIT_DEFS).forEach(type => {
+    units[type] = clamp(Math.round(Number(uiDraft.newArmy.units?.[type]) || 0), 0, comp[type] || 0);
+  });
+  const commanderId = options.some(option => option.id === uiDraft.newArmy.commanderId)
+    ? uiDraft.newArmy.commanderId
+    : (options[0]?.id || null);
+  return { options, units, commanderId, name: uiDraft.newArmy.name ?? "第二军团", main, comp };
+}
+
 function armyCorpsHtml(s = S) {
   const armies = playerArmies(s);
-  const main = armyEntity(s, "army_1");
-  const assigned = assignedCommanderIds(s);
-  const commanderOptions = [{ id: "player", name: `${s.playerName} · 王子亲征` }].filter(option => canUseCommander(s, option.id)).concat(activeKnights(s).filter(knight => !assigned.has(knight.id)).map(knight => ({ id: knight.id, name: `${knight.name} · 骑士` })));
+  const draft = newArmyDraftView(s);
+  const main = draft.main;
+  const commanderOptions = draft.options;
   const canCreate = main?.status === "idle" && compositionTotal(main.composition) >= 20 && commanderOptions.length > 0;
   return `<section class="corps-panel"><div class="section-head"><h2>军团编制</h2><span>${armies.length}支军团 · 每支由王子或骑士带领</span></div>
     <div class="corps-grid">${armies.map(army => { const commander = armyCommander(s, army); const canDisband = army.id !== "army_1" && army.status === "idle"; return `<article class="corps-card ${army.id === "army_1" ? "primary" : ""}"><div class="corps-card-head"><b>${esc(army.name)}</b><span>${army.id === "army_1" ? "主军" : "独立军团"}</span></div><p><strong>${esc(commander.person?.name || "未任命")}</strong> · ${commander.isKnight ? "骑士" : "王子"}<br>${TERRITORY_DEFS[army.locationId]?.name || "未知地点"} · ${armyStatusText(s, army)}</p><div class="stat-chips"><span>${compositionTotal(army.composition)}人</span><span>${compositionText(army.composition)}</span></div>${canDisband ? `<button class="ghost-btn" data-disband-army="${army.id}">解散军团</button>` : `<small class="corps-note">${army.id === "army_1" ? "主军不可解散" : "行军或交战中"}</small>`}</article>`; }).join("")}</div>
     <div class="corps-create"><div><h3>组建新军团</h3><p>从渡鸦第一军团抽调兵力，至少留下10人。组建完成后，地图上可以单独出征或合军。</p></div>
-      <div class="corps-create-grid"><label>军团名称<input id="newArmyName" maxlength="18" value="第二军团" placeholder="例如：黑棘骑士团"></label><label>带队指挥官<select id="newArmyCommander">${commanderOptions.map(option => `<option value="${option.id}">${esc(option.name)}</option>`).join("")}</select></label></div>
-      <div class="corps-unit-picks">${Object.entries(UNIT_DEFS).map(([type, unit]) => `<label><span>${unit.name} · 主军${main?.composition[type] || 0}</span><input type="number" min="0" max="${main?.composition[type] || 0}" value="0" data-new-army-unit="${type}"></label>`).join("")}</div>
+      <div class="corps-create-grid"><label>军团名称<input id="newArmyName" maxlength="18" value="${esc(draft.name)}" placeholder="例如：黑棘骑士团"></label><label>带队指挥官<select id="newArmyCommander">${commanderOptions.map(option => `<option value="${option.id}" ${option.id === draft.commanderId ? "selected" : ""}>${esc(option.name)}</option>`).join("")}</select></label></div>
+      <div class="corps-unit-picks">${Object.entries(UNIT_DEFS).map(([type, unit]) => `<label><span>${unit.name} · 主军${main?.composition[type] || 0}</span><input type="number" min="0" max="${main?.composition[type] || 0}" value="${draft.units[type]}" data-new-army-unit="${type}"></label>`).join("")}</div>
       <button class="secondary-btn" data-create-army ${canCreate ? "" : "disabled"}>${canCreate ? "组建军团" : "主军至少需要20人，且要有空闲骑士"}</button>
     </div></section>`;
 }
 
 function bindArmyControls(panel) {
   bindFold(panel, "battlelog", foldState.sections);
+  // 记录草稿但不重渲染：重渲染会打断正在输入的光标。
+  // 草稿本身足以让值活过下一次 renderAll()。
+  panel.querySelectorAll("[data-new-army-unit]").forEach(input => input.addEventListener("input", () => {
+    uiDraft.newArmy.units[input.dataset.newArmyUnit] = Math.max(0, Math.round(Number(input.value) || 0));
+  }));
+  panel.querySelector("#newArmyName")?.addEventListener("input", event => { uiDraft.newArmy.name = event.target.value; });
+  panel.querySelector("#newArmyCommander")?.addEventListener("change", event => { uiDraft.newArmy.commanderId = event.target.value; });
   panel.querySelectorAll("[data-create-army]").forEach(button => button.addEventListener("click", () => {
-    const composition = emptyComposition();
-    panel.querySelectorAll("[data-new-army-unit]").forEach(input => { composition[input.dataset.newArmyUnit] = Math.max(0, Math.round(Number(input.value) || 0)); });
-    const army = createArmyFromMain(S, $("newArmyName")?.value || "第二军团", $("newArmyCommander")?.value || "player", composition);
+    const draft = newArmyDraftView(S);
+    const army = createArmyFromMain(S, uiDraft.newArmy.name || "第二军团", draft.commanderId || "player", draft.units);
     if (!army) { toast("兵力、指挥官或主军状态不符合组建条件"); return; }
+    uiDraft.newArmy = { name: "第二军团", commanderId: null, units: {} };
     saveGame(); renderAll();
   }));
   panel.querySelectorAll("[data-disband-army]").forEach(button => button.addEventListener("click", () => {
