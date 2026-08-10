@@ -64,16 +64,41 @@ python3 -m http.server 8788
 
 然后访问 `http://127.0.0.1:8788/`。
 
+## 源码结构
+
+游戏源码在 `src/`，是七个**零模块语法的经典脚本**（没有 `import`／`export`，也没有 IIFE 包裹）：
+
+| 文件 | 职责 |
+|---|---|
+| `01-data.js` | 纯数据表：时间、势力、领地、领主、骑士、建筑、兵种、地图、事件、纹章 |
+| `02-core.js` | 运行时全局与工具、时钟与调度器、任务队列、科技与开城条件、事件表规范化 |
+| `03-domain.js` | 领主与骑士归属、三条收服路线、城市行动、经济产出、建筑与征募 |
+| `04-state.js` | 建档、存档迁移 v1→v6、自检、任务与世界推进、可攻目标与守军 |
+| `05-war.js` | 战前预测、战斗会话、军团、AI 势力回合、战后处置与决策 |
+| `06-ui.js` | 全部渲染、DOM 绑定与启动流程 |
+| `07-exports.js` | 仅 `module.exports`，供 Node 测试使用 |
+
+**`sources.json` 是文件清单的唯一真相源。** 浏览器（`index.html` 的 script 标签）、
+打包（`build_single.py`）、测试（`tests/_game.mjs`）三个消费者按同一顺序拼接；
+结构测试断言三处完全一致，漂移会直接变红。
+
+两条规矩：`01-data.js` 不得出现函数声明；每个文件都要以 `"use strict";` 开头
+（严格模式在经典脚本里逐脚本生效，漏一个会让该文件在浏览器里退回宽松模式）。
+
 ## 检查与封装
 
 ```bash
-node --check app.js
+for f in src/*.js; do node --check "$f"; done
 node tests/structure.test.mjs
 node tests/lords.test.mjs
 node tests/migration.test.mjs
+node tests/clock.test.mjs
 node tests/campaign-balance.sim.mjs
 python3 build_single.py
 ```
+
+平衡模拟是确定性的：同一份代码任意次运行输出应当逐字节相同。
+如果两次运行结果不一样，那是测试台漏了时间或随机源，不是平衡在波动。
 
 打包后生成 `模拟中世纪领主-单文件版.html`，模块化源码不会被覆盖。
 
