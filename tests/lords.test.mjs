@@ -372,4 +372,23 @@ assert.equal(lg.legitimacy, lgBefore, "丢地 −3 抵消");
 assert.equal(game.gainLegitimacy(lg, "不存在的理由"), false, "未知理由不应静默改数值");
 assert.equal(lg.legitimacy, lgBefore, "未知理由不应改动数值");
 
+// 三条路线的可用性要能被 UI 查询到，且各自给出明确的缺口说明
+const ui = game.createInitialState("界面", "oath", "standard");
+const opts = game.lordRouteStatus(ui, "selma");
+assert.deepEqual(Object.keys(opts).sort(), ["bribe", "force", "persuade"]);
+assert.equal(opts.persuade.available, false, "开局阻力未清，说服不可用");
+assert.ok(opts.persuade.detail.includes("阻力"), `说服应说明还差多少阻力，实际：${opts.persuade.detail}`);
+assert.ok(opts.bribe.detail.includes("金"), `收买应给出价格，实际：${opts.bribe.detail}`);
+
+const uiReady = game.createInitialState("界面2", "oath", "standard");
+uiReady.legitimacy = 100;
+uiReady.officers.find(o => o.id === "ysabel").rapport = 40;
+assert.equal(game.lordRouteStatus(uiReady, "ysabel").persuade.available, true, "阻力归零后说服应可用");
+
+// 公爵三条路里只有武力
+const duke = game.lordRouteStatus(ui, "regent");
+assert.equal(duke.persuade.available, false);
+assert.equal(duke.bribe.available, false);
+assert.ok(duke.persuade.detail.includes("篡位"), `公爵应明说不可说服，实际：${duke.persuade.detail}`);
+
 console.log("lords tests passed");

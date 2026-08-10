@@ -612,3 +612,9 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 }
 .city-lord { display: block; margin-bottom: 5px; color: #c6b98e; }
 .city-lord b { color: #efe6d1; font: 14px var(--serif); }
+
+.lord-routes { display: grid; gap: 3px; margin: 6px 0 5px; }
+.lord-routes .route { color: #83857c; font-size: 10px; line-height: 1.45; }
+.lord-routes .route.on { color: #c6b98e; }
+.lord-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.lord-actions button { flex: 1 1 auto; }

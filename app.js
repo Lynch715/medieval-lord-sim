@@ -1134,6 +1134,33 @@ function submitLord(s, lordId, route = "persuade", rng = Math.random) {
   return true;
 }
 
+// UI 与测试共用的路线可用性查询：每条路要么可用，要么说清楚还差什么。
+function lordRouteStatus(s, lordId) {
+  const lord = officer(s, lordId);
+  const def = LORD_DEFS[lordId];
+  if (!lord || !def) return {};
+  const resistance = lordResistance(s, lordId);
+  const cost = lordBribeCost(s, lordId);
+  const holdings = lordHoldings(s, lordId).length;
+  const persuadable = (def.routes?.persuade || 0) > 0;
+  return {
+    force: {
+      available: holdings > 0,
+      detail: holdings > 0 ? `攻下他最后一座城即可俘获（现有 ${holdings} 座）` : "他已无城可守"
+    },
+    persuade: {
+      available: canPersuadeLord(s, lordId),
+      detail: !persuadable ? "篡位者不接受任何使者，只能兵戎相见"
+        : resistance <= 0 ? "阻力已清，可要求他效忠"
+        : `还需消解 ${Math.ceil(resistance)} 点阻力`
+    },
+    bribe: {
+      available: Number.isFinite(cost) && s.gold >= cost && lord.side !== "player" && lord.side !== "gone" && !lord.captured,
+      detail: !Number.isFinite(cost) ? "他不收钱" : `${cost}金 + 一块封地承诺（正统性 −${BRIBE_LEGITIMACY_COST}）`
+    }
+  };
+}
+
 const BRIBE_LEGITIMACY_COST = 4;
 const PERSUADE_LEGITIMACY_GAIN = 6;
 
@@ -3153,7 +3180,8 @@ function renderTop() {
   $("playerNameText").textContent = S.playerName;
   $("oathBadge").textContent = "合法继承人";
   $("territoryCount").textContent = `${ownTerritoryIds(S).length} / ${playableTerritoryIds().length}`;
-  [["support", S.support], ["morale", S.morale], ["renown", S.renown]].forEach(([id, value]) => {
+  [["support", S.support], ["morale", S.morale], ["renown", S.renown], ["legitimacy", S.legitimacy]].forEach(([id, value]) => {
+    if (!$(`${id}Text`)) return;
     $(`${id}Text`).textContent = Math.round(value);
     $(`${id}Bar`).style.width = `${clamp(value)}%`;
   });
@@ -3403,7 +3431,7 @@ function territorySummary(s, id, attackable = []) {
   const lord = lordAt(s, id);
   const lordDef = lord ? LORD_DEFS[lord.id] : null;
   const lordLine = lord
-    ? `<span class="city-lord"><b>${esc(lord.name)}</b> · ${esc(lordDef?.title || "")}<br>${esc(lordDef?.oldTie || "")} · 抵抗 ${Math.round(lord.defiance ?? 0)}${lordDef?.liege ? ` · 主君 ${esc(LORD_DEFS[lordDef.liege].name)}` : " · 独立割据"}</span><br>`
+    ? `<span class="city-lord"><b>${esc(lord.name)}</b> · ${esc(lordDef?.title || "")}<br>${esc(lordDef?.oldTie || "")} · 抵抗 ${Math.round(lord.defiance ?? 0)} · 说服阻力 ${Math.max(0, Math.ceil(lordResistance(s, lord.id)))}${lordDef?.liege ? ` · 主君 ${esc(LORD_DEFS[lordDef.liege].name)}` : " · 独立割据"}</span><br>`
     : "";
   return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
 }
@@ -3589,14 +3617,33 @@ function renderCourt() {
       const def = LORD_DEFS[lord.id];
       const holdings = lordHoldings(S, lord.id);
       const liege = def.liege ? LORD_DEFS[def.liege].name : "独立";
+      const routes = lordRouteStatus(S, lord.id);
       const status = lord.captured ? "已被俘，等待处置" : holdings.length ? `据守${holdings.map(id => TERRITORY_DEFS[id].name).join("、")}` : "已失去全部辖地";
       return `<article class="officer-card enemy">${def.portrait ? `<img src="${def.portrait}" alt="${esc(def.name)}">` : `<div class="knight-mark">${esc(def.name.slice(0, 1))}</div>`}
         <div class="card-copy"><div class="role-line"><h3>${esc(def.name)}</h3><span>${esc(def.title)}</span></div>
         <p>${esc(def.oldTie || "")}<br>主君：${esc(liege)} · 抵抗 ${Math.round(lord.defiance ?? def.defiance)}</p>
-        <div class="loyalty-line"><span>${esc(status)}</span><b>${holdings.length}座城</b></div></div></article>`;
+        <div class="loyalty-line"><span>${esc(status)}</span><b>${holdings.length}座城</b></div>
+        <div class="lord-routes">
+          <span class="route ${routes.force.available ? "on" : ""}">打服 · ${esc(routes.force.detail)}</span>
+          <span class="route ${routes.persuade.available ? "on" : ""}">说服 · ${esc(routes.persuade.detail)}</span>
+          <span class="route ${routes.bribe.available ? "on" : ""}">收买 · ${esc(routes.bribe.detail)}</span>
+        </div>
+        <div class="lord-actions">
+          ${routes.persuade.available ? `<button class="secondary-btn" data-demand-fealty="${lord.id}">要求效忠</button>` : ""}
+          ${routes.bribe.available ? `<button class="ghost-btn" data-bribe-lord="${lord.id}">收买 · ${lordBribeCost(S, lord.id)}金</button>` : ""}
+        </div></div></article>`;
     }).join("") : `<div class="empty-state">北境已经没有仍举着旧旗的叛臣。</div>`}</div>
     <div class="section-head"><h2>骑士名册</h2><span>${activeKnights(S).length}名在列 · ${availableKnights(S).length}名游侠可招募 · 俘虏可处置</span></div><div class="knight-grid">${knights.filter(k => !["gone", "executed", "released", "hostile"].includes(k.status)).map(knightCard).join("") || `<div class="empty-state">暂时没有可处理的骑士。</div>`}</div>`;
   panel.querySelectorAll("[data-knight-action]").forEach(button => button.addEventListener("click", () => knightAction(button.dataset.knightId, button.dataset.knightAction)));
+  panel.querySelectorAll("[data-demand-fealty]").forEach(button => button.addEventListener("click", () => {
+    if (!demandFealty(S, button.dataset.demandFealty)) { toast("当前还无法让他效忠"); return; }
+    saveGame(); renderAll();
+  }));
+  panel.querySelectorAll("[data-bribe-lord]").forEach(button => button.addEventListener("click", () => {
+    const id = button.dataset.bribeLord;
+    if (!bribeLord(S, id, lordHoldings(S, id)[0] || null)) { toast("金币不足，或此人不收钱"); return; }
+    saveGame(); renderAll();
+  }));
 }
 
 function renderChronicle() {
@@ -3776,7 +3823,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals, adjacencyPressure, lordResistance, canPersuadeLord, lordBribeCost, submitLord, SUBMIT_LOYALTY, demandFealty, bribeLord, BRIBE_LEGITIMACY_COST, PERSUADE_LEGITIMACY_GAIN,
+    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals, adjacencyPressure, lordResistance, canPersuadeLord, lordBribeCost, submitLord, SUBMIT_LOYALTY, demandFealty, bribeLord, lordRouteStatus, BRIBE_LEGITIMACY_COST, PERSUADE_LEGITIMACY_GAIN,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
