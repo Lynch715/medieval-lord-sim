@@ -16,7 +16,8 @@ if (typeof module !== "undefined" && module.exports) {
     getQueueUsage, researchCapacity, runningResearchJobs, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, ownTerritoryIds, techCost, knowledgePerSeason, TECH_LEVEL_COST_GROWTH, ACADEMY_KNOWLEDGE_PER_LEVEL, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
     migrateSave, migrateV7ToV8, recordBattle, BATTLE_LOG_LIMIT, migrateV3ToV4, migrateV4ToV5, migrateV5ToV6, migrateV6ToV7, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, ENVOY_RAPPORT_GAIN, ENVOY_RAPPORT_CAP, RELEASE_RAPPORT_GAIN, cityActionAvailable, KNIGHT_LIEGE, intelLevel, reportedGuard, FOG_LEVELS,
     uiDraft, armyCorpsHtml, newArmyDraftView, expeditionDraftView, castleExpeditionHtml,
-    redeployArmy, stationedArmies
+    redeployArmy, stationedArmies, stationedPower, applyStationedLosses, retreatStationedArmies,
+    STATIONED_DEFENSE_FACTOR, STATIONED_RECOVERING_FACTOR
   };
 }
 

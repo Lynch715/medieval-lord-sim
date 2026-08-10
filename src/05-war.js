@@ -380,6 +380,56 @@ function aiArmyPower(army) {
     + (comp.light_cavalry || 0) * 1.22;
 }
 
+// 驻扎野战部队计入守城。0.8：野战部队守城不如城墙好使。
+// 0.7：整补中的疲兵再打七折 —— 刚打完硬仗的部队不该立刻变成铜墙铁壁，
+// 这也让「胜后整补 90 秒」第一次有了防守层面的意义。
+const STATIONED_DEFENSE_FACTOR = .8;
+const STATIONED_RECOVERING_FACTOR = .7;
+// 打退了也要流血，否则驻防是白嫖；城破损失更重。
+const STATIONED_LOSS_REPELLED = .04;
+const STATIONED_LOSS_CAPTURED = .18;
+
+function stationedPower(s, territoryId) {
+  return stationedArmies(s, territoryId).reduce((sum, army) =>
+    sum + aiArmyPower(army) * STATIONED_DEFENSE_FACTOR * (army.status === "recovering" ? STATIONED_RECOVERING_FACTOR : 1), 0);
+}
+
+// 扣除顺序按军团在 s.armies 里的下标从小到大，不按兵力或战力排序 ——
+// 平衡模拟是确定性的，任何依赖运行期状态的排序都可能让两次运行结果不同。
+function applyStationedLosses(s, territoryId, share) {
+  const armies = stationedArmies(s, territoryId);
+  const total = armies.reduce((sum, army) => sum + compositionTotal(army.composition), 0);
+  if (!armies.length || total <= 0) return 0;
+  let left = Math.max(1, Math.round(total * share));
+  let taken = 0;
+  armies.forEach(army => {
+    if (left <= 0) return;
+    const removed = compositionTotal(removeFromComposition(army.composition, left));
+    taken += removed;
+    left -= removed;
+  });
+  syncTroops(s);
+  return taken;
+}
+
+// 城破后撤往最近的自有领地并进入整补。距离相同时取 ownTerritoryIds 里
+// 靠前的那个 —— 该函数返回顺序由 TERRITORY_DEFS 的键序决定，是确定的。
+function retreatStationedArmies(s, territoryId, now = Date.now()) {
+  const armies = stationedArmies(s, territoryId);
+  const havens = ownTerritoryIds(s).filter(id => id !== territoryId);
+  // 无处可退说明渡鸦堡也已失守，紧接着就会置 s.ended，游戏已经结束。
+  if (!armies.length || !havens.length) return [];
+  const haven = havens.reduce((best, id) => territoryDistance(territoryId, id) < territoryDistance(territoryId, best) ? id : best, havens[0]);
+  armies.forEach(army => {
+    army.locationId = haven;
+    army.destinationId = null;
+    army.jobId = null;
+    army.status = "idle";
+    startArmyRecovery(s, army, 90 * 1000, now);
+  });
+  return armies;
+}
+
 // AI 能打哪里，取自己版图的边界 —— 和玩家那边是同一条规则。
 // 原先只看「大军脚下那一格的邻居里哪些属于玩家」，后果是摄政公爵整局一仗没打：
 // 它的军队站在王冠谷，三个邻居分别属狼牙和河望，targets 恒为空。
@@ -478,7 +528,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
   const vulnerableKeep = targetId === "ravenstone" && turnOf(s) > 16 && (t.guard < 30 || s.grain < 24 || s.support < 25);
   const decisiveRaid = faction === "wolf" && targetId === "ravenstone" && turnOf(s) > 12 && (vulnerableKeep || rng() < .12);
   const attack = aiArmyPower(army) * (.56 + (army.morale || 50) / 420) * (difficultyOf(s).enemy * (.9 + rng() * .2)) * (decisiveRaid ? 1.65 : 1);
-  const defense = t.guard + (t.buildings.walls || 0) * 8 + (t.buildings.watchtower || 0) * 4 + t.stability * .2;
+  const defense = t.guard + (t.buildings.walls || 0) * 8 + (t.buildings.watchtower || 0) * 4 + t.stability * .2 + stationedPower(s, targetId);
   const loss = Math.max(1, Math.round((army.composition?.levy || 0) * .08));
   army.composition.levy = Math.max(0, (army.composition.levy || 0) - loss);
   if (attack > defense * (decisiveRaid ? .92 : 1.1)) {
@@ -495,6 +545,10 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
     t.devastated = 2;
     log(s, "bad", `${army.name}攻占${TERRITORY_DEFS[targetId].name}。`);
     recordBattle(s, { dir: "defend", targetId, targetName: TERRITORY_DEFS[targetId].name, outcome: "lost", attacker: FACTIONS[faction]?.name || "敌军" });
+    // 先扣伤亡再撤离：applyStationedLosses 按 locationId 找军团，撤走了就找不到。
+    // retreatStationedArmies 要在 t.owner 已改判之后调，这样 ownTerritoryIds 拿到的是城破后的名单。
+    applyStationedLosses(s, targetId, STATIONED_LOSS_CAPTURED);
+    retreatStationedArmies(s, targetId);
     if (targetId === "ravenstone") { s.ended = true; s.endingReason = "fallen"; }
     return "captured";
   }
@@ -509,6 +563,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
     outcome: "raided", attacker: FACTIONS[army.owner]?.name || "敌军",
     lostGold: goldLoss, lostGrain: grainLoss
   });
+  applyStationedLosses(s, targetId, STATIONED_LOSS_REPELLED);
   army.locationId = originId || army.locationId;
   return attack > defense * .92 ? "raided" : "repulsed";
 }
