@@ -77,6 +77,28 @@ function bestDraft(state) {
   return best;
 }
 
+// 机器人的外交：够得着就先谈，谈不动再打。
+// 这不是最优策略，只是用来验证两条路线在实战中确实可走。
+function diplomacy(state) {
+  const used = { envoy: 0, persuade: 0, bribe: 0 };
+  for (const [id, def] of Object.entries(game.LORD_DEFS)) {
+    if (def.tier === "loyal") continue;
+    const lord = state.officers.find(o => o.id === id);
+    if (!lord || lord.side === "player" || lord.side === "gone" || lord.captured) continue;
+    if (game.demandFealty(state, id)) { used.persuade++; continue; }
+    const cost = game.lordBribeCost(state, id);
+    if (Number.isFinite(cost) && state.gold > cost + 120) {
+      if (game.bribeLord(state, id, game.lordHoldings(state, id)[0] || null)) { used.bribe++; continue; }
+    }
+    const seat = game.lordHoldings(state, id)[0];
+    if (seat && state.gold > 40 && game.cityActionAvailable(state, seat, "envoy") && game.cityAction(state, seat, "envoy")) {
+      game.processCompletedJobs(state, state.jobs.at(-1).endAt);
+      used.envoy++;
+    }
+  }
+  return used;
+}
+
 function fight(state, random) {
   const draft = bestDraft(state);
   if (!draft || draft.ratio < .84 || state.grain < game.campaignSupply(state, draft.troops, draft.leaderIds, "army_1")) return false;
@@ -99,6 +121,7 @@ function fight(state, random) {
 
 function run(seed) {
   const random = rngFor(seed);
+  const diploTally = { envoy: 0, persuade: 0, bribe: 0 };
   const state = game.createInitialState(`模拟${seed}`, ["oath", "iron", "wealth"][seed % 3], "standard");
   const originalRandom = Math.random;
   let now = Date.now();
@@ -108,6 +131,8 @@ function run(seed) {
       game.processCompletedJobs(state, now);
       resolveDecisions(state);
       if (state.ended) break;
+      const diplo = diplomacy(state);
+      diploTally.envoy += diplo.envoy; diploTally.persuade += diplo.persuade; diploTally.bribe += diplo.bribe;
       fight(state, random);
       if (state.ended) break;
       // 应急征收已随「领主行动」系统一并删除：现在缺钱只能靠经营和扩张，
@@ -131,7 +156,8 @@ function run(seed) {
     wins: state.wins, battles: state.battles, ending: state.endingReason, casualties: state.casualties,
     renown: Math.round(state.renown), army: game.armyTotal(state, "army_1"),
     siegeTech: game.techCompleted(state, "war_engineering"), gold: Math.round(state.gold), grain: Math.round(state.grain),
-    submittedLords: state.officers.filter(o => o.submitted).length
+    submittedLords: state.officers.filter(o => o.submitted).length,
+    persuaded: diploTally.persuade, bribed: diploTally.bribe, envoys: diploTally.envoy
   };
 }
 
@@ -166,6 +192,9 @@ assert.ok(Number(avg("territories")) >= 6,
 assert.ok(met("siegeTech") >= results.length * .9, "攻城工程应当是常规可达成的科技");
 assert.ok(Number(avg("renown")) >= 60, "威望门槛应当是常规可达成的");
 assert.ok(Number(avg("submittedLords")) > 0, "打服路线必须能实际收服到领主，否则整条路线在实战中不可用");
+// 三条路线都必须在实战中确实可走，否则说明某条路线只是摆设。
+assert.ok(results.some(r => r.persuaded > 0), "说服路线必须至少在部分局中成立");
+assert.ok(results.some(r => r.bribed > 0), "收买路线必须至少在部分局中成立");
 console.log(JSON.stringify({
   runs: results.length, unified: unified.length, collapsed, medianTurn: median,
   range: completionTurns.length ? [completionTurns[0], completionTurns.at(-1)] : null,
@@ -174,5 +203,6 @@ console.log(JSON.stringify({
   平均主力: avg("army"), 主力要求: 80,
   攻城工程达成局数: met("siegeTech"),
   平均胜场: avg("wins"), 平均出征: avg("battles"), 平均结余金币: avg("gold"), 平均收服领主: avg("submittedLords"),
+  平均说服归附: avg("persuaded"), 平均收买归附: avg("bribed"), 平均派出使者: avg("envoys"),
   结局分布: endingCounts, 崩溃局数: collapsed
 }, null, 2));
