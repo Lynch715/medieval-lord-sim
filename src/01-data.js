@@ -68,14 +68,14 @@ const TECH_DEFS = {
     { id: "relay_roads", name: "驿站道路", desc: "换季时额外获得 2 知识。", cost: { knowledge: 18, gold: 30 }, requires: ["tax_registry"] },
     { id: "census", name: "人口清册", desc: "降低人口粮食消耗，并提高征募上限。", cost: { knowledge: 24, gold: 38 }, requires: ["relay_roads"] },
     { id: "provincial_offices", name: "行省官署", desc: "家臣管理领地时少损失一成收入。", cost: { knowledge: 32, gold: 52 }, requires: ["census"] },
-    { id: "law_code", name: "统一法典", desc: "稳定度低于50的领地不再额外损失金币。", cost: { knowledge: 42, gold: 68 }, requires: ["provincial_offices"] }
+    { id: "law_code", name: "统一法典", desc: "稳定度偏低的领地不再继续流失金币：产出按稳定度 50 托底，每多一阶再抬 10 点。", cost: { knowledge: 42, gold: 68 }, requires: ["provincial_offices"] }
   ],
   commerce: [
-    { id: "coinage", name: "统一铸币", desc: "金币流量 +8%，商站收益提高。", cost: { knowledge: 12, gold: 24 }, requires: [] },
-    { id: "caravanserai", name: "商旅驿站", desc: "每座商站额外带回金币，并降低贸易风险。", cost: { knowledge: 22, gold: 36 }, requires: ["coinage"] },
+    { id: "coinage", name: "统一铸币", desc: "所有领地金币产出 +8%。", cost: { knowledge: 12, gold: 24 }, requires: [] },
+    { id: "caravanserai", name: "商旅驿站", desc: "驿道每级额外带回金币。", cost: { knowledge: 22, gold: 36 }, requires: ["coinage"] },
     { id: "trade_guild", name: "商会特许", desc: "市场建筑的金币加成提高。", cost: { knowledge: 30, gold: 48 }, requires: ["caravanserai"] },
-    { id: "market_charter", name: "自由市契约", desc: "外围城市签订城约的信任门槛降低。", cost: { knowledge: 40, gold: 62 }, requires: ["trade_guild"] },
-    { id: "royal_exchange", name: "王家汇兑", desc: "商站收益再提高；完成统一时额外获得威望。", cost: { knowledge: 54, gold: 86 }, requires: ["market_charter"] }
+    { id: "market_charter", name: "自由市契约", desc: "商路铺开，收买领主的开价降低（每阶 −12%，最多 −30%）。", cost: { knowledge: 40, gold: 62 }, requires: ["trade_guild"] },
+    { id: "royal_exchange", name: "王家汇兑", desc: "驿道收益再提高；完成统一时额外获得威望。", cost: { knowledge: 54, gold: 86 }, requires: ["market_charter"] }
   ],
   siege: [
     { id: "siege_ladders", name: "攻城梯", desc: "攻城战第一阶段突破力提高。", cost: { knowledge: 14, gold: 28 }, requires: [] },

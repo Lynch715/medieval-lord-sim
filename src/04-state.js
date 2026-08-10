@@ -402,13 +402,21 @@ function territoryOutput(s, id, season = seasonOf(s)) {
   const diff = difficultyOf(s).income;
   const grainTech = (1 + techLevel(s, "heavy_plow") * .08) * (1 + techLevel(s, "crop_rotation") * .1) * (1 + techLevel(s, "seed_selection") * .08) * (season.id === "winter" ? 1 + techLevel(s, "winter_storage") * .12 : 1) * (season.id !== "winter" ? 1 + techLevel(s, "irrigation") * .06 : 1);
   const goldTech = (1 + techLevel(s, "tax_registry") * .08) * (1 + techLevel(s, "coinage") * .08) * (1 + techLevel(s, "trade_guild") * .08);
+  // 统一法典只托底，不加成：低稳定度领地的金币不再随稳定度继续下滑，
+  // 相当于把它当作稳定度 50（每多一阶再抬 10 点）来算。稳定度本来就高的领地
+  // 取 Math.max 后拿到的仍是自己那一份，因此不会变成一条隐形的全局增益。
+  const lawFloorAt = 40 + techLevel(s, "law_code") * 10;
+  const goldStability = techLevel(s, "law_code") ? Math.max(stability, .62 + lawFloorAt / 265) : stability;
+  // 驿道是这条商路上真正的载体：商旅驿站与王家汇兑各让每级驿道多带回金币。
+  // 原描述里的「商站」在游戏里根本不存在，是某个被删系统留下的词。
+  const roadGold = 1.5 + techLevel(s, "caravanserai") * .7 + techLevel(s, "royal_exchange") * .9;
   // 每块领地保留一小段基础余量，确保自动换季结算不是“产出刚好被开支吃完”；
   // 玩家仍需通过政策、建筑和扩张把余量放大，而不是靠反复点击应急征收维持运转。
   const grainBase = (d.grain + t.buildings.fields * 8 + 4) * grainTech;
-  const goldBase = (d.gold + t.buildings.market * 3 + t.buildings.roads * 1.5 + 1) * goldTech;
+  const goldBase = (d.gold + t.buildings.market * 3 + t.buildings.roads * roadGold + 1) * goldTech;
   return {
     grain: Math.max(0, Math.round(grainBase * season.grain * stability * damage * share * diff)),
-    gold: Math.max(0, Math.round(goldBase * season.gold * stability * damage * share * wealth * admin * diff))
+    gold: Math.max(0, Math.round(goldBase * season.gold * goldStability * damage * share * wealth * admin * diff))
   };
 }
 
@@ -597,7 +605,11 @@ function recruitAmount(s, type, territoryId = recruitmentTerritoryId(s)) {
   const barracks = s.territories[territoryId]?.buildings?.barracks || 0;
   const workshop = s.territories[territoryId]?.buildings?.workshop || 0;
   const trainingBonus = type === "levy" ? Math.min(5, barracks) + Math.floor(workshop / 2) : ["archers", "crossbowmen"].includes(type) ? Math.floor(Math.min(5, barracks) / 2) + Math.floor(workshop / 3) : Math.floor(barracks / 2);
-  return unit.amount + trainingBonus;
+  // 人口清册的「提高征募上限」与长弓的「弓箭手征募量提高」原先都只写在描述里。
+  // 清册管所有兵种，长弓只管弓手（弓箭手与弩手）。
+  const censusBonus = techLevel(s, "census");
+  const bowBonus = ["archers", "crossbowmen"].includes(type) ? techLevel(s, "longbow") : 0;
+  return unit.amount + trainingBonus + censusBonus + bowBonus;
 }
 
 function recruitUnit(type) {

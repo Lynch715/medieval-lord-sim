@@ -74,7 +74,11 @@ function lordBribeCost(s, lordId) {
   const def = LORD_DEFS[lordId];
   const bribe = def?.routes?.bribe || 0;
   if (!lord || !bribe) return Infinity;
-  return Math.round((lord.defiance ?? def.defiance) * 6 / bribe);
+  // 自由市契约压低开价：商路铺开之后，钱在北境更好使。
+  // 收买本来就要扣正统性，是三条路里最弱的一条，让商贸线的终点补贴它不会
+  // 动摇「武力为主」——不收钱的篡位者仍然不收钱（bribe 为 0 时上面已返回 Infinity）。
+  const charter = 1 - Math.min(.3, techLevel(s, "market_charter") * .12);
+  return Math.round((lord.defiance ?? def.defiance) * 6 / bribe * charter);
 }
 
 // 打服 / 说服 / 收买三条路线共用同一个归附出口：

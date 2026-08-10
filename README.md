@@ -43,6 +43,7 @@
 ### 经营
 - 农田、集市、兵营、城墙、粮仓、学宫、军械工坊、驿道、烽火台、神殿十类五级建设
 - 农业、军事、行政、商贸、攻城五条科技树共 25 项，每项三阶；研究可并发，学宫每累计 5 级多开一条研究线
+- 25 项科技**每一项都有真实效果**，由 `tests/tech.test.mjs` 的元断言钉死：往科技表里加一项却忘了接线，测试直接红
 - 金币、粮食、知识、民心、军心、威望、王室正统性
 
 ### 其他
@@ -52,9 +53,9 @@
 
 ## 尚未实现
 
-- 收买时的封地承诺已记录，但兑现与背弃的后续事件尚未实现
+- 收买时的封地承诺已记录，但兑现与背弃的后续事件尚未实现（`keepPromise` / `breakPromise` 两个正统性档位已定义、尚无触发点）
 - 地图分层与扩张、AI 决策质量（P3）
-- 科技树成本与产出的配平、三项安慰剂科技（P4）
+- 科技树成本与产出的配平（P4）：25 项一阶合计 740 知识，而知识产出只有「3 + 学宫总级数 + 驿道×2」每季，48 季内一阶勉强点满、三阶基本不可能
 
 ## 启动
 
@@ -95,6 +96,7 @@ node tests/structure.test.mjs
 node tests/lords.test.mjs
 node tests/migration.test.mjs
 node tests/clock.test.mjs
+node tests/tech.test.mjs
 node tests/campaign-balance.sim.mjs
 python3 build_single.py
 ```
