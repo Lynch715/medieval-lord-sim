@@ -520,7 +520,9 @@ function recordBattle(s, entry) {
   return s.battleLog[0];
 }
 
-function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.locationId) {
+// now 必须由调用方给出（行军任务的 completedAt）。世界由 clock 驱动，
+// 这里若退回 Date.now()，撤离产生的整补任务就会和模拟时间线脱节。
+function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.locationId, now = Date.now()) {
   const faction = army.owner;
   const t = s.territories[targetId];
   if (t && t.owner === "neutral") return resolveAIAnnex(s, army, targetId, rng);
@@ -548,7 +550,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
     // 先扣伤亡再撤离：applyStationedLosses 按 locationId 找军团，撤走了就找不到。
     // retreatStationedArmies 要在 t.owner 已改判之后调，这样 ownTerritoryIds 拿到的是城破后的名单。
     applyStationedLosses(s, targetId, STATIONED_LOSS_CAPTURED);
-    retreatStationedArmies(s, targetId);
+    retreatStationedArmies(s, targetId, now);
     if (targetId === "ravenstone") { s.ended = true; s.endingReason = "fallen"; }
     return "captured";
   }

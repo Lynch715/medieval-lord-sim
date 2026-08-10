@@ -297,6 +297,31 @@ const resetDraft = () => {
   assert.equal(main.status, "recovering", "撤离后应进入整补");
 }
 
+// ── 撤离产生的整补任务必须挂在传入的时刻上，不能取墙钟 ────────────────
+// 平衡模拟是确定性的：世界由 clock 驱动，任何 Date.now() 泄漏都会让
+// 任务的 endAt 与模拟时间线脱节，两次运行可能给出不同结果。
+{
+  resetDraft();
+  const s = fresh("时钟不泄漏");
+  const main = game.armyEntity(s, "army_1");
+  const spot = game.ownTerritoryIds(s).find(id => id !== "ravenstone");
+  main.locationId = spot;
+  main.composition = { levy: 2, archers: 0, knights: 0, heavy_infantry: 0, crossbowmen: 0, light_cavalry: 0 };
+  s.territories[spot].guard = 1;
+  s.territories[spot].stability = 5;
+  s.territories[spot].buildings.walls = 0;
+  s.territories[spot].buildings.watchtower = 0;
+  const at = 5_000_000;
+  game.resolveAIAttack(s, {
+    id: "wolf_t4", name: "狼牙主力", owner: "wolf", locationId: "highpass",
+    composition: { levy: 90, archers: 30, knights: 20, heavy_infantry: 15, crossbowmen: 10, light_cavalry: 10 },
+    morale: 80, status: "idle", jobId: null
+  }, spot, () => 0.99, "highpass", at);
+  const job = s.jobs.find(item => item.type === "RECOVER" && item.status === "running");
+  assert.ok(job, "撤离应产生整补任务");
+  assert.equal(job.endAt, at + 90 * 1000, "整补任务必须挂在传入的时刻上，而不是 Date.now()");
+}
+
 // ── 六个兵种各排各的队 ────────────────────────────────────────────────
 // 此前 queueKey 是 recruit:${领地}，同一块地同时只能训练一个兵种，
 // 其余兵种卡显示「训练队列占用」。放开后唯一的闸门是金币和粮食。

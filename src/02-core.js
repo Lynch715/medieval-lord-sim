@@ -490,9 +490,10 @@ function applyCompletedJob(s, job, rng = Math.random) {
     // AI 抵达非自家领地即交战：打玩家是袭击，打中立割据是吞并。
     const arrivedOwner = s.territories[destinationId]?.owner;
     if (army.owner !== "player" && (arrivedOwner === "player" || arrivedOwner === "neutral")) {
-      const result = resolveAIAttack(s, army, destinationId, rng, originId);
+      const arrivedAt = job.completedAt || Date.now();
+      const result = resolveAIAttack(s, army, destinationId, rng, originId, arrivedAt);
       if (result !== "captured") army.locationId = originId;
-      startArmyRecovery(s, army, result === "captured" ? 110 * 1000 : 90 * 1000, job.completedAt || Date.now());
+      startArmyRecovery(s, army, result === "captured" ? 110 * 1000 : 90 * 1000, arrivedAt);
     }
     const battlePlan = job.payload?.battlePlan;
     if (army.owner === "player" && battlePlan && s.territories[destinationId]?.owner !== "player") {
