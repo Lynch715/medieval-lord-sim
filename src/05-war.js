@@ -353,6 +353,10 @@ function finishBattle(s, outcome, rng = Math.random) {
   });
   const report = { targetId, targetName, outcome, losses: session.playerLoss, lossesByType, composition: clone(session.composition), enemyLoss: session.enemyLoss, persistentEnemyLoss, garrisoned, lostGold, lostGrain, history: clone(session.history), momentum: session.momentum, injured };
   s.lastBattle = report;
+  recordBattle(s, {
+    dir: "attack", targetId, targetName, outcome,
+    ourLoss: session.playerLoss, theirLoss: session.enemyLoss
+  });
   s.battleSession = null;
   // 攻下王冠谷就是胜利。原本要求「拥有全部 24 块可占领地」——
   // 那与开城条件是两套完全不同的门槛，实测 7/120 局打进了王城却没人触发统一，
@@ -453,6 +457,19 @@ function resolveAIAnnex(s, army, targetId, rng = Math.random) {
   return "captured";
 }
 
+// 战斗历史。此前只有 s.lastBattle 存最后一场，敌军打过来更是完全不留记录 ——
+// 日志里只有一行「XX攻占YY」，玩家事后无从复盘自己到底被谁打过几次。
+// 上限 24 条：够回看一整段战役，又不会把存档撑大。
+const BATTLE_LOG_LIMIT = 24;
+
+function recordBattle(s, entry) {
+  if (!s) return null;
+  s.battleLog ||= [];
+  s.battleLog.unshift({ turn: turnOf(s), elapsedMs: s.clock?.elapsedMs || 0, ...entry });
+  s.battleLog.length = Math.min(s.battleLog.length, BATTLE_LOG_LIMIT);
+  return s.battleLog[0];
+}
+
 function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.locationId) {
   const faction = army.owner;
   const t = s.territories[targetId];
@@ -477,6 +494,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
     t.guard = Math.max(18, Math.round(attack * .34));
     t.devastated = 2;
     log(s, "bad", `${army.name}攻占${TERRITORY_DEFS[targetId].name}。`);
+    recordBattle(s, { dir: "defend", targetId, targetName: TERRITORY_DEFS[targetId].name, outcome: "lost", attacker: FACTIONS[faction]?.name || "敌军" });
     if (targetId === "ravenstone") { s.ended = true; s.endingReason = "fallen"; }
     return "captured";
   }
@@ -486,6 +504,11 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
   t.stability = clamp(t.stability - 5);
   t.devastated = Math.max(t.devastated, 1);
   log(s, "warn", `${army.name}袭扰${TERRITORY_DEFS[targetId].name}，抢走${grainLoss}粮食和${goldLoss}金币。`);
+  recordBattle(s, {
+    dir: "defend", targetId, targetName: TERRITORY_DEFS[targetId].name,
+    outcome: "raided", attacker: FACTIONS[army.owner]?.name || "敌军",
+    lostGold: goldLoss, lostGrain: grainLoss
+  });
   army.locationId = originId || army.locationId;
   return attack > defense * .92 ? "raided" : "repulsed";
 }

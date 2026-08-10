@@ -5,7 +5,7 @@
 // 附庸生成、骑士归属反查）依赖它。
 
 const SAVE_KEY = "iron-crown-lord-save-v1";
-const VERSION = 7;
+const VERSION = 8;
 // 加冕记在游戏时间（elapsedMs）上而非真实时间，这样暂停与离线都不会让公爵偷跑。
 const CORONATION_AT_MS = 48 * 5 * 60 * 1000;      // 12 游戏年
 const CORONATION_DELAY_MS = 20 * 60 * 1000;       // 每拿下一块公爵直辖地推迟 20 分钟

@@ -406,6 +406,7 @@ function armyCorpsHtml() {
 }
 
 function bindArmyControls(panel) {
+  bindFold(panel, "battlelog", foldState.sections);
   panel.querySelectorAll("[data-create-army]").forEach(button => button.addEventListener("click", () => {
     const composition = emptyComposition();
     panel.querySelectorAll("[data-new-army-unit]").forEach(input => { composition[input.dataset.newArmyUnit] = Math.max(0, Math.round(Number(input.value) || 0)); });
@@ -429,7 +430,7 @@ function renderCampaign() {
   panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>军队与军团</h2><p>军队页负责募兵和编制。先把兵卒分成几支由王子或骑士带领的军团，再去地图选择目标出征；地图上可以单独出征，也可以多军团合军。</p>${metrics([[totalMobile, "机动兵力"], [activeUnits, "现役兵种"], [armies.length, "军团数量"], [activeKnights(S).length, "在列骑士"]])}</section>
     ${armyCorpsHtml()}
     <div class="section-head"><h2>兵种与补充</h2><span>训练完成后进入本地驻军，再编入渡鸦第一军团</span></div>${armyRosterHtml()}
-    ${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
+    ${renderBattleLog()}`;
   bindArmyControls(panel);
   panel.querySelectorAll("[data-recruit-unit]").forEach(button => button.addEventListener("click", () => recruitUnit(button.dataset.recruitUnit)));
   panel.querySelectorAll("[data-deploy-garrison]").forEach(button => button.addEventListener("click", () => { if (!deployGarrison(S, button.dataset.deployGarrison)) toast("第一军团必须驻扎在本地且完成整补"); saveGame(); renderAll(); }));
@@ -466,6 +467,29 @@ function battleBackground(targetId) {
   if (tags.includes("mountain")) return "assets/battle-mountain.webp";
   if (tags.includes("river")) return "assets/battle-river.webp";
   return "assets/battle-plains.webp";
+}
+
+// 战报改为可折叠的历史，并且两个方向都记：我打出去的，和别人打进来的。
+// 此前只有 s.lastBattle 一条，敌军来袭更是完全不留痕迹，玩家事后无从复盘。
+function renderBattleLog() {
+  const entries = S.battleLog || [];
+  const attacks = entries.filter(e => e.dir === "attack");
+  const defends = entries.filter(e => e.dir === "defend");
+  if (!entries.length && !S.lastBattle) return "";
+  const row = e => {
+    const when = `第${Math.floor(e.turn / 4) + 1}年${SEASONS[e.turn % 4].name}`;
+    if (e.dir === "attack") {
+      const label = e.outcome === "win" ? "胜" : e.outcome === "retreat" ? "撤退" : "败";
+      return `<article class="log-row"><time>${when}</time><div><b class="battle-dir-out">出征 · ${esc(e.targetName)} · ${label}</b><p>我军损失 ${e.ourLoss || 0} 人，敌军约损失 ${e.theirLoss || 0} 人。</p></div></article>`;
+    }
+    const lost = e.outcome === "lost";
+    return `<article class="log-row"><time>${when}</time><div><b class="battle-dir-in">来袭 · ${esc(e.targetName)} · ${lost ? "失守" : "遭袭扰"}</b><p>${esc(e.attacker || "敌军")}${lost ? "攻占了这里。" : `抢走 ${e.lostGrain || 0} 粮和 ${e.lostGold || 0} 金。`}</p></div></article>`;
+  };
+  const body = `<div class="chronicle">${entries.length ? entries.map(row).join("") : `<div class="empty-state">还没有交战记录。</div>`}</div>${S.lastBattle ? renderLastBattle(S.lastBattle) : ""}`;
+  return `<div class="section-head"><h2>战报</h2><span>点开查看历次交战</span></div>
+    ${foldBlock("battlelog", "log", "交战记录", `出征 ${attacks.length} 次 · 来袭 ${defends.length} 次`,
+      entries.length ? `最近：${esc(entries[0].dir === "attack" ? "出征 " + entries[0].targetName : "来袭 " + entries[0].targetName)}` : "暂无",
+      body, foldState.sections)}`;
 }
 
 function renderLastBattle(report) {

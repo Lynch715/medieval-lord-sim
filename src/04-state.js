@@ -59,6 +59,7 @@ function createInitialState(name, startingStyle, difficulty) {
     battles: 0, wins: 0, casualties: 0,
     lastAction: null,
     lastBattle: null,
+    battleLog: [],
     battleSession: null,
     pendingDecisions: [],
     seenEvents: [],
@@ -199,6 +200,16 @@ function migrateV6ToV7(raw) {
   return migrated;
 }
 
+function migrateV7ToV8(raw) {
+  const migrated = clone(raw);
+  migrated.version = 8;
+  // 战斗历史是新账本，老档没有往事可补，给个空数组即可。
+  // 不去拿 lastBattle 伪造一条：那条没有方向也没有时刻，塞进去只会是假记录。
+  migrated.battleLog = Array.isArray(migrated.battleLog) ? migrated.battleLog : [];
+  migrated.migrationLog = [...(migrated.migrationLog || []), "v7-to-v8"];
+  return migrated;
+}
+
 function migrateSave(raw, now = Date.now()) {
   if (!raw) return null;
   let migrated = clone(raw);
@@ -208,6 +219,7 @@ function migrateSave(raw, now = Date.now()) {
   if (migrated.version === 4) migrated = migrateV4ToV5(migrated, now);
   if (migrated.version === 5) migrated = migrateV5ToV6(migrated);
   if (migrated.version === 6) migrated = migrateV6ToV7(migrated);
+  if (migrated.version === 7) migrated = migrateV7ToV8(migrated);
   if (migrated.version !== VERSION) return null;
   return hydrateLatest(migrated);
 }

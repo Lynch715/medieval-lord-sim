@@ -667,3 +667,6 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 }
 
 .city-fogged { color: #7c7e74; font-style: italic; }
+
+.battle-dir-out { color: var(--gold-light); }
+.battle-dir-in { color: #c98d7f; }
