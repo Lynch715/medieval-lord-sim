@@ -216,6 +216,24 @@ function mapRoutes(s) {
   return `<svg class="map-routes" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${zones}${routes}</svg>`;
 }
 
+// 三类领地的职能名。type 以前只用来分「城堡／附属镇」两个字，现在它决定
+// 大区控制与防御投射，玩家必须一眼看得出手上这块地是干什么用的。
+function territoryRoleName(type) {
+  return type === "capital" ? "王城" : type === "castle" ? "核心城堡" : type === "fort" ? "战略要点" : "附庸城镇";
+}
+
+function territoryRoleHint(s, id) {
+  const d = TERRITORY_DEFS[id];
+  if (!d) return "";
+  if (d.type === "castle" || d.type === "capital") {
+    const held = controlsRegionOf(s, id) && s.territories[id]?.owner === "player";
+    return held ? "本区核心城堡 · 已控制本区，同区领地产出与稳定获得加成"
+      : "本区核心城堡 · 拿下它，同区自有领地产出与稳定一并提升";
+  }
+  if (d.type === "fort") return "战略要点 · 易守难养，为相邻的自有领地提高守军上限";
+  return "附庸城镇 · 扩张的口粮，产出中庸";
+}
+
 function mapNode(id, attackable) {
   const d = TERRITORY_DEFS[id];
   const t = S.territories[id];
@@ -224,7 +242,7 @@ function mapNode(id, attackable) {
   const canAttack = attackable.includes(id);
   const locked = d.final && !crownAccessMet(S);
   const minor = d.playable === false;
-  const settlementType = d.type === "castle" || d.type === "capital" ? "城堡" : "附属镇";
+  const settlementType = territoryRoleName(d.type);
   const status = canAttack ? "可出征" : mine ? `我方${settlementType} · 守军${t.guard}` : minor ? "道路节点 · 可侦察" : locked ? "条件未满足" : `守军 ${t.guard}`;
   return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${minor ? "minor" : ""} ${canAttack ? "attackable" : ""} ${locked ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%">${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${status}</small></span></button>`;
 }
@@ -264,14 +282,14 @@ function territorySummary(s, id, attackable = []) {
   const actionHtml = cityJob ? `<div class="city-queue"><b>斥候行动进行中</b><span data-job-countdown="${cityJob.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(cityJob))}</span><small>完成后会记录这座城的基础军情。</small></div>` : actions.length ? `<div class="city-actions">${actions.map(action => `<button data-city-action="${action.id}" data-city-id="${id}" ${action.disabled ? "disabled" : ""}><b>${action.name}</b><small>${action.note}</small></button>`).join("")}</div>` : "";
   const attack = attackable.includes(id) ? `<button class="city-attack-btn" data-city-attack="${id}">打开出征配置</button>` : "";
   const castlePlan = t.owner !== "player" && d.playable !== false ? castleExpeditionHtml(s, id) : "";
-  const settlementType = d.type === "castle" || d.type === "capital" ? "城堡" : "附属镇";
+  const settlementType = territoryRoleName(d.type);
   // 每块叛臣领地都有具名守将，地图是玩家挑目标的地方，必须能看见守的是谁。
   const lord = lordAt(s, id);
   const lordDef = lord ? LORD_DEFS[lord.id] : null;
   const lordLine = lord
     ? `<span class="city-lord"><b>${esc(lord.name)}</b> · ${esc(lordDef?.title || "")}<br>${esc(lordDef?.oldTie || "")} · 抵抗 ${Math.round(lord.defiance ?? 0)} · 说服阻力 ${Math.max(0, Math.ceil(lordResistance(s, lord.id)))}${lordDef?.liege ? ` · 主君 ${esc(LORD_DEFS[lordDef.liege].name)}` : " · 独立割据"}</span><br>`
     : "";
-  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
+  return `<article style="--owner-color:${faction.color}"><div class="city-inspector-head"><div><small style="color:${faction.color}">${faction.name} · ${settlementType}</small><h3>${d.name}</h3></div><b class="city-relation">${t.owner === "player" ? "我方领地" : lord ? "叛臣据守" : "无人据守"}</b></div><p>${lordLine}${d.terrain} · 守军 ${t.guard} · 民心 ${Math.round(S.support)}<br><span class="city-role">${territoryRoleHint(s, id)}</span><br>${esc(d.desc)}<br><span class="city-intel">${intel}</span></p>${attack}${castlePlan}${actionHtml}</article>`;
 }
 
 function terrainAdvice(targetId, composition) {

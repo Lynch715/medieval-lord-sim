@@ -122,6 +122,18 @@ const AI_FACTION_DEFS = {
   crown: { capital: "crownvale", personality: "cautious", gold: 130, grain: 220, knowledge: 16 }
 };
 
+// 三类领地各有职能，type 不再只是界面上「城堡／附属镇」两个字：
+//   核心城堡（castle / capital）—— 控制大区：占住它，同区自有领地产出与稳定都上一个台阶
+//   战略要点（fort）        —— 防御投射：本身守军上限高，还抬高相邻自有领地的守军上限
+//   附庸城镇（town）        —— 普通的扩张口粮
+// 大区加成看着不大，实际收益要连同下面的稳定加成一起算：稳定既直接抬产出
+// （产出系数是 .62 + 稳定/265），又是守军自然回复的门槛。两项合起来约一成。
+// 定在这个量级是配平出来的：早先给到 .2 时机器人胜率从 35% 一路窜到 61%，
+// 「控制大区」会强到让其他决策都不重要。
+const REGION_CONTROL_OUTPUT_BONUS = .05;
+const REGION_CONTROL_STABILITY_BONUS = 8;
+const FORT_GUARD_PROJECTION = .25;
+
 // 三家 AI 各自的补兵偏好。性格不再只决定出兵概率，也决定它们养出什么样的军队。
 const AI_RECRUIT_TASTE = {
   aggressive: ["light_cavalry", "levy", "knights"],
@@ -180,9 +192,52 @@ const EXTRA_TERRITORIES = {
   southgate: ["南门镇", "neutral_cities", 52, 96, "plains", ["riverwatch"]],
   ashcoast: ["灰岸", "neutral_cities", 98, 8, "river", ["crownvale"]]
 };
+// 地形档案：扩展领地此前一律 5 金 / 12 粮 / 60 人 / 20 守 / 55 稳，
+// 24 块可占领地里有 14 块数值完全相同 —— 「下一块打哪」除了看邻接之外没有任何内容。
+// 现在按地形拉开：河谷有商路所以金多，密林粮稳但难治，山地穷而险，要塞产出低但极难攻。
+const TERRAIN_PROFILES = {
+  plains:    { gold: 6, grain: 19, people: 82, guard: 15, stability: 59, terrain: "平原" },
+  river:     { gold: 10, grain: 13, people: 86, guard: 16, stability: 61, terrain: "河谷" },
+  forest:    { gold: 4, grain: 16, people: 54, guard: 21, stability: 52, terrain: "密林" },
+  hills:     { gold: 5, grain: 12, people: 63, guard: 23, stability: 56, terrain: "丘陵" },
+  mountain:  { gold: 3, grain: 8, people: 41, guard: 29, stability: 50, terrain: "山地" },
+  fortified: { gold: 5, grain: 10, people: 57, guard: 38, stability: 68, terrain: "要塞" }
+};
+
+const TERRAIN_FLAVOUR = {
+  plains: "开阔的耕地，进出都容易——好收成，也好被人踏平。",
+  river: "商路与渡口在此交汇，钱好赚，也守不住。",
+  forest: "林子挡得住骑兵，却也藏得住盗匪。",
+  hills: "起伏的坡地，站得高看得远。",
+  mountain: "石头比粮食多。守着容易，养兵难。",
+  fortified: "石墙与箭塔。攻方要付出代价，守方要忍受贫瘠。"
+};
+
 Object.entries(EXTRA_TERRITORIES).forEach(([id, [name, region, x, y, tag, adj]]) => {
-  TERRITORY_DEFS[id] = { name, region, x, y, type: tag === "fortified" ? "fort" : "town", terrain: tag === "forest" ? "密林" : tag === "mountain" ? "山地" : tag === "river" ? "河谷" : tag === "hills" ? "丘陵" : "平原", terrainTags: [tag], owner: "neutral", gold: 5, grain: 12, people: 60, guard: 20, stability: 55, final: false, playable: false, adj, desc: `${name}是北境地图上的一处战略节点。` };
+  const profile = TERRAIN_PROFILES[tag] || TERRAIN_PROFILES.plains;
+  TERRITORY_DEFS[id] = {
+    name, region, x, y,
+    type: tag === "fortified" || tag === "mountain" ? "fort" : "town",
+    terrain: profile.terrain, terrainTags: [tag], owner: "neutral",
+    gold: profile.gold, grain: profile.grain, people: profile.people,
+    guard: profile.guard, stability: profile.stability,
+    final: false, playable: false, adj,
+    desc: TERRAIN_FLAVOUR[tag] || `${name}是北境地图上的一处节点。`
+  };
 });
+
+// 每个大区补一座核心城堡，否则「控制大区」在这些区里无从争夺。
+// 松林渡是狼牙氏族的据点，灰门是雷纳德割据的主城——两者本来就是各自区域的重心。
+TERRITORY_DEFS.pineford.type = "castle";
+TERRITORY_DEFS.ashgate.type = "castle";
+// 灰门原本套的是平原城镇档案，18 名守军撑不起一座区域重心。雷纳德是六名大叛臣
+// 之一，他的主城该像样一点。
+Object.assign(TERRITORY_DEFS.ashgate, {
+  gold: 9, grain: 21, people: 124, guard: 30, stability: 70, terrain: "石门城",
+  desc: "雷纳德把守着北境通往东面的石门。父亲在世时，他是最先递上效忠状的那一个。"
+});
+// 商旅驿孤悬在只有它一块地的 neutral_cities 区里，永远拿不到大区加成；并入河谷区。
+TERRITORY_DEFS.tradersrest.region = "riverlands";
 
 // 复国版地图：四块开局领地，25 个可夺取节点，其余节点作为侦察与道路上的互动地点。
 const RESTORATION_OWNERS = {

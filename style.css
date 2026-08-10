@@ -618,3 +618,5 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .lord-routes .route.on { color: #c6b98e; }
 .lord-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .lord-actions button { flex: 1 1 auto; }
+
+.city-role{color:var(--accent,#c8a45c);font-size:.86em;letter-spacing:.02em}

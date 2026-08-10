@@ -404,7 +404,11 @@ function subjects(s) {
 function territoryOutput(s, id, season = seasonOf(s)) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
-  const stability = .62 + t.stability / 265;
+  // 控制了本区的核心城堡，则整片区都更好治理：稳定按加成计，产出再乘一个系数。
+  const regionHeld = controlsRegionOf(s, id);
+  const effectiveStability = regionHeld ? Math.min(100, t.stability + REGION_CONTROL_STABILITY_BONUS) : t.stability;
+  const stability = .62 + effectiveStability / 265;
+  const regionBonus = regionHeld ? 1 + REGION_CONTROL_OUTPUT_BONUS : 1;
   const damage = 1 - Math.min(3, t.devastated) * .13;
   const share = t.fiefHolder && t.fiefHolder !== "charter" ? (techLevel(s, "provincial_offices") ? .77 + Math.max(0, techLevel(s, "provincial_offices") - 1) * .015 : .7) : 1;
   const wealth = 1;
@@ -426,8 +430,8 @@ function territoryOutput(s, id, season = seasonOf(s)) {
   const grainBase = (d.grain + t.buildings.fields * 8 + 4) * grainTech;
   const goldBase = (d.gold + t.buildings.market * 3 + t.buildings.roads * roadGold + 1) * goldTech;
   return {
-    grain: Math.max(0, Math.round(grainBase * season.grain * stability * damage * share * diff)),
-    gold: Math.max(0, Math.round(goldBase * season.gold * goldStability * damage * share * wealth * admin * diff))
+    grain: Math.max(0, Math.round(grainBase * season.grain * stability * damage * share * diff * regionBonus)),
+    gold: Math.max(0, Math.round(goldBase * season.gold * goldStability * damage * share * wealth * admin * diff * regionBonus))
   };
 }
 
@@ -503,6 +507,32 @@ function accrueTo(s, at) {
   s.clock.elapsedMs += deltaMs;
   s.clock.lastProcessedAt = at;
   return seconds;
+}
+
+// 一个大区的核心城堡。capital 优先于 castle；没有核心城堡的大区不产生控制加成。
+function regionCoreSeat(region) {
+  const seats = Object.keys(TERRITORY_DEFS).filter(id => TERRITORY_DEFS[id].region === region);
+  return seats.find(id => TERRITORY_DEFS[id].type === "capital")
+    || seats.find(id => TERRITORY_DEFS[id].type === "castle")
+    || null;
+}
+
+// 是否控制了这块地所在的大区 —— 即该区的核心城堡与它是否在同一方手里。
+// 核心城堡自己也享受这份加成：拿下它本身就是一件值得的事。
+function controlsRegionOf(s, id) {
+  const core = regionCoreSeat(TERRITORY_DEFS[id]?.region);
+  const owner = s.territories[id]?.owner;
+  return !!core && !!owner && s.territories[core]?.owner === owner;
+}
+
+// 相邻的自有战略要点会抬高这块地的守军上限：要塞把防御投射到周围。
+// 最多叠两座，免得几个要塞挤在一起就让某块地变成打不动的乌龟壳。
+function fortProjection(s, id) {
+  const owner = s.territories[id]?.owner;
+  if (!owner) return 0;
+  const forts = (TERRITORY_DEFS[id]?.adj || []).filter(nb =>
+    TERRITORY_DEFS[nb]?.type === "fort" && s.territories[nb]?.owner === owner).length;
+  return FORT_GUARD_PROJECTION * Math.min(2, forts);
 }
 
 function buildingCost(s, id, type) {
@@ -664,7 +694,9 @@ function applyUnrest(s) {
 function enemyGuardCap(s, id) {
   const expansionPressure = Math.max(0, ownTerritoryIds(s).length - 1) * 4;
   const timePressure = Math.floor(turnOf(s) / 4) * 3;
-  return Math.round(TERRITORY_DEFS[id].guard + (expansionPressure + timePressure) * difficultyOf(s).enemy);
+  // 敌方的要塞同样向周边投射防御，否则「战略要点」只对玩家一方成立。
+  const projection = 1 + fortProjection(s, id);
+  return Math.round((TERRITORY_DEFS[id].guard + (expansionPressure + timePressure) * difficultyOf(s).enemy) * projection);
 }
 
 function settleSeasonEconomy(s, options = {}) {
@@ -696,7 +728,7 @@ function applyDrift(s, intervalMs) {
   };
   ownTerritoryIds(s).forEach(id => {
     const t = s.territories[id];
-    const guardCap = TERRITORY_DEFS[id].guard + t.buildings.barracks * 7 + t.buildings.walls * 5 + t.buildings.watchtower * 4;
+    const guardCap = Math.round((TERRITORY_DEFS[id].guard + t.buildings.barracks * 7 + t.buildings.walls * 5 + t.buildings.watchtower * 4) * (1 + fortProjection(s, id)));
     if (t.devastated > 0) t.devastated = Math.max(0, t.devastated + bump(t, "devastated", -1));
     if (t.stability >= 65 && t.guard < guardCap) t.guard = Math.min(guardCap, t.guard + bump(t, "guard", 1));
   });
