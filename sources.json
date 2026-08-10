@@ -1,1 +1,9 @@
-["app.js"]
+[
+  "src/01-data.js",
+  "src/02-core.js",
+  "src/03-domain.js",
+  "src/04-state.js",
+  "src/05-war.js",
+  "src/06-ui.js",
+  "src/07-exports.js"
+]
