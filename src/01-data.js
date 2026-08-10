@@ -122,6 +122,21 @@ const AI_FACTION_DEFS = {
   crown: { capital: "crownvale", personality: "cautious", gold: 130, grain: 220, knowledge: 16 }
 };
 
+// 三家 AI 各自的补兵偏好。性格不再只决定出兵概率，也决定它们养出什么样的军队。
+const AI_RECRUIT_TASTE = {
+  aggressive: ["light_cavalry", "levy", "knights"],
+  trader: ["archers", "crossbowmen", "levy"],
+  cautious: ["heavy_infantry", "crossbowmen", "knights"]
+};
+// 每次决策拿出金库的几成补兵。AI 此前只进不出：48 季能囤到六百多金而一个兵不买，
+// 同时每次进攻还要掉 8% 长矛兵 —— 它不是静态，是在自己饿死。
+const AI_REINVEST_SHARE = .35;
+// 养兵上限 = 基数 + 每块地的份额。占的地越多能养的兵越多，也因此限制了无限膨胀。
+const AI_ARMY_BASE_CAP = 52;
+const AI_ARMY_CAP_PER_TERRITORY = 17;
+// 吞并中立割据比进攻玩家慢：AI 会蚕食无主小领，但主线压力仍来自玩家自己的边境。
+const AI_ANNEX_CHANCE_SCALE = .45;
+
 const TERRITORY_DEFS = {
   ravenstone: { name: "渡鸦堡", region: "raven_march", x: 20, y: 56, type: "castle", terrain: "丘陵城堡", terrainTags: ["hills", "fortified"], owner: "player", gold: 10, grain: 34, people: 218, guard: 46, stability: 66, final: false, playable: true, adj: ["blackthorn", "westmarch", "ironhill", "ashfield", "pineford"], desc: "你的祖堡。城墙还在，附近三座附属镇是渡鸦家最后的粮仓、林场和铁作坊。" },
   ashfield: { name: "灰麦原", region: "wolf_march", x: 47, y: 49, type: "town", terrain: "开阔农田", terrainTags: ["plains"], owner: "wolf", gold: 7, grain: 38, people: 142, guard: 34, stability: 61, final: false, playable: true, adj: ["ravenstone", "pineford", "crossford"], desc: "北境最肥沃的麦地。谁占住这里，谁就不怕下一个冬天。" },

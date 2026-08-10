@@ -363,14 +363,100 @@ function finishBattle(s, outcome, rng = Math.random) {
   return { ended: true, report };
 }
 
+// 六个兵种全部计入。原先只算 levy / archers / knights，重步兵、弩手、轻骑兵
+// 一律按 0 —— 摄政开局那 8 名重步兵与 5 名弩手等于白养，它的军队看着唬人，
+// 真打起来只有一半兵力在出力。
 function aiArmyPower(army) {
-  const comp = army.composition || {};
-  return (comp.levy || 0) * .92 + (comp.archers || 0) * 1.08 + (comp.knights || 0) * 1.72;
+  const comp = army?.composition || {};
+  return (comp.levy || 0) * .92
+    + (comp.archers || 0) * 1.08
+    + (comp.knights || 0) * 1.72
+    + (comp.heavy_infantry || 0) * 1.34
+    + (comp.crossbowmen || 0) * 1.28
+    + (comp.light_cavalry || 0) * 1.22;
+}
+
+// AI 能打哪里，取自己版图的边界 —— 和玩家那边是同一条规则。
+// 原先只看「大军脚下那一格的邻居里哪些属于玩家」，后果是摄政公爵整局一仗没打：
+// 它的军队站在王冠谷，三个邻居分别属狼牙和河望，targets 恒为空。
+// 追着玩家加冕的头号反派，全程是个雕像。
+function aiTargets(s, factionId) {
+  const mine = new Set(factionTerritories(s, factionId));
+  if (!mine.size) return [];
+  return Object.keys(TERRITORY_DEFS).filter(id => {
+    const d = TERRITORY_DEFS[id];
+    if (d.playable === false || mine.has(id)) return false;
+    const owner = s.territories[id]?.owner;
+    // 只打玩家和中立割据：三家 AI 互不交火，免得它们自己先分出胜负。
+    if (owner !== "player" && owner !== "neutral") return false;
+    // 六名大叛臣的主城是玩家的主线目标，不该被 AI 顺手拿走。
+    if (owner === "neutral" && LORD_DEFS[SEAT_TO_LORD[id]]?.tier === "liege") return false;
+    return d.adj.some(neighbour => mine.has(neighbour));
+  });
+}
+
+// 势力每季金币收入。抽成函数是为了让「按计时器间隔摊薄」的测试与实现共用一份公式，
+// 而不是在测试里再抄一遍数字 —— 这个项目已经吃过好几次「两处各写一份」的亏。
+// 收入随占地浮动：被打掉地盘的势力会真的衰弱，扩张的会真的变强。
+function aiSeasonIncome(s, factionId) {
+  return (4 + factionTerritories(s, factionId).length * 1.6) * difficultyOf(s).income;
+}
+
+// 地盘越大能养的兵越多。这既是成长曲线，也是防止后期无限膨胀的闸门。
+function aiArmyCap(s, factionId) {
+  return AI_ARMY_BASE_CAP + factionTerritories(s, factionId).length * AI_ARMY_CAP_PER_TERRITORY;
+}
+
+// 把囤着的金币换成兵。没有这一步，AI 每打一仗就少一批人，越打越弱。
+function reinforceAIArmy(s, factionId, share = 1, rng = Math.random) {
+  const faction = s?.factions?.[factionId];
+  const army = faction?.armies?.[0];
+  if (!faction || !army) return 0;
+  const room = aiArmyCap(s, factionId) - compositionTotal(army.composition);
+  if (room <= 0) return 0;
+  const taste = AI_RECRUIT_TASTE[AI_FACTION_DEFS[factionId]?.personality] || ["levy"];
+  const type = taste[Math.min(taste.length - 1, Math.floor(rng() * taste.length))];
+  const unit = UNIT_DEFS[type];
+  if (!unit) return 0;
+  const budget = Math.max(0, faction.gold) * AI_REINVEST_SHARE * share;
+  const count = Math.min(room, Math.floor(budget / unit.gold));
+  if (count < 1) return 0;
+  faction.gold -= count * unit.gold;
+  army.composition[type] = (army.composition[type] || 0) + count;
+  return count;
+}
+
+// AI 吞并一块中立割据。领主本人就此出局 —— 玩家磨蹭太久，本来能谈下来的人就没了。
+// 这是「世界在动」最直接的体现：地图上的机会窗口会自己关上。
+function resolveAIAnnex(s, army, targetId, rng = Math.random) {
+  const faction = army.owner;
+  const t = s.territories[targetId];
+  if (!t || t.owner !== "neutral") return null;
+  const attack = aiArmyPower(army) * (.56 + (army.morale || 50) / 420) * (.9 + rng() * .2);
+  const defense = t.guard + (t.buildings.walls || 0) * 8 + t.stability * .2;
+  army.composition.levy = Math.max(0, (army.composition.levy || 0) - Math.max(1, Math.round((army.composition?.levy || 0) * .06)));
+  if (attack <= defense * 1.15) return "repelled";
+  const lord = lordAt(s, targetId);
+  t.owner = faction;
+  t.lordId = null;
+  t.stability = 44;
+  t.guard = Math.max(16, Math.round(attack * .3));
+  t.devastated = 1;
+  if (lord && lord.side !== "player") {
+    lord.side = "gone";
+    lord.captured = false;
+    (s.knights || []).forEach(k => { if (k.liegeLordId === lord.id) { k.liegeLordId = null; k.side = "gone"; } });
+    log(s, "warn", `${FACTIONS[faction].name}吞并了${TERRITORY_DEFS[targetId].name}，${lord.name}就此除名。他不会再听任何人的条件。`);
+  } else {
+    log(s, "warn", `${FACTIONS[faction].name}占据了${TERRITORY_DEFS[targetId].name}。`);
+  }
+  return "captured";
 }
 
 function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.locationId) {
   const faction = army.owner;
   const t = s.territories[targetId];
+  if (t && t.owner === "neutral") return resolveAIAnnex(s, army, targetId, rng);
   if (!t || t.owner !== "player") return null;
   const vulnerableKeep = targetId === "ravenstone" && turnOf(s) > 16 && (t.guard < 30 || s.grain < 24 || s.support < 25);
   const decisiveRaid = faction === "wolf" && targetId === "ravenstone" && turnOf(s) > 12 && (vulnerableKeep || rng() < .12);
@@ -405,8 +491,11 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
 }
 
 function startAIMarch(s, factionId, army, targetId, now = Date.now()) {
-  if (!army || army.status !== "idle" || !TERRITORY_DEFS[army.locationId]?.adj.includes(targetId)) return null;
-  const job = startJob(s, { type: "MARCH", armyId: army.id, startedAt: now, endAt: now + marchDuration(s), queueKey: `march:${army.id}`, payload: { originId: army.locationId, destinationId: targetId, factionId } });
+  if (!army || army.status !== "idle" || !TERRITORY_DEFS[targetId]) return null;
+  // 目标由 aiTargets 按版图边界给出，未必挨着大军当前所在地；和玩家的长征一样，
+  // 距离体现在行军时间上，而不是「够不着就不许打」。
+  if (!aiTargets(s, factionId).includes(targetId)) return null;
+  const job = startJob(s, { type: "MARCH", armyId: army.id, startedAt: now, endAt: now + marchDurationForDistance(s, army.locationId, targetId), queueKey: `march:${army.id}`, payload: { originId: army.locationId, destinationId: targetId, factionId } });
   army.destinationId = targetId;
   army.status = "marching";
   army.jobId = job.id;
@@ -425,16 +514,21 @@ function runFactionTurn(s, factionId, rng = Math.random, now = Date.now()) {
   const timerKey = FACTION_TIMER_KEY[factionId];
   if (!def || !faction || !timerKey) return null;
   const share = TIMER_DEFS[timerKey].intervalMs / TIME_CONFIG.seasonDurationMs;
-  faction.gold += 10 * difficultyOf(s).income * share;
+  faction.gold += aiSeasonIncome(s, factionId) * share;
   faction.grain += 18 * share;
   faction.knowledge += 2 * share;
+  reinforceAIArmy(s, factionId, share, rng);
   const army = faction.armies.find(item => item.status === "idle");
   if (!army || turnOf(s) < 2) return null;
-  const targets = (TERRITORY_DEFS[army.locationId]?.adj || []).filter(id => owns(s, id));
+  const targets = aiTargets(s, factionId);
   if (!targets.length) return null;
-  const chance = (def.personality === "aggressive" ? .23 : def.personality === "cautious" ? .1 : .16) * share;
-  if (rng() <= chance && startAIMarch(s, factionId, army, targets[Math.floor(rng() * targets.length)], now)) return "marching";
-  return null;
+  const base = def.personality === "aggressive" ? .23 : def.personality === "cautious" ? .1 : .16;
+  // 先按「打玩家」的概率掷一次；选中中立小领时再按更低的概率掷第二次，
+  // 于是蚕食中立地是长期的背景进程，而边境压力仍主要冲着玩家来。
+  if (rng() > base * share) return null;
+  const targetId = targets[Math.min(targets.length - 1, Math.floor(rng() * targets.length))];
+  if (s.territories[targetId]?.owner === "neutral" && rng() > AI_ANNEX_CHANCE_SCALE) return null;
+  return startAIMarch(s, factionId, army, targetId, now) ? "marching" : null;
 }
 
 // 正统性的涨落集中在这里，配平时只改这一处，也便于排查「谁动了正统性」。

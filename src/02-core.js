@@ -460,7 +460,9 @@ function applyCompletedJob(s, job, rng = Math.random) {
       item.status = "idle";
       item.jobId = null;
     });
-    if (army.owner !== "player" && s.territories[destinationId]?.owner === "player") {
+    // AI 抵达非自家领地即交战：打玩家是袭击，打中立割据是吞并。
+    const arrivedOwner = s.territories[destinationId]?.owner;
+    if (army.owner !== "player" && (arrivedOwner === "player" || arrivedOwner === "neutral")) {
       const result = resolveAIAttack(s, army, destinationId, rng, originId);
       if (result !== "captured") army.locationId = originId;
       startArmyRecovery(s, army, result === "captured" ? 110 * 1000 : 90 * 1000, job.completedAt || Date.now());

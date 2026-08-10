@@ -121,7 +121,12 @@ const goldStart = acc.factions.wolf.gold;
 const firesPerSeason = SEASON / game.TIMER_DEFS.aiWolf.intervalMs;
 for (let i = 0; i < firesPerSeason; i++) game.runFactionTurn(acc, "wolf", () => .99, Date.now());
 const gained = acc.factions.wolf.gold - goldStart;
-assert.ok(Math.abs(gained - 10) < 0.5, `一季内累计增长应约为 10，实际 ${gained.toFixed(2)}`);
+// 断言的是「摊薄不变性」：不管每季收入公式是多少，拆成 N 次计时器触发的总和
+// 必须等于一整季的量。这里向实现要那个数，而不是在测试里抄一遍常数 ——
+// 原本写死的 10 是旧的固定收入，收入改成随占地浮动后它就只剩误导作用了。
+const expected = game.aiSeasonIncome(acc, "wolf");
+assert.ok(Math.abs(gained - expected) < 0.5,
+  `一季内累计增长应约为 ${expected.toFixed(2)}，实际 ${gained.toFixed(2)}`);
 
 // 冷却用时间戳，不再是「本季已用」
 const cd = game.createInitialState("冷却测试", "oath", "standard");
