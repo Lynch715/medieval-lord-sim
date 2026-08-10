@@ -55,7 +55,7 @@ function researchPanelHtml() {
     const max = techs.reduce((sum, tech) => sum + techMaxLevel(tech), 0);
     const branchRunning = techs.some(tech => researchQueueJob(S, tech.id));
     const open = foldState.branches.has(branch);
-    return `<details class="tech-branch domain-fold" data-fold-branch="${branch}"${open ? " open" : ""}>
+    return `<details class="tech-branch domain-fold" data-fold-group="branch" data-fold-key="${branch}"${open ? " open" : ""}>
     <summary><span class="fold-title"><b>${TECH_BRANCH_NAMES[branch]}</b><small>${done} / ${max} 阶</small></span><span class="fold-meta">${branchRunning ? `<em class="fold-busy">研究中</em>` : done >= max ? `<em class="fold-idle">已满阶</em>` : `<em class="fold-idle">可研究</em>`}</span></summary>${techs.map(tech => {
     const currentLevel = techLevel(S, tech.id);
     const maxLevel = techMaxLevel(tech);
@@ -66,7 +66,11 @@ function researchPanelHtml() {
     const cost = techCost(tech, nextLevel);
     const duration = researchDuration(tech, nextLevel);
     const affordable = S.knowledge >= cost.knowledge && S.gold >= cost.gold;
-    const label = currentLevel >= maxLevel ? `已满阶 · ${currentLevel}/${maxLevel}` : active ? `研究中 · ${nextLevel}/${maxLevel} · ${formatDuration(getJobRemainingMs(queue))}` : atCapacity ? "研究队列已满" : unmet.length ? `需要：${unmet.map(id => techDefinition(branch, id)?.name || id).join("、")}` : !affordable ? "知识或金币不足" : `研究 ${nextLevel}/${maxLevel} · ${cost.knowledge}知 · ${cost.gold}金 · ${formatDuration(duration)}`;
+    const label = currentLevel >= maxLevel ? `已满阶 · ${currentLevel}/${maxLevel}` : active ? `研究中 · ${nextLevel}/${maxLevel} · ${formatDuration(getJobRemainingMs(queue))}` : atCapacity ? "研究队列已满" : unmet.length ? `需要：${unmet.map(id => techDefinition(branch, id)?.name || id).join("、")}` : !affordable ? `还差 ${[
+        S.knowledge < cost.knowledge ? `${Math.ceil(cost.knowledge - S.knowledge)}知` : "",
+        S.gold < cost.gold ? `${Math.ceil(cost.gold - S.gold)}金` : ""
+      ].filter(Boolean).join(" ")} · 需 ${cost.knowledge}知 ${cost.gold}金`
+      : `研究 ${nextLevel}/${maxLevel} · ${cost.knowledge}知 · ${cost.gold}金 · ${formatDuration(duration)}`;
     const disabled = currentLevel >= maxLevel || active || atCapacity || unmet.length > 0 || !affordable;
     return `<div class="tech-card ${currentLevel >= maxLevel ? "completed" : active ? "active" : ""}"><div><b>${esc(tech.name)} <i class="tech-level-badge">${currentLevel}/${maxLevel}</i></b><small>${esc(tech.desc)} 每阶都会强化效果，研究时间逐阶增加。</small></div><button data-research-branch="${branch}" data-research="${tech.id}" ${disabled ? "disabled" : ""}>${active && queue ? `<span data-job-countdown="${queue.id}" data-job-prefix="研究中 · ">研究中 · ${nextLevel}/${maxLevel} · ${formatDuration(getJobRemainingMs(queue))}</span>` : label}</button></div>`;
   }).join("")}</details>`;
@@ -107,14 +111,23 @@ function officerCard(o, enemy = false) {
   </article>`;
 }
 
+// 折叠块的统一写法。三个页面都用它，避免同一段 details 结构抄第三遍。
+// 收起时这一行就是全部信息，所以 meta 必须写清「里面有什么、有没有在进行的事」。
+function foldBlock(group, key, title, sub, meta, body, store) {
+  const open = store.has(key);
+  return `<details class="domain-fold" data-fold-group="${group}" data-fold-key="${key}"${open ? " open" : ""}>
+    <summary><span class="fold-title"><b>${title}</b>${sub ? `<small>${sub}</small>` : ""}</span><span class="fold-meta">${meta}</span></summary>
+    ${body}
+  </details>`;
+}
+
 // 记账挂在 summary 的 click 上，而不是 details 的 toggle 上：
 // toggle 是异步派发的，玩家「展开后立刻点建造」时，renderAll() 会抢在 toggle
 // 之前重建面板，于是刚展开的那一项按旧状态又被合上。click 里预测翻转后的值
 // 同步写入，就没有这个时间窗。keyboard 回车同样会触发 summary 的 click。
-function bindFold(panel, datasetKey, store) {
-  const attr = datasetKey === "foldTerritory" ? "data-fold-territory" : "data-fold-branch";
-  panel.querySelectorAll(`[${attr}]`).forEach(node => {
-    const key = node.dataset[datasetKey];
+function bindFold(panel, group, store) {
+  panel.querySelectorAll(`[data-fold-group="${group}"]`).forEach(node => {
+    const key = node.dataset.foldKey;
     const summary = node.querySelector("summary");
     if (!summary) return;
     summary.addEventListener("click", () => { node.open ? store.delete(key) : store.add(key); });
@@ -135,8 +148,9 @@ function renderDomain() {
     <div class="domain-grid">${ownTerritoryIds(S).map(domainCard).join("")}</div>${researchPanelHtml()}`;
   // 折叠状态记在 foldState 里，renderAll() 重建面板后按它还原，
   // 这样点一次建造不会把刚展开的领地合上。
-  bindFold(panel, "foldTerritory", foldState.territories);
-  bindFold(panel, "foldBranch", foldState.branches);
+  bindFold(panel, "territory", foldState.territories);
+  bindFold(panel, "branch", foldState.branches);
+  bindFold(panel, "court", foldState.sections);
   panel.querySelectorAll("[data-upgrade]").forEach(button => button.addEventListener("click", () => upgradeBuilding(button.dataset.territory, button.dataset.upgrade)));
   panel.querySelectorAll("[data-research]").forEach(button => button.addEventListener("click", () => {
     const job = queueResearch(S, button.dataset.researchBranch, button.dataset.research);
@@ -161,7 +175,7 @@ function domainCard(id) {
     : `<em class="fold-idle">空闲</em>`;
   const levels = Object.keys(BUILDINGS).reduce((sum, type) => sum + (t.buildings[type] || 0), 0);
   const open = foldState.territories.has(id);
-  return `<details class="domain-fold" data-fold-territory="${id}"${open ? " open" : ""}>
+  return `<details class="domain-fold" data-fold-group="territory" data-fold-key="${id}"${open ? " open" : ""}>
     <summary><span class="fold-title"><b>${d.name}</b><small>${territoryRoleName(d.type)} · ${esc(d.terrain)} · ${holder}</small></span><span class="fold-meta">${out.gold}金 ${out.grain}粮 · 守军 ${t.guard} · 建筑 ${levels}/${Object.keys(BUILDINGS).length * BUILDING_MAX_LEVEL}级 ${busy}</span></summary>
     <article class="domain-card"><div class="stat-chips"><span>本季 ${out.gold}金</span><span>${out.grain}粮</span><span>守军 ${t.guard}</span><span>${territoryRoleHint(S, id)}</span></div>
     <div class="building-grid">${Object.entries(BUILDINGS).map(([type, b]) => {
@@ -509,9 +523,12 @@ function renderCourt() {
   const averageLoyalty = own.length > 1 ? Math.round(own.filter(o => o.id !== "player").reduce((sum, o) => sum + o.loyalty, 0) / (own.length - 1)) : 100;
   const knights = S.knights || [];
   panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">COMMANDERS & KNIGHTS</span><h2>将领与骑士</h2><p>父亲死后，旧日臣属各自独立。打下他们的最后一座城，才能决定其去留；骑士随主君进退，只有无主的游侠才能用金币直接招募。</p>${metrics([[own.length, "我方领主"], [enemies.length, "在野叛臣"], [captured.length, "待处置俘虏"], [activeKnights(S).length, "我方骑士"]])}</section>
-    <div class="section-head"><h2>我方领主</h2><span>平均忠诚 ${averageLoyalty} · 治理封地与政务</span></div><div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}</div>`).join("")}</div>
-    <div class="section-head"><h2>北境叛臣</h2><span>${enemies.length}名仍在野 · 打服后可处置</span></div>
-    <div class="officer-grid">${enemies.length ? enemies.map(lord => {
+    <div class="section-head"><h2>将领名册</h2><span>点开一栏展开其中的卡片</span></div>
+    ${foldBlock("court", "own", "我方领主", `平均忠诚 ${averageLoyalty}`, `${own.length} 人`,
+      `<div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}</div>`).join("")}</div>`, foldState.sections)}
+    ${foldBlock("court", "rebels", "北境叛臣", "打服、说服或收买",
+      `${enemies.length} 人在野${captured.length ? ` · <em class="fold-busy">${captured.length} 名待处置</em>` : ""}`,
+      `<div class="officer-grid">${enemies.length ? enemies.map(lord => {
       const def = LORD_DEFS[lord.id];
       const holdings = lordHoldings(S, lord.id);
       const liege = def.liege ? LORD_DEFS[def.liege].name : "独立";
@@ -530,8 +547,11 @@ function renderCourt() {
           ${routes.persuade.available ? `<button class="secondary-btn" data-demand-fealty="${lord.id}">要求效忠</button>` : ""}
           ${routes.bribe.available ? `<button class="ghost-btn" data-bribe-lord="${lord.id}">收买 · ${lordBribeCost(S, lord.id)}金</button>` : ""}
         </div></div></article>`;
-    }).join("") : `<div class="empty-state">北境已经没有仍举着旧旗的叛臣。</div>`}</div>
-    <div class="section-head"><h2>骑士名册</h2><span>${activeKnights(S).length}名在列 · ${availableKnights(S).length}名游侠可招募 · 俘虏可处置</span></div><div class="knight-grid">${knights.filter(k => !["gone", "executed", "released", "hostile"].includes(k.status)).map(knightCard).join("") || `<div class="empty-state">暂时没有可处理的骑士。</div>`}</div>`;
+    }).join("") : `<div class="empty-state">北境已经没有仍举着旧旗的叛臣。</div>`}</div>`, foldState.sections)}
+    ${foldBlock("court", "knights", "骑士名册", `${availableKnights(S).length} 名游侠可招募`,
+      `${activeKnights(S).length} 名在列`,
+      `<div class="knight-grid">${knights.filter(k => !["gone", "executed", "released", "hostile"].includes(k.status)).map(knightCard).join("") || `<div class="empty-state">暂时没有可处理的骑士。</div>`}</div>`, foldState.sections)}`;
+  bindFold(panel, "court", foldState.sections);
   panel.querySelectorAll("[data-knight-action]").forEach(button => button.addEventListener("click", () => knightAction(button.dataset.knightId, button.dataset.knightAction)));
   panel.querySelectorAll("[data-demand-fealty]").forEach(button => button.addEventListener("click", () => {
     if (!demandFealty(S, button.dataset.demandFealty)) { toast("当前还无法让他效忠"); return; }

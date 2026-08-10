@@ -14,7 +14,7 @@ let hiddenAt = 0;
 // 不是游戏进度，不该占存档字段、也不该有迁移。
 // 必须存在渲染之外 —— 每次建造或研究都会 renderAll() 重建整个面板，
 // 状态若只留在 DOM 上，玩家一点建造，刚展开的那块地就自己合上了。
-const foldState = { territories: new Set(), branches: new Set(), seeded: false };
+const foldState = { territories: new Set(), branches: new Set(), sections: new Set(["own"]), seeded: false };
 
 const $ = id => typeof document === "undefined" ? null : document.getElementById(id);
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));

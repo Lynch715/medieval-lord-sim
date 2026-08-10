@@ -653,5 +653,5 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .fold-meta { font-size: 10px; gap: 5px; }
   /* 只藏领地那串「核心城堡 · 丘陵城堡 · 由你管理」，它在窄屏会把标题挤没；
      科技分支的 small 是「0 / 15 阶」进度，短而有用，必须留着。 */
-  [data-fold-territory] .fold-title small { display: none; }
+  [data-fold-group="territory"] .fold-title small { display: none; }
 }
