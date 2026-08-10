@@ -456,6 +456,16 @@ function forecast(s, season = seasonOf(s)) {
   return { ...gross, grainCost, goldCost, storageCap, spoilage, netGold: gross.gold - goldCost, netGrain: gross.grain - grainCost - spoilage };
 }
 
+// 每季知识产出。学宫每级 1.5 点：原本是 1 点，投入与回报太不成比例 ——
+// 一块地把学宫点满要 270 金和 5 次建设排队，只换来每季 5 点知识，
+// 于是「要不要搞科研」根本不成为一个选择，所有人都是顺手点满一阶就不管了。
+const ACADEMY_KNOWLEDGE_PER_LEVEL = 1.5;
+
+function knowledgePerSeason(s) {
+  const academyLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.academy || 0), 0);
+  return 3 + academyLevels * ACADEMY_KNOWLEDGE_PER_LEVEL + techLevel(s, "relay_roads") * 2;
+}
+
 function resourceFlow(s, season = seasonOf(s)) {
   const f = forecast(s, season);
   const duration = Math.max(1, TIME_CONFIG.seasonDurationMs);
@@ -477,9 +487,8 @@ function accrueTo(s, at) {
   // 因此这里不能再单独扣一次，否则是重复计算。
   s.grain += flow.grainPerSecond * seconds;
 
-  // 知识：原本每季一次性 +（3 + 学宫总等级 + 驿站道路×2），改为按秒摊开
-  const academyLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.academy || 0), 0);
-  s.knowledge = (s.knowledge || 0) + (3 + academyLevels + techLevel(s, "relay_roads") * 2) * seconds / seasonSeconds;
+  // 知识：原本每季一次性结算，改为按秒摊开。公式抽成函数，测试与实现共用一份。
+  s.knowledge = (s.knowledge || 0) + knowledgePerSeason(s) * seconds / seasonSeconds;
 
   // 训练度衰减
   const decayPerSeason = Math.max(0, 2 - Math.ceil(techLevel(s, "field_doctrine") / 2));

@@ -158,9 +158,14 @@ function techLevel(s, techId) {
   return 0;
 }
 
+// 阶数成本增长。原本是 .55：三阶要 2.1 倍成本却只给 3 倍线性效果，
+// 也就是说往深了点是亏的 —— 没人走深不只是买不起，是不划算。
+// 降到 .32 后三阶为 1.64 倍成本、3 倍效果，深度终于值得投。
+const TECH_LEVEL_COST_GROWTH = .32;
+
 function techCost(tech, level) {
   const next = Math.max(1, Math.round(level || 1));
-  const growth = 1 + (next - 1) * .55;
+  const growth = 1 + (next - 1) * TECH_LEVEL_COST_GROWTH;
   return { knowledge: Math.round(tech.cost.knowledge * growth), gold: Math.round(tech.cost.gold * growth) };
 }
 

@@ -132,4 +132,53 @@ const withTech = (s, id, level = 1) => {
     `人口清册声称「提高征募上限」，必须真的提高，实际 ${plainLevy} → ${game.recruitAmount(census, "levy")}`);
 }
 
+// ── 科技树的体量必须对得上知识产出 ────────────────────────────────────
+// 这一组断言钉住的是设计意图，不是某几个数字：
+// 「每项三阶」必须是真能够到的目标，而不是写在界面上的装饰。
+{
+  const branchCount = Object.keys(game.TECH_DEFS).length;
+  const tierCost = level => techs.reduce((sum, t) => sum + game.techCost(t, level).knowledge, 0);
+  const tier1 = tierCost(1), tier2 = tierCost(2), tier3 = tierCost(3);
+  const fullTree = tier1 + tier2 + tier3;
+
+  // 48 季里的知识累计，按学宫从 0 线性堆到 target 级来积分。
+  // 产出公式向实现取（knowledgePerSeason），不在测试里抄第二份。
+  const budget = academyTarget => {
+    const probe = game.createInitialState("预算", "oath", "standard");
+    const seat = "ravenstone";
+    let total = 0;
+    for (let season = 0; season < 48; season++) {
+      probe.territories[seat].buildings.academy = 0;
+      const levels = Math.min(academyTarget, Math.round(season * academyTarget / 48));
+      // knowledgePerSeason 按「自有领地学宫总级数」算，这里用一块地承载全部级数即可
+      probe.territories[seat].buildings.academy = levels;
+      total += game.knowledgePerSeason(probe);
+    }
+    return total;
+  };
+
+  const 保守 = budget(15), 积极 = budget(40), 极限 = budget(80);
+
+  // 保守投入拿到一阶的大部分即可 —— 少投入就少拿是应该的，
+  // 但不该少到「点不动几项、整棵树看着都是灰的」。
+  assert.ok(保守 >= tier1 * .8,
+    `保守投入（末期 15 级学宫）连一阶的八成都够不到，科技树就只剩挫败感。一阶 ${tier1}，保守预算 ${Math.round(保守)}`);
+
+  assert.ok(积极 >= tier1 + tier2 * .6,
+    `积极投入（末期 40 级学宫）应当够到二阶的大半，实际预算 ${Math.round(积极)}，一阶+六成二阶 ${Math.round(tier1 + tier2 * .6)}`);
+
+  assert.ok(极限 >= fullTree * .9,
+    `把学宫堆到极限（80 级）仍够不到全树，说明「每项三阶」是装饰。全树 ${fullTree}，极限预算 ${Math.round(极限)}`);
+
+  // 走深不该比走宽亏太多。三阶给 3 倍线性效果，若成本超过 3 倍就没人会走深。
+  const depthCost = 1 + 2 * game.TECH_LEVEL_COST_GROWTH;
+  assert.ok(depthCost < 2,
+    `三阶成本为一阶的 ${depthCost.toFixed(2)} 倍。效果只有 3 倍且是线性的，成本再高就没人愿意走深了`);
+
+  // 专精一两条线必须是可行的打法，而不是只能全线摊薄
+  const twoBranchesDeep = fullTree * 2 / branchCount;
+  assert.ok(积极 >= twoBranchesDeep,
+    `积极投入应当足以把两条分支点满，实际预算 ${Math.round(积极)}，两条线全满 ${Math.round(twoBranchesDeep)}`);
+}
+
 console.log("tech tests passed");
