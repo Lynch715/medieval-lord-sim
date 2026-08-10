@@ -671,6 +671,7 @@ function applyCompletedJob(s, job, rng = Math.random) {
       knight.liegeLordId = null;
       if (formerLiege && formerLiege.side !== "player" && formerLiege.side !== "gone") {
         formerLiege.rapport = Math.min(100, (formerLiege.rapport || 0) + RELEASE_RAPPORT_GAIN);
+        gainLegitimacy(s, "returnKnight");
         log(s, "good", `${formerLiege.name}听说你放回了他的骑士，对渡鸦家的态度缓和了。`);
       }
       knight.captured = false;
@@ -1025,7 +1026,11 @@ function lordHoldings(s, lordId) {
 // 必须挡住 lordId 为空的调用，否则会把所有 liege 为 null 的独立叛臣当成某人的附庸返回。
 function lordVassals(s, lordId) {
   if (!lordId) return [];
-  return (s?.officers || []).filter(o => LORD_DEFS[o.id]?.liege === lordId && o.side !== "player" && o.side !== "gone");
+  // 优先读运行时 liege：附庸拒绝跟随主君归附时会自立门户，静态表说不出这件事。
+  return (s?.officers || []).filter(o => {
+    const liege = o.liege !== undefined ? o.liege : LORD_DEFS[o.id]?.liege;
+    return liege === lordId && o.side !== "player" && o.side !== "gone";
+  });
 }
 
 // 邻近压力：该领主全部辖地的相邻领地并集里，有多少已归玩家。
@@ -1070,7 +1075,7 @@ function lordBribeCost(s, lordId) {
 // 忠诚基线、辖地转移、骑士随迁只实现一次，避免三份会各自漂移的代码。
 const SUBMIT_LOYALTY = { force: 45, persuade: 65, bribe: 30 };
 
-function submitLord(s, lordId, route = "persuade") {
+function submitLord(s, lordId, route = "persuade", rng = Math.random) {
   const lord = officer(s, lordId);
   if (!lord || lord.side === "player" || lord.side === "gone") return false;
   lord.side = "player";
@@ -1094,6 +1099,38 @@ function submitLord(s, lordId, route = "persuade") {
     k.captured = false;
     k.status = "active";
   });
+
+  // 附庸易主会削弱其主君的抵抗意志，最多削到原值的 70%。
+  // 这让「先拆他的羽翼再谈」成为一条真实可走的路。
+  const liegeId = lord.liege !== undefined ? lord.liege : LORD_DEFS[lordId]?.liege;
+  if (liegeId) {
+    const liege = officer(s, liegeId);
+    const liegeDef = LORD_DEFS[liegeId];
+    if (liege && liegeDef && liege.side !== "player" && liege.side !== "gone") {
+      const total = Object.values(LORD_DEFS).filter(d => d.liege === liegeId).length;
+      if (total > 0) {
+        const lost = Object.entries(LORD_DEFS).filter(([id, d]) => d.liege === liegeId && officer(s, id)?.side === "player").length;
+        liege.defiance = Math.max(liegeDef.defiance * 0.7, liegeDef.defiance - liegeDef.defiance * 0.3 * (lost / total));
+        log(s, "info", `${liege.name}又失去一名附庸，抵抗意志降到 ${Math.round(liege.defiance)}。`);
+      }
+    }
+  }
+
+  // 大叛臣归附后，其附庸各自做一次跟随判定。
+  // 跟随者成建制倒向；不跟随者自立门户，而不是继续挂在已归附的主君名下。
+  if (LORD_DEFS[lordId]?.tier === "liege") {
+    lordVassals(s, lordId).forEach(vassal => {
+      const chance = 0.35 + (s.legitimacy || 0) / 250 + (vassal.rapport || 0) / 200
+        - (vassal.defiance ?? LORD_DEFS[vassal.id].defiance) / 300;
+      if (rng() < chance) {
+        submitLord(s, vassal.id, route, rng);
+        log(s, "good", `${vassal.name}随${lord.name}一同归附。`);
+      } else {
+        vassal.liege = null;
+        log(s, "warn", `${vassal.name}拒绝跟随，自立门户。`);
+      }
+    });
+  }
   return true;
 }
 
@@ -2760,7 +2797,8 @@ function finishBattle(s, outcome, rng = Math.random) {
     t.fiefHolder = null;
     s.wins++;
     s.renown = clamp(s.renown + 8);
-    s.legitimacy = clamp(s.legitimacy + 3);
+    gainLegitimacy(s, "battleWin");
+    gainLegitimacy(s, "reclaim");
     s.morale = clamp(s.morale + 7);
     leaders.forEach(o => { if (o.merit != null) o.merit += 7 + (session.flags.demanded ? 2 : 0); if (o.loyalty != null) o.loyalty = clamp(o.loyalty + 2); });
     const fallenLord = lordAt(s, targetId);
@@ -2853,6 +2891,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
       if (holder) { holder.fief = null; holder.loyalty = clamp(holder.loyalty - 8); }
     }
     t.owner = faction;
+    gainLegitimacy(s, "loseTerritory");
     t.fiefHolder = null;
     t.stability = 42;
     t.guard = Math.max(18, Math.round(attack * .34));
@@ -2902,6 +2941,23 @@ function runFactionTurn(s, factionId, rng = Math.random, now = Date.now()) {
   const chance = (def.personality === "aggressive" ? .23 : def.personality === "cautious" ? .1 : .16) * share;
   if (rng() <= chance && startAIMarch(s, factionId, army, targets[Math.floor(rng() * targets.length)], now)) return "marching";
   return null;
+}
+
+// 正统性的涨落集中在这里，配平时只改这一处，也便于排查「谁动了正统性」。
+const LEGITIMACY_DELTAS = {
+  reclaim: 3,          // 收复一块旧土
+  battleWin: 2,        // 会战胜利
+  keepPromise: 6,      // 兑现封地承诺
+  returnKnight: 2,     // 归还俘虏骑士
+  loseTerritory: -3,   // 被反攻丢地
+  breakPromise: -8     // 背弃封地承诺
+};
+
+function gainLegitimacy(s, reason) {
+  const delta = LEGITIMACY_DELTAS[reason];
+  if (!s || delta === undefined) return false;
+  s.legitimacy = clamp((s.legitimacy || 0) + delta);
+  return true;
 }
 
 // 危机阈值集中在这里，配平时只改这一处。
@@ -3725,7 +3781,7 @@ if (typeof module !== "undefined" && module.exports) {
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
     applyEventEffects, handleOfficerPolitics, interactionLocked, checkDefeat,
-    enemyGuardCap, CRISIS_LIMITS, DUCHY_HOLDINGS, CROWN_GATE_HOLDING, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, coronationRemainingMs, delayCoronation, CORONATION_AT_MS, CORONATION_DELAY_MS, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
+    enemyGuardCap, CRISIS_LIMITS, gainLegitimacy, LEGITIMACY_DELTAS, DUCHY_HOLDINGS, CROWN_GATE_HOLDING, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, coronationRemainingMs, delayCoronation, CORONATION_AT_MS, CORONATION_DELAY_MS, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, researchCapacity, runningResearchJobs, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
     migrateSave, migrateV3ToV4, migrateV4ToV5, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, ENVOY_RAPPORT_GAIN, ENVOY_RAPPORT_CAP, RELEASE_RAPPORT_GAIN, cityActionAvailable, KNIGHT_LIEGE

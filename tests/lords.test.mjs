@@ -336,4 +336,40 @@ bb2.gold = 99999;
 assert.equal(game.bribeLord(bb2, "regent", "crownvale"), false, "篡位者不可收买");
 assert.equal(bb2.gold, 99999, "对不可收买者也不应扣钱");
 
+// 大叛臣归附后，附庸做跟随判定
+const fl = game.createInitialState("附庸跟随", "oath", "standard");
+fl.legitimacy = 100;
+game.lordVassals(fl, "bran").forEach(v => { v.rapport = 100; });
+assert.ok(game.lordVassals(fl, "bran").length >= 4, "布兰应有多名附庸");
+game.submitLord(fl, "bran", "persuade", () => 0.01);
+const followed = fl.officers.filter(o => game.LORD_DEFS[o.id]?.liege === "bran" && o.side === "player");
+assert.ok(followed.length > 0, "高正统性高好感时附庸应有人跟随");
+
+// 不跟随的附庸转为独立叛臣
+const fl2 = game.createInitialState("不跟随", "oath", "standard");
+fl2.legitimacy = 0;
+game.submitLord(fl2, "bran", "persuade", () => 0.99);
+const stillVassal = fl2.officers.filter(o => game.LORD_DEFS[o.id]?.liege === "bran" && o.side !== "player");
+assert.ok(stillVassal.length > 0, "低正统性时应有人拒绝跟随");
+assert.ok(stillVassal.every(v => v.liege === null), "不跟随者应转为独立叛臣");
+assert.deepEqual(game.lordVassals(fl2, "bran"), [], "已自立的附庸不应再算在原主君名下");
+
+// 剥离附庸会削弱主君的抵抗意志，但不会削到 0
+const st = game.createInitialState("剥离附庸", "oath", "standard");
+const branDefiance0 = st.officers.find(o => o.id === "bran").defiance;
+game.submitLord(st, "selma", "persuade", () => 0.99);
+const branAfter = st.officers.find(o => o.id === "bran").defiance;
+assert.ok(branAfter < branDefiance0, "附庸易主后主君抵抗应下降");
+assert.ok(branAfter >= game.LORD_DEFS.bran.defiance * 0.7, "抵抗最多削到原值的 70%");
+
+// 正统性统一入口
+const lg = game.createInitialState("正统性", "oath", "standard");
+const lgBefore = lg.legitimacy;
+game.gainLegitimacy(lg, "reclaim");
+assert.equal(lg.legitimacy, lgBefore + 3, "收复旧土 +3");
+game.gainLegitimacy(lg, "loseTerritory");
+assert.equal(lg.legitimacy, lgBefore, "丢地 −3 抵消");
+assert.equal(game.gainLegitimacy(lg, "不存在的理由"), false, "未知理由不应静默改数值");
+assert.equal(lg.legitimacy, lgBefore, "未知理由不应改动数值");
+
 console.log("lords tests passed");
