@@ -259,4 +259,43 @@ const dup = game.createInitialState("重复归附", "oath", "standard");
 assert.ok(game.submitLord(dup, "selma", "persuade"));
 assert.equal(game.submitLord(dup, "selma", "persuade"), false, "不能重复归附");
 
+// 使者提高个人好感，冷却用时间戳而非「本季已用」
+const en = game.createInitialState("使者", "oath", "standard");
+en.gold = 500;
+assert.deepEqual(Object.keys(game.CITY_ACTION_DEFS).sort(), ["envoy", "scout"], "说服路线恢复使者行动");
+const selmaE = en.officers.find(o => o.id === "selma");
+assert.equal(selmaE.rapport, 0);
+assert.ok(game.cityAction(en, "ashfield", "envoy"), "对叛臣领地应可派使者");
+game.processCompletedJobs(en, en.jobs.at(-1).endAt);
+assert.equal(selmaE.rapport, 8, "一次使者 +8 好感");
+assert.ok(en.cooldowns["envoy:ashfield"] > Date.now(), "使者应写入冷却到期时间戳");
+assert.equal(game.cityActionAvailable(en, "ashfield", "envoy"), false, "冷却期内不可再派");
+assert.equal(en.seasonLocks, undefined, "不得引入任何按季的锁");
+
+// 好感有上限：单靠使者堆不到能说服布兰的程度
+const cap = game.createInitialState("好感上限", "oath", "standard");
+cap.gold = 5000;
+const branC = cap.officers.find(o => o.id === "bran");
+for (let i = 0; i < 20; i++) {
+  cap.cooldowns["envoy:highpass"] = 0;
+  if (!game.cityAction(cap, "highpass", "envoy")) break;
+  game.processCompletedJobs(cap, cap.jobs.at(-1).endAt);
+}
+assert.ok(branC.rapport <= 40, `单靠使者好感上限为 40，实际 ${branC.rapport}`);
+assert.ok(game.lordResistance(cap, "bran") > 0, "只靠使者说不动布兰");
+
+// 对自己的领地和摄政公爵的王城不派使者
+assert.equal(game.cityActionAvailable(en, "ravenstone", "envoy"), false, "不对自己的领地派使者");
+assert.equal(game.cityActionAvailable(en, "crownvale", "envoy"), false, "篡位者不接受使者");
+
+// 归还俘虏骑士也能提高其原主君的好感
+const rk = game.createInitialState("归还骑士", "oath", "standard");
+const cap13 = rk.knights.find(k => k.id === "knight_13");
+cap13.status = "captured"; cap13.captured = true;
+const selmaR = rk.officers.find(o => o.id === "selma");
+assert.equal(selmaR.rapport, 0);
+assert.ok(game.knightAction("knight_13", "release", rk));
+game.processCompletedJobs(rk, rk.jobs.at(-1).endAt);
+assert.equal(selmaR.rapport, 12, "归还俘虏骑士 +12 好感");
+
 console.log("lords tests passed");

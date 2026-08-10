@@ -202,11 +202,16 @@ const playableTerritoryIds = () => Object.keys(TERRITORY_DEFS).filter(id => TERR
 // 侦察是当前唯一的城市行动。使者、商站、断粮道和城约属于「说服路线」，
 // 会在领主绑定领地与王室正统性落地后重建，届时它们要作用于具体的叛臣，而不是匿名城市。
 const CITY_ACTION_DEFS = {
-  scout: { name: "派出斥候", note: "花2金币，记录守军与地形两季。", cost: { gold: 2 } }
+  scout: { name: "派出斥候", note: "花2金币，记录守军与地形两季。", cost: { gold: 2 } },
+  envoy: { name: "派使者", note: "花8金币，提高该领主对渡鸦家的好感。", cost: { gold: 8 } }
 };
-const CITY_ACTION_DURATIONS = { scout: 20 * 1000 };
+// 单靠使者堆不满：抵抗高的领主必须配合邻近压力与正统性才谈得动。
+const ENVOY_RAPPORT_GAIN = 8;
+const ENVOY_RAPPORT_CAP = 40;
+const RELEASE_RAPPORT_GAIN = 12;
+const CITY_ACTION_DURATIONS = { scout: 20 * 1000, envoy: 30 * 1000 };
 // 冷却用绝对到期时刻，而不是「本季已用」——季不再是结算单位，锁也不该按季走。
-const CITY_ACTION_COOLDOWNS = { scout: 90 * 1000 };
+const CITY_ACTION_COOLDOWNS = { scout: 90 * 1000, envoy: 120 * 1000 };
 
 const LORD_DEFS = {
   player:  { name: "罗恩", title: "渡鸦家的王子", portrait: "assets/player.webp", stats: { force: 68, command: 65, scheme: 60, govern: 58, charm: 67 }, trait: "合法继承人", traitText: "亲自出战时，本场军心最低按45点计算；只有收复旧土后，才有资格重新戴上王冠。", loyalty: 100, ambition: 55, tier: "loyal",  faction: "player",  seat: "ravenstone", liege: null,   oldTie: "先王之子",                     defiance: 0,  routes: { force: 0, persuade: 0, bribe: 0 },        knights: ["knight_2"] },
@@ -659,9 +664,15 @@ function applyCompletedJob(s, job, rng = Math.random) {
       return true;
     }
     if (action === "release") {
+      // 放人之前先记下他原本效忠谁——释放会清空 liegeLordId
+      const formerLiege = officer(s, knight.liegeLordId);
       knight.status = "released";
       knight.side = "neutral";
       knight.liegeLordId = null;
+      if (formerLiege && formerLiege.side !== "player" && formerLiege.side !== "gone") {
+        formerLiege.rapport = Math.min(100, (formerLiege.rapport || 0) + RELEASE_RAPPORT_GAIN);
+        log(s, "good", `${formerLiege.name}听说你放回了他的骑士，对渡鸦家的态度缓和了。`);
+      }
       knight.captured = false;
       const text = `${knight.name}获释离开，今后可能在别处重新出现。`;
       s.lastAction = { name: "释放骑士", text };
@@ -1096,6 +1107,11 @@ function cityActionAvailable(s, id, action) {
   if (!d || !t || !CITY_ACTION_DEFS[action] || s.battleSession) return false;
   if (cityActionJob(s, id) || (s.cooldowns?.[cityActionLockKey(id, action)] || 0) > Date.now()) return false;
   if (action === "scout") return !owns(s, id);
+  if (action === "envoy") {
+    const lord = lordAt(s, id);
+    return !!lord && lord.side !== "player" && lord.side !== "gone" && !lord.captured
+      && (LORD_DEFS[lord.id]?.routes?.persuade || 0) > 0;
+  }
   return false;
 }
 
@@ -1136,6 +1152,15 @@ function resolveCityAction(s, id, action) {
   const t = s.territories[id];
   if (!d || !t || !CITY_ACTION_DEFS[action]) return false;
   s.cityIntel ||= {};
+  if (action === "envoy") {
+    const lord = lordAt(s, id);
+    if (!lord) return false;
+    lord.rapport = Math.min(ENVOY_RAPPORT_CAP, (lord.rapport || 0) + ENVOY_RAPPORT_GAIN);
+    const envoyText = `使者带着渡鸦家的礼物见到了${lord.name}，好感提高到 ${lord.rapport}。`;
+    s.lastAction = { name: `${d.name} · 派使者`, text: envoyText };
+    log(s, "info", envoyText);
+    return true;
+  }
   if (action !== "scout") return false;
   s.cityIntel[id] = turnOf(s) + 2;
   const text = `斥候从${d.name}带回城防、粮道与地形记录。`;
@@ -3671,7 +3696,7 @@ if (typeof module !== "undefined" && module.exports) {
     enemyGuardCap, CRISIS_LIMITS, DUCHY_HOLDINGS, CROWN_GATE_HOLDING, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, coronationRemainingMs, delayCoronation, CORONATION_AT_MS, CORONATION_DELAY_MS, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, researchCapacity, runningResearchJobs, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
-    migrateSave, migrateV3ToV4, migrateV4ToV5, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, cityActionAvailable, KNIGHT_LIEGE
+    migrateSave, migrateV3ToV4, migrateV4ToV5, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, ENVOY_RAPPORT_GAIN, ENVOY_RAPPORT_CAP, RELEASE_RAPPORT_GAIN, cityActionAvailable, KNIGHT_LIEGE
   };
 }
 
