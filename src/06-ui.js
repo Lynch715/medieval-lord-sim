@@ -50,7 +50,13 @@ function renderAll() {
 function researchPanelHtml() {
   const running = runningResearchJobs(S);
   const atCapacity = running.length >= researchCapacity(S);
-  return `<section class="research-panel"><div class="section-head"><h2>学堂与研究</h2><span>当前知识 ${Math.floor(S.knowledge || 0)} · 研究队列 ${running.length}/${researchCapacity(S)} · 每项科技三阶</span></div><div class="tech-grid">${Object.entries(TECH_DEFS).map(([branch, techs]) => `<article class="tech-branch"><div class="tech-branch-head"><b>${TECH_BRANCH_NAMES[branch]}</b><small>${techs.reduce((sum, tech) => sum + techLevel(S, tech.id), 0)} / ${techs.reduce((sum, tech) => sum + techMaxLevel(tech), 0)} 阶</small></div>${techs.map(tech => {
+  return `<section class="research-panel"><div class="section-head"><h2>学堂与研究</h2><span>当前知识 ${Math.floor(S.knowledge || 0)} · 研究队列 ${running.length}/${researchCapacity(S)} · 每项科技三阶</span></div><div class="tech-grid">${Object.entries(TECH_DEFS).map(([branch, techs]) => {
+    const done = techs.reduce((sum, tech) => sum + techLevel(S, tech.id), 0);
+    const max = techs.reduce((sum, tech) => sum + techMaxLevel(tech), 0);
+    const branchRunning = techs.some(tech => researchQueueJob(S, tech.id));
+    const open = foldState.branches.has(branch);
+    return `<details class="tech-branch domain-fold" data-fold-branch="${branch}"${open ? " open" : ""}>
+    <summary><span class="fold-title"><b>${TECH_BRANCH_NAMES[branch]}</b><small>${done} / ${max} 阶</small></span><span class="fold-meta">${branchRunning ? `<em class="fold-busy">研究中</em>` : done >= max ? `<em class="fold-idle">已满阶</em>` : `<em class="fold-idle">可研究</em>`}</span></summary>${techs.map(tech => {
     const currentLevel = techLevel(S, tech.id);
     const maxLevel = techMaxLevel(tech);
     const nextLevel = currentLevel + 1;
@@ -63,7 +69,8 @@ function researchPanelHtml() {
     const label = currentLevel >= maxLevel ? `已满阶 · ${currentLevel}/${maxLevel}` : active ? `研究中 · ${nextLevel}/${maxLevel} · ${formatDuration(getJobRemainingMs(queue))}` : atCapacity ? "研究队列已满" : unmet.length ? `需要：${unmet.map(id => techDefinition(branch, id)?.name || id).join("、")}` : !affordable ? "知识或金币不足" : `研究 ${nextLevel}/${maxLevel} · ${cost.knowledge}知 · ${cost.gold}金 · ${formatDuration(duration)}`;
     const disabled = currentLevel >= maxLevel || active || atCapacity || unmet.length > 0 || !affordable;
     return `<div class="tech-card ${currentLevel >= maxLevel ? "completed" : active ? "active" : ""}"><div><b>${esc(tech.name)} <i class="tech-level-badge">${currentLevel}/${maxLevel}</i></b><small>${esc(tech.desc)} 每阶都会强化效果，研究时间逐阶增加。</small></div><button data-research-branch="${branch}" data-research="${tech.id}" ${disabled ? "disabled" : ""}>${active && queue ? `<span data-job-countdown="${queue.id}" data-job-prefix="研究中 · ">研究中 · ${nextLevel}/${maxLevel} · ${formatDuration(getJobRemainingMs(queue))}</span>` : label}</button></div>`;
-  }).join("")}</article>`).join("")}</div></section>`;
+  }).join("")}</details>`;
+  }).join("")}</div></section>`;
 }
 
 function renderHall() {
@@ -100,11 +107,36 @@ function officerCard(o, enemy = false) {
   </article>`;
 }
 
+// 记账挂在 summary 的 click 上，而不是 details 的 toggle 上：
+// toggle 是异步派发的，玩家「展开后立刻点建造」时，renderAll() 会抢在 toggle
+// 之前重建面板，于是刚展开的那一项按旧状态又被合上。click 里预测翻转后的值
+// 同步写入，就没有这个时间窗。keyboard 回车同样会触发 summary 的 click。
+function bindFold(panel, datasetKey, store) {
+  const attr = datasetKey === "foldTerritory" ? "data-fold-territory" : "data-fold-branch";
+  panel.querySelectorAll(`[${attr}]`).forEach(node => {
+    const key = node.dataset[datasetKey];
+    const summary = node.querySelector("summary");
+    if (!summary) return;
+    summary.addEventListener("click", () => { node.open ? store.delete(key) : store.add(key); });
+  });
+}
+
 function renderDomain() {
   const panel = $("panel");
+  // 第一次进这一页时默认展开主城，让玩家看见「点开有内容」这件事；
+  // 之后完全按玩家自己的开合来，不再自动插手。
+  if (!foldState.seeded) {
+    foldState.seeded = true;
+    const first = ownTerritoryIds(S)[0];
+    if (first) foldState.territories.add(first);
+  }
   panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">RESTORATION ECONOMY</span><h2>发展复国根基</h2><p>农田养军，市场聚财，铁匠铺和兵营把资源变成收复旧土的军力。建筑最高五级，每块领地同时只进行一项建设。</p>${metrics([[ownTerritoryIds(S).length, "收复领地"], [S.support, "民心"], [forecast(S).grain, "本季产粮"], [forecast(S).gold, "本季金币"]])}</section>
-    <div class="section-head"><h2>领地建设</h2><span>农田、市场、兵营、城墙、粮仓、学宫、工坊、驿道、烽火台、神殿</span></div>
+    <div class="section-head"><h2>领地建设</h2><span>点开一块领地，展开它的十类建筑</span></div>
     <div class="domain-grid">${ownTerritoryIds(S).map(domainCard).join("")}</div>${researchPanelHtml()}`;
+  // 折叠状态记在 foldState 里，renderAll() 重建面板后按它还原，
+  // 这样点一次建造不会把刚展开的领地合上。
+  bindFold(panel, "foldTerritory", foldState.territories);
+  bindFold(panel, "foldBranch", foldState.branches);
   panel.querySelectorAll("[data-upgrade]").forEach(button => button.addEventListener("click", () => upgradeBuilding(button.dataset.territory, button.dataset.upgrade)));
   panel.querySelectorAll("[data-research]").forEach(button => button.addEventListener("click", () => {
     const job = queueResearch(S, button.dataset.researchBranch, button.dataset.research);
@@ -121,7 +153,17 @@ function domainCard(id) {
   const t = S.territories[id];
   const out = territoryOutput(S, id);
   const holder = t.fiefHolder === "charter" ? "村镇自治" : t.fiefHolder ? `由${officer(S, t.fiefHolder)?.name || "旧领主"}管理` : "由你管理";
-  return `<article class="domain-card"><div class="owner-line"><span>${esc(d.terrain)} · ${holder}</span><b>王国民心 ${Math.round(S.support)}</b></div><h3>${d.name}</h3><div class="stat-chips"><span>本季 ${out.gold}金</span><span>${out.grain}粮</span><span>守军 ${t.guard}</span><span>生产正常</span></div>
+  const buildJob = getRunningJob(S, `build:${id}`);
+  // 折叠时这一行就是全部信息，所以要把「在建什么、还有多久」直接摆在标题里，
+  // 否则玩家得把每块地挨个点开才知道哪块闲着。
+  const busy = buildJob
+    ? `<em class="fold-busy">${BUILDINGS[buildJob.payload?.buildingType]?.name || "建设"}中 · <span data-job-countdown="${buildJob.id}" data-job-prefix="">${formatDuration(getJobRemainingMs(buildJob))}</span></em>`
+    : `<em class="fold-idle">空闲</em>`;
+  const levels = Object.keys(BUILDINGS).reduce((sum, type) => sum + (t.buildings[type] || 0), 0);
+  const open = foldState.territories.has(id);
+  return `<details class="domain-fold" data-fold-territory="${id}"${open ? " open" : ""}>
+    <summary><span class="fold-title"><b>${d.name}</b><small>${territoryRoleName(d.type)} · ${esc(d.terrain)} · ${holder}</small></span><span class="fold-meta">${out.gold}金 ${out.grain}粮 · 守军 ${t.guard} · 建筑 ${levels}/${Object.keys(BUILDINGS).length * BUILDING_MAX_LEVEL}级 ${busy}</span></summary>
+    <article class="domain-card"><div class="stat-chips"><span>本季 ${out.gold}金</span><span>${out.grain}粮</span><span>守军 ${t.guard}</span><span>${territoryRoleHint(S, id)}</span></div>
     <div class="building-grid">${Object.entries(BUILDINGS).map(([type, b]) => {
       const level = t.buildings[type];
       const cost = buildingCost(S, id, type);
@@ -129,7 +171,7 @@ function domainCard(id) {
       const buildingQueued = buildJob?.payload?.buildingType === type;
       const buildLabel = buildingQueued ? `建设中 · ${formatDuration(getJobRemainingMs(buildJob))}` : buildJob ? "建设队列占用" : level >= BUILDING_MAX_LEVEL ? "已达最高级" : `升级 · ${cost}金`;
       return `<div class="building-card"><b>${glyphSvg(type)}${b.name} · ${level}/${BUILDING_MAX_LEVEL}</b><small>${b.desc}</small><button data-territory="${id}" data-upgrade="${type}" ${!canUpgrade(S, id, type) ? "disabled" : ""}>${buildingQueued ? `<span data-job-countdown="${buildJob.id}" data-job-prefix="建设中 · ">建设中 · ${formatDuration(getJobRemainingMs(buildJob))}</span>` : buildLabel}</button></div>`;
-    }).join("")}</div></article>`;
+    }).join("")}</div></article></details>`;
 }
 
 function renderMap() {

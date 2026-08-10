@@ -144,12 +144,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 .metric b, .metric span { display: block; }
 .metric b { color: var(--gold-light); font: 21px var(--serif); }
 .metric span { margin-top: 3px; color: #999b92; font-size: 11px; }
-.section-head { display: flex; align-items: flex-end; justify-content: space-between; margin: 24px 0 11px; }
-.section-head h2 { margin: 0; font: 21px var(--serif); }
+.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 24px 0 11px; }
+.section-head h2 { margin: 0; font: 21px var(--serif); white-space: nowrap; }
 .section-head span { color: #85877d; font-size: 11px; }
 .research-panel { margin: 24px 0 30px; padding: 18px; border: 1px solid var(--line); background: rgba(16,19,15,.72); }
-.tech-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; }
-.tech-branch { display: grid; gap: 8px; }
+.tech-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.tech-branch[open] { padding-bottom: 2px; }
 .tech-branch-head { display: flex; justify-content: space-between; align-items: baseline; color: var(--gold-light); font: 17px var(--serif); }
 .tech-branch-head small { color: var(--muted); font: 11px var(--sans); }
 .tech-card { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); background: rgba(0,0,0,.18); }
@@ -228,7 +228,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .knight-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .knight-actions button { min-height: 31px; padding: 5px 8px; font-size: 11px; }
 
-.domain-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
+.domain-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .domain-card { padding: 18px; }
 .domain-card h3 { margin: 0; font: 21px var(--serif); }
 .domain-card .owner-line { display: flex; justify-content: space-between; color: #898b82; font-size: 11px; }
@@ -620,3 +620,38 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .lord-actions button { flex: 1 1 auto; }
 
 .city-role{color:var(--accent,#c8a45c);font-size:.86em;letter-spacing:.02em}
+
+/* 发展页的折叠行。收起时只留一行摘要，展开后才铺开建筑或科技。 */
+.domain-fold { border: 1px solid var(--line); background: linear-gradient(145deg,rgba(31,34,28,.93),rgba(15,17,14,.96)); }
+.domain-fold > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; cursor: pointer; list-style: none;
+  border-left: 3px solid transparent; transition: background .15s, border-color .15s;
+}
+.domain-fold > summary::-webkit-details-marker { display: none; }
+.domain-fold > summary:hover { background: rgba(200,169,106,.06); }
+.domain-fold[open] > summary { border-left-color: var(--gold-light); background: rgba(200,169,106,.05); }
+/* 自绘三角，避免各浏览器默认标记不一致 */
+.domain-fold > summary::before {
+  content: ""; flex: none; width: 0; height: 0;
+  border-left: 5px solid var(--gold-light); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .15s; transform-origin: 25% 50%;
+}
+.domain-fold[open] > summary::before { transform: rotate(90deg); }
+.fold-title { flex: 1 1 auto; display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.fold-title b { font: 17px var(--serif); color: var(--gold-light); }
+.fold-title small { color: #85877d; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold-meta { flex: none; color: #898b82; font-size: 11px; display: flex; align-items: center; gap: 8px; }
+.fold-busy { font-style: normal; color: var(--gold-light); }
+.fold-idle { font-style: normal; color: #6f7167; }
+.domain-fold .domain-card { border: 0; border-top: 1px solid var(--line); padding: 14px 16px 16px; background: rgba(0,0,0,.14); }
+.domain-fold .tech-card { margin: 0 12px 10px; }
+.domain-fold[open] > summary + * { animation: foldIn .16s ease-out; }
+@keyframes foldIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 720px) {
+  .fold-meta { font-size: 10px; gap: 5px; }
+  /* 只藏领地那串「核心城堡 · 丘陵城堡 · 由你管理」，它在窄屏会把标题挤没；
+     科技分支的 small 是「0 / 15 阶」进度，短而有用，必须留着。 */
+  [data-fold-territory] .fold-title small { display: none; }
+}
