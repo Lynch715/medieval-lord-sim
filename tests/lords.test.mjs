@@ -194,7 +194,8 @@ assert.equal(game.crownAccessMet(cw), true, "切断公爵大道后应开城");
 assert.ok(game.DUCHY_HOLDINGS.includes(game.CROWN_GATE_HOLDING));
 assert.equal(game.DUCHY_HOLDINGS.length, 3, "三块直辖地仍是加冕推迟的目标");
 
-// 说服阻力 = defiance − (正统性×0.6 + 好感×0.8 + 邻近压力×0.5) × routes.persuade
+// 说服阻力 = defiance − (正统性×0.4 + 好感×0.4 + 邻近压力×1.2) × routes.persuade
+// 邻近压力是主导项：说服要建立在武力威慑之上，不能靠使者刷好感刷出来。
 const rs = game.createInitialState("阻力", "oath", "standard");
 rs.legitimacy = 0;
 rs.officers.find(o => o.id === "ysabel").rapport = 0;
@@ -203,7 +204,25 @@ assert.equal(game.lordResistance(rs, "ysabel"), 45, "无正统性无好感时阻
 rs.legitimacy = 50;
 const withLegit = game.lordResistance(rs, "ysabel");
 assert.ok(withLegit < 45, "正统性应降低阻力");
-assert.ok(Math.abs(withLegit - (45 - 50 * 0.6 * 1.3)) < 0.01, `阻力公式不符，实际 ${withLegit}`);
+assert.ok(Math.abs(withLegit - (45 - 50 * 0.4 * 1.3)) < 0.01, `阻力公式不符，实际 ${withLegit}`);
+
+// 邻近压力必须比好感更能压低阻力，否则「以武力统治为主」只是一句文案。
+const lever = game.createInitialState("杠杆对比", "oath", "standard");
+lever.legitimacy = 0;
+const leverLord = lever.officers.find(o => o.id === "ysabel");
+leverLord.rapport = game.ENVOY_RAPPORT_CAP;              // 使者刷到封顶
+const byRapport = game.lordResistance(lever, "ysabel");
+leverLord.rapport = 0;
+lever.territories[game.lordHoldings(lever, "ysabel")[0]] // 换成军事包围
+  && Object.keys(game.TERRITORY_DEFS).forEach(id => {
+    const holds = new Set(game.lordHoldings(lever, "ysabel"));
+    if (!holds.has(id) && [...holds].some(h => game.TERRITORY_DEFS[h].adj.includes(id)) && lever.territories[id]) {
+      lever.territories[id].owner = "player";
+    }
+  });
+const byPressure = game.lordResistance(lever, "ysabel");
+assert.ok(byPressure < byRapport,
+  `满额邻近压力应比刷满好感更能压低阻力，实际 压力${byPressure} vs 好感${byRapport}`);
 
 // 摄政公爵 persuade 为 0，阻力恒等于 defiance
 rs.legitimacy = 100;

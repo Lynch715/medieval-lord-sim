@@ -42,8 +42,23 @@ function lordResistance(s, lordId) {
   const def = LORD_DEFS[lordId];
   if (!lord || !def) return Infinity;
   const persuade = def.routes?.persuade || 0;
-  const leverage = (s.legitimacy || 0) * 0.6 + (lord.rapport || 0) * 0.8 + adjacencyPressure(s, lordId) * 0.5;
-  return (lord.defiance ?? def.defiance) - leverage * persuade;
+  const parts = persuasionLeverage(s, lordId);
+  return (lord.defiance ?? def.defiance) - (parts.pressure + parts.legitimacy + parts.rapport) * persuade;
+}
+
+// 说服杠杆的三项来源，拆开返回是为了让将领页能告诉玩家「该往哪使劲」。
+//
+// 权重取向：说服建立在武力威慑之上，不是靠使者刷好感刷出来的。邻近压力
+// （他的辖地被我方版图包住多少）是主导项，正统性与好感只是加成。
+// 旧权重 0.6/0.8/0.5 让好感成了最大单项来源（上限 40 × 0.8 = 32），
+// 光靠外交就能翻掉大半个北境，武力反而退成次要路线。
+function persuasionLeverage(s, lordId) {
+  const lord = officer(s, lordId);
+  return {
+    pressure: adjacencyPressure(s, lordId) * 1.2,
+    legitimacy: (s?.legitimacy || 0) * 0.4,
+    rapport: (lord?.rapport || 0) * 0.4
+  };
 }
 
 function canPersuadeLord(s, lordId) {
@@ -131,6 +146,7 @@ function lordRouteStatus(s, lordId) {
   const def = LORD_DEFS[lordId];
   if (!lord || !def) return {};
   const resistance = lordResistance(s, lordId);
+  const leverage = persuasionLeverage(s, lordId);
   const cost = lordBribeCost(s, lordId);
   const holdings = lordHoldings(s, lordId).length;
   const persuadable = (def.routes?.persuade || 0) > 0;
@@ -143,7 +159,7 @@ function lordRouteStatus(s, lordId) {
       available: canPersuadeLord(s, lordId),
       detail: !persuadable ? "篡位者不接受任何使者，只能兵戎相见"
         : resistance <= 0 ? "阻力已清，可要求他效忠"
-        : `还需消解 ${Math.ceil(resistance)} 点阻力`
+        : `还需消解 ${Math.ceil(resistance)} 点阻力 · 当前杠杆：兵临城下 ${Math.round(leverage.pressure)}、正统 ${Math.round(leverage.legitimacy)}、好感 ${Math.round(leverage.rapport)}（占他的辖地邻边最有效）`
     },
     bribe: {
       available: Number.isFinite(cost) && s.gold >= cost && lord.side !== "player" && lord.side !== "gone" && !lord.captured,
@@ -153,7 +169,10 @@ function lordRouteStatus(s, lordId) {
 }
 
 const BRIBE_LEGITIMACY_COST = 4;
-const PERSUADE_LEGITIMACY_GAIN = 6;
+// 说服的正统性收益必须低于攻城拔寨（收复一块地 +3、会战胜利 +2，合计 +5）。
+// 原本是 +6：说服比打仗更能涨正统性，而正统性又是说服公式里的加成项 ——
+// 说服因此自我供能，每成功一次下一次更容易，滚起来就停不下来。
+const PERSUADE_LEGITIMACY_GAIN = 2;
 
 // 说服：阻力归零后要求对方重新宣誓。不花钱、无战损，且提高正统性。
 function demandFealty(s, lordId) {

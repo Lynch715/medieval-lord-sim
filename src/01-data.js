@@ -210,8 +210,10 @@ const CITY_ACTION_DEFS = {
   envoy: { name: "派使者", note: "花8金币，提高该领主对渡鸦家的好感。", cost: { gold: 8 } }
 };
 // 单靠使者堆不满：抵抗高的领主必须配合邻近压力与正统性才谈得动。
+// 上限从 40 压到 24，是为了让「一季一发使者、发满全场」这种纯外交打法
+// 拿不到决定性的杠杆 —— 好感是加速器，不是替代打仗的另一条通路。
 const ENVOY_RAPPORT_GAIN = 8;
-const ENVOY_RAPPORT_CAP = 40;
+const ENVOY_RAPPORT_CAP = 24;
 const RELEASE_RAPPORT_GAIN = 12;
 const CITY_ACTION_DURATIONS = { scout: 20 * 1000, envoy: 30 * 1000 };
 // 冷却用绝对到期时刻，而不是「本季已用」——季不再是结算单位，锁也不该按季走。
