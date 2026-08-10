@@ -1055,6 +1055,37 @@ function lordBribeCost(s, lordId) {
   return Math.round((lord.defiance ?? def.defiance) * 6 / bribe);
 }
 
+// 打服 / 说服 / 收买三条路线共用同一个归附出口：
+// 忠诚基线、辖地转移、骑士随迁只实现一次，避免三份会各自漂移的代码。
+const SUBMIT_LOYALTY = { force: 45, persuade: 65, bribe: 30 };
+
+function submitLord(s, lordId, route = "persuade") {
+  const lord = officer(s, lordId);
+  if (!lord || lord.side === "player" || lord.side === "gone") return false;
+  lord.side = "player";
+  lord.captured = false;
+  lord.submitted = true;
+  lord.loyalty = SUBMIT_LOYALTY[route] ?? SUBMIT_LOYALTY.persuade;
+  lord.grievance = route === "force" ? clamp((lord.grievance || 0) + 10) : 0;
+  // 打服时辖地已在战斗结算里易主；说服与收买则整片带过来
+  if (route !== "force") {
+    lordHoldings(s, lordId).forEach(id => {
+      const t = s.territories[id];
+      t.owner = "player";
+      t.lordId = null;
+      t.stability = clamp(Math.max(t.stability, 50));
+    });
+  }
+  // 骑士随主君：在列的直接入伍，被俘的一并释放归队；已战死或转为死敌的除外
+  (s.knights || []).filter(k => k.liegeLordId === lordId && k.status !== "gone" && k.status !== "hostile").forEach(k => {
+    k.side = "player";
+    k.liegeLordId = "player";
+    k.captured = false;
+    k.status = "active";
+  });
+  return true;
+}
+
 const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= turnOf(s);
 
 function cityActionLockKey(id, action) { return `${action}:${id}`; }
@@ -2854,12 +2885,8 @@ function decisionView(s, decision) {
       body: `<p>${esc(d.name)}已经换旗。${esc(lord.name)}——${esc(lord.oldTie || "父亲旧部")}——在城下被俘，等待你的处置。</p><p>他名下的骑士也在等同一个结果。</p>`,
       options: [
         { name: "接受效忠，让他重新宣誓", note: "加入你的领主议会，忠诚 45；王室正统性 +4", effect() {
-          lord.side = "player"; lord.captured = false; lord.loyalty = 45;
-          lord.grievance = clamp((lord.grievance || 0) + 10); lord.submitted = true;
+          submitLord(s, lord.id, "force");
           s.legitimacy = clamp(s.legitimacy + 4); s.style.oath++;
-          (s.knights || []).filter(k => k.liegeLordId === lord.id && k.status === "captured").forEach(k => {
-            k.status = "active"; k.side = "player"; k.liegeLordId = "player"; k.captured = false;
-          });
           log(s, "good", `${lord.name}重新向渡鸦家宣誓效忠。`);
         } },
         { name: `收取赎金 ${ransom} 金币`, note: `金币 +${ransom}；王室正统性 −2；该领主离场`, effect() {
@@ -3636,7 +3663,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals, adjacencyPressure, lordResistance, canPersuadeLord, lordBribeCost,
+    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals, adjacencyPressure, lordResistance, canPersuadeLord, lordBribeCost, submitLord, SUBMIT_LOYALTY,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,

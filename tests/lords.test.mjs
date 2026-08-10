@@ -234,4 +234,29 @@ assert.ok(game.lordResistance(rd, "ysabel") <= 0, "高正统性 + 高好感应�
 assert.equal(game.canPersuadeLord(rd, "ysabel"), true);
 assert.equal(game.canPersuadeLord(rd, "regent"), false, "公爵永远不可说服");
 
+// 三条路线共用同一个归附出口，忠诚基线由路线决定
+const sub = game.createInitialState("归附", "oath", "standard");
+sub.knights.find(k => k.id === "knight_13").status = "captured";
+assert.ok(game.submitLord(sub, "selma", "persuade"));
+const selmaS = sub.officers.find(o => o.id === "selma");
+assert.equal(selmaS.side, "player");
+assert.equal(selmaS.loyalty, 65, "说服的忠诚基线为 65");
+assert.equal(selmaS.submitted, true);
+assert.equal(selmaS.captured, false);
+const k13s = sub.knights.find(k => k.id === "knight_13");
+assert.equal(k13s.side, "player");
+assert.equal(k13s.liegeLordId, "player", "随主君归附的骑士必须改挂玩家");
+assert.equal(sub.territories.ashfield.owner, "player", "说服归附应把辖地一并带过来");
+assert.equal(sub.territories.ashfield.lordId, null);
+
+for (const [route, base] of Object.entries({ force: 45, persuade: 65, bribe: 30 })) {
+  const st = game.createInitialState(`基线${route}`, "oath", "standard");
+  game.submitLord(st, "selma", route);
+  assert.equal(st.officers.find(o => o.id === "selma").loyalty, base, `${route} 的忠诚基线应为 ${base}`);
+}
+
+const dup = game.createInitialState("重复归附", "oath", "standard");
+assert.ok(game.submitLord(dup, "selma", "persuade"));
+assert.equal(game.submitLord(dup, "selma", "persuade"), false, "不能重复归附");
+
 console.log("lords tests passed");
