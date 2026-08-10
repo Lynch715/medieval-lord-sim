@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const game = require("../app.js");
+import game from "./_game.mjs";
 
 const SEASON = game.TIME_CONFIG.seasonDurationMs;
 

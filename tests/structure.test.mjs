@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import game, { bundledSource } from "./_game.mjs";
 import { fileURLToPath } from "node:url";
 
-const require = createRequire(import.meta.url);
-const game = require("../app.js");
-const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
+// 黑名单检查的是拼接后的全部源码，拆分后依然覆盖每一个文件
+const source = bundledSource;
 const html = readFileSync(fileURLToPath(new URL("../index.html", import.meta.url)), "utf8");
 const css = readFileSync(fileURLToPath(new URL("../style.css", import.meta.url)), "utf8");
 const fixed = value => () => value;

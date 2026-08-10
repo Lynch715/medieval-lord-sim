@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const game = require("../app.js");
+import game from "./_game.mjs";
 
 const s = game.createInitialState("领主测试", "oath", "standard");
 

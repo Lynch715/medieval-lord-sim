@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const game = require("../app.js");
+import game from "./_game.mjs";
 
 // 版本链：v1 → v2 → v3 → v4，任何一档旧存档都应能一路迁到最新
 
