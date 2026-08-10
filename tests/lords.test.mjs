@@ -196,4 +196,42 @@ assert.equal(game.crownAccessMet(cw), true, "切断公爵大道后应开城");
 assert.ok(game.DUCHY_HOLDINGS.includes(game.CROWN_GATE_HOLDING));
 assert.equal(game.DUCHY_HOLDINGS.length, 3, "三块直辖地仍是加冕推迟的目标");
 
+// 说服阻力 = defiance − (正统性×0.6 + 好感×0.8 + 邻近压力×0.5) × routes.persuade
+const rs = game.createInitialState("阻力", "oath", "standard");
+rs.legitimacy = 0;
+rs.officers.find(o => o.id === "ysabel").rapport = 0;
+assert.equal(game.lordResistance(rs, "ysabel"), 45, "无正统性无好感时阻力等于 defiance");
+
+rs.legitimacy = 50;
+const withLegit = game.lordResistance(rs, "ysabel");
+assert.ok(withLegit < 45, "正统性应降低阻力");
+assert.ok(Math.abs(withLegit - (45 - 50 * 0.6 * 1.3)) < 0.01, `阻力公式不符，实际 ${withLegit}`);
+
+// 摄政公爵 persuade 为 0，阻力恒等于 defiance
+rs.legitimacy = 100;
+rs.officers.find(o => o.id === "regent").rapport = 100;
+assert.equal(game.lordResistance(rs, "regent"), game.LORD_DEFS.regent.defiance, "摄政公爵不可被说服");
+
+// 邻近压力
+const ap = game.createInitialState("邻近压力", "oath", "standard");
+// 灰麦原开局就与渡鸦堡接壤，所以起点不是 0；关键是「再拿下一个邻居会不会增加压力」
+const apStart = game.adjacencyPressure(ap, "selma");
+ap.territories.pineford.owner = "player";
+ap.territories.pineford.lordId = null;
+assert.ok(game.adjacencyPressure(ap, "selma") > apStart, "再拿下松林渡应进一步增加对灰麦原的压力");
+// 把它所有邻居都拿下，压力应封顶且不越界
+(game.TERRITORY_DEFS.ashfield.adj || []).forEach(id => { ap.territories[id].owner = "player"; ap.territories[id].lordId = null; });
+assert.ok(game.adjacencyPressure(ap, "selma") <= 20, "邻近压力应有上限 20");
+// 没有辖地的领主不产生邻近压力
+ap.territories.ashfield.lordId = null;
+assert.equal(game.adjacencyPressure(ap, "selma"), 0, "已失去全部辖地的领主没有邻近压力");
+
+// 阻力归零即可要求效忠
+const rd = game.createInitialState("可说服", "oath", "standard");
+rd.legitimacy = 100;
+rd.officers.find(o => o.id === "ysabel").rapport = 40;
+assert.ok(game.lordResistance(rd, "ysabel") <= 0, "高正统性 + 高好感应把伊莎贝尔的阻力压到零");
+assert.equal(game.canPersuadeLord(rd, "ysabel"), true);
+assert.equal(game.canPersuadeLord(rd, "regent"), false, "公爵永远不可说服");
+
 console.log("lords tests passed");

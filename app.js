@@ -1017,6 +1017,44 @@ function lordVassals(s, lordId) {
   return (s?.officers || []).filter(o => LORD_DEFS[o.id]?.liege === lordId && o.side !== "player" && o.side !== "gone");
 }
 
+// 邻近压力：该领主全部辖地的相邻领地并集里，有多少已归玩家。
+// 去重，并排除他自己的辖地——否则自己的地会被算成对自己的压力。
+function adjacencyPressure(s, lordId) {
+  const holdings = lordHoldings(s, lordId);
+  if (!holdings.length) return 0;
+  const own = new Set(holdings);
+  const neighbours = new Set();
+  holdings.forEach(id => (TERRITORY_DEFS[id]?.adj || []).forEach(nb => { if (!own.has(nb)) neighbours.add(nb); }));
+  return Math.min(20, [...neighbours].filter(id => owns(s, id)).length * 4);
+}
+
+// 说服阻力。routes.persuade 为 0 的领主（摄政公爵）阻力恒等于 defiance，
+// 无论正统性和好感堆到多高都说不动——主线的军事高潮因此得以保留。
+function lordResistance(s, lordId) {
+  const lord = officer(s, lordId);
+  const def = LORD_DEFS[lordId];
+  if (!lord || !def) return Infinity;
+  const persuade = def.routes?.persuade || 0;
+  const leverage = (s.legitimacy || 0) * 0.6 + (lord.rapport || 0) * 0.8 + adjacencyPressure(s, lordId) * 0.5;
+  return (lord.defiance ?? def.defiance) - leverage * persuade;
+}
+
+function canPersuadeLord(s, lordId) {
+  const lord = officer(s, lordId);
+  if (!lord || lord.side === "player" || lord.side === "gone" || lord.captured) return false;
+  if (!(LORD_DEFS[lordId]?.routes?.persuade > 0)) return false;
+  return lordResistance(s, lordId) <= 0;
+}
+
+// 收买价随抵抗值上升、随该领主的贪财程度下降。bribe 为 0 者不可收买。
+function lordBribeCost(s, lordId) {
+  const lord = officer(s, lordId);
+  const def = LORD_DEFS[lordId];
+  const bribe = def?.routes?.bribe || 0;
+  if (!lord || !bribe) return Infinity;
+  return Math.round((lord.defiance ?? def.defiance) * 6 / bribe);
+}
+
 const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= turnOf(s);
 
 function cityActionLockKey(id, action) { return `${action}:${id}`; }
@@ -3598,7 +3636,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals,
+    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals, adjacencyPressure, lordResistance, canPersuadeLord, lordBribeCost,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,
