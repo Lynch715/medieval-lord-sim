@@ -1097,6 +1097,38 @@ function submitLord(s, lordId, route = "persuade") {
   return true;
 }
 
+const BRIBE_LEGITIMACY_COST = 4;
+const PERSUADE_LEGITIMACY_GAIN = 6;
+
+// 说服：阻力归零后要求对方重新宣誓。不花钱、无战损，且提高正统性。
+function demandFealty(s, lordId) {
+  if (!canPersuadeLord(s, lordId)) return false;
+  const lord = officer(s, lordId);
+  if (!submitLord(s, lordId, "persuade")) return false;
+  s.legitimacy = clamp(s.legitimacy + PERSUADE_LEGITIMACY_GAIN);
+  s.style.oath++;
+  log(s, "good", `${lord.name}承认渡鸦家的继承权，重新宣誓效忠。`);
+  return true;
+}
+
+// 收买：金币加封地承诺，见效最快，代价是正统性与忠诚基线。
+// promisedFief 只记录，兑现与背弃的事件属后续内容阶段。
+function bribeLord(s, lordId, promisedFief) {
+  const lord = officer(s, lordId);
+  const def = LORD_DEFS[lordId];
+  if (!lord || !def || lord.side === "player" || lord.side === "gone" || lord.captured) return false;
+  if (!(def.routes?.bribe > 0)) return false;
+  const cost = lordBribeCost(s, lordId);
+  if (!Number.isFinite(cost) || s.gold < cost) return false;
+  s.gold -= cost;
+  if (!submitLord(s, lordId, "bribe")) { s.gold += cost; return false; }
+  lord.promisedFief = promisedFief || null;
+  s.legitimacy = clamp(s.legitimacy - BRIBE_LEGITIMACY_COST);
+  s.style.wealth += 2;
+  log(s, "warn", `${lord.name}收下${cost}金币与${promisedFief ? TERRITORY_DEFS[promisedFief]?.name || "一块封地" : "一纸空头承诺"}的许诺，换下了旧旗。`);
+  return true;
+}
+
 const cityIntelActive = (s, id) => (s.cityIntel?.[id] || -1) >= turnOf(s);
 
 function cityActionLockKey(id, action) { return `${action}:${id}`; }
@@ -3688,7 +3720,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
-    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals, adjacencyPressure, lordResistance, canPersuadeLord, lordBribeCost, submitLord, SUBMIT_LOYALTY,
+    finishBattle, defenderLeader, runFactionTurn, FACTION_TIMER_KEY, startMarch, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals, adjacencyPressure, lordResistance, canPersuadeLord, lordBribeCost, submitLord, SUBMIT_LOYALTY, demandFealty, bribeLord, BRIBE_LEGITIMACY_COST, PERSUADE_LEGITIMACY_GAIN,
     SEASONS, PLANS, UNIT_DEFS, clamp, armyTotal, syncTroops,
     selectedComposition, compositionPower, campaignSupply, allocateLosses, recruitAmount, canRecruitUnit, unitLevel, unitEquipment, counterMultiplier, defenderComposition, knightBattleMultiplier,
     settleSeasonEconomy, casualtyForecast, queueSeasonEvents, WORLD_EVENTS, NPC_ARCS,

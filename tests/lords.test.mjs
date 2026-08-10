@@ -298,4 +298,42 @@ assert.ok(game.knightAction("knight_13", "release", rk));
 game.processCompletedJobs(rk, rk.jobs.at(-1).endAt);
 assert.equal(selmaR.rapport, 12, "归还俘虏骑士 +12 好感");
 
+// 要求效忠：阻力归零才成立，成功后 +6 正统性
+const df = game.createInitialState("要求效忠", "oath", "standard");
+df.legitimacy = 100;
+df.officers.find(o => o.id === "ysabel").rapport = 40;
+assert.ok(game.lordResistance(df, "ysabel") <= 0);
+const fealtyLegitBefore = df.legitimacy;
+assert.ok(game.demandFealty(df, "ysabel"));
+assert.equal(df.officers.find(o => o.id === "ysabel").side, "player");
+assert.equal(df.officers.find(o => o.id === "ysabel").loyalty, 65, "说服的忠诚基线");
+assert.equal(df.legitimacy, Math.min(100, fealtyLegitBefore + 6), "说服成功 +6 正统性");
+assert.equal(df.territories.frostfield.owner, "player", "辖地一并带过来");
+
+const df2 = game.createInitialState("阻力未清", "oath", "standard");
+assert.equal(game.demandFealty(df2, "ysabel"), false, "阻力未归零不应成功");
+assert.equal(game.demandFealty(df2, "regent"), false, "公爵永远拒绝");
+
+// 收买：花金币 + 封地承诺，忠诚基线低，且掉正统性
+const bb = game.createInitialState("收买", "oath", "standard");
+const bribeCost = game.lordBribeCost(bb, "selma");
+assert.ok(Number.isFinite(bribeCost) && bribeCost > 0, `塞尔玛应有明确的收买价，实际 ${bribeCost}`);
+bb.gold = bribeCost + 100;
+const bbLegit = bb.legitimacy;
+assert.ok(game.bribeLord(bb, "selma", "ashfield"));
+const selmaB = bb.officers.find(o => o.id === "selma");
+assert.equal(selmaB.side, "player");
+assert.equal(selmaB.loyalty, 30, "收买的忠诚基线最低");
+assert.equal(selmaB.promisedFief, "ashfield", "收买必须附带封地承诺");
+assert.equal(bb.legitimacy, bbLegit - 4, "收买掉 4 正统性");
+assert.equal(bb.gold, 100, "应扣掉收买价");
+
+const bb2 = game.createInitialState("钱不够", "oath", "standard");
+bb2.gold = 1;
+assert.equal(game.bribeLord(bb2, "selma", "ashfield"), false);
+assert.equal(bb2.gold, 1, "失败不应扣钱");
+bb2.gold = 99999;
+assert.equal(game.bribeLord(bb2, "regent", "crownvale"), false, "篡位者不可收买");
+assert.equal(bb2.gold, 99999, "对不可收买者也不应扣钱");
+
 console.log("lords tests passed");
