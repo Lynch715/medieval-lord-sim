@@ -43,14 +43,16 @@ ES 模块能满足 1–3，但第 4 条会碎：单文件里的 `<script type="m
 | 序号 | 文件 | 约行数 | 职责 |
 |---|---|---|---|
 | 01 | `src/01-data.js` | 1000 | 纯数据表：`TIME_CONFIG`、`TIMER_DEFS`、`TECH_DEFS`、`SEASONS`、`FACTIONS`、`TERRITORY_DEFS`（含邻接对称化）、`LORD_DEFS`、`LORD_ARCHETYPES`、`MINOR_LORD_ROWS`、`SEAT_TO_LORD`、`KNIGHT_*`、`BUILDINGS`、`UNIT_DEFS`、`PLANS`、`WORLD_EVENTS`、`NPC_ARCS`、`CREST_PATHS`、`GLYPH_PATHS`、各类常量 |
-| 02 | `src/02-core.js` | 420 | 时钟（`makeClock`/`turnOf`/`accrueTo`）、调度器（`initTimers`/`nextDueEvent`/`fireTimer`/`advanceWorld`）、任务队列、冷却、工具函数（`clamp`/`esc`/`clone`/`formatDuration`） |
-| 03 | `src/03-domain.js` | 500 | 经济与产出、建筑、科技、征募、领主查询与三条收服路线、骑士 |
+| 02 | `src/02-core.js` | 520 | 运行时全局与工具（`clamp`/`esc`/`clone`）、时钟与调度器、任务队列、科技与开城条件、骑士与指挥官查询、事件表规范化 |
+| 03 | `src/03-domain.js` | 1540 | 领主与骑士的归属查询、三条收服路线、经济与产出、建筑、征募 |
 | 04 | `src/04-war.js` | 650 | 战斗会话、行军、军团、AI 势力、战后处置 |
 | 05 | `src/05-state.js` | 600 | 建档、存档迁移 v1→v6、`selfCheck`、事件与决策视图 |
 | 06 | `src/06-ui.js` | 660 | 全部 `render*` / `show*` / DOM 绑定 / `boot()` |
 | 07 | `src/07-exports.js` | 25 | 仅 `module.exports` 块 |
 
-**`01-data.js` 必须零函数。** 数据表因此可以被随意读取和断言，不必担心副作用；P3 改地图与领主时只动这一个文件。唯一的例外是文件末尾那段邻接对称化循环——它是数据的一部分（把声明补全），不是逻辑。
+**`01-data.js` 必须零函数。** 数据表因此可以被随意读取和断言，不必担心副作用；P3 改地图与领主时只动这一个文件。唯一的例外是几段加载期展开（邻接对称化、附庸生成、骑士归属反查）——它们是数据的一部分（把声明补全），不是逻辑。
+
+**实际切分时发现数据与函数在 app.js 里是交错的**（数据区分五段、函数区分五段），因此 01 与 02 各由五段不连续区间拼成，而科技与开城条件这类原本预期在 03 的函数因为夹在核心函数区里，实际落到了 02。上表已按实测结果修正。
 
 `app.js` 本身在拆分后删除。
 
