@@ -82,4 +82,47 @@ const resetDraft = () => {
     "草稿选中的指挥官必须带 selected 渲染");
 }
 
+// ── 出征草稿：换了目标就作废 ──────────────────────────────────────────
+{
+  resetDraft();
+  const s = fresh("换目标");
+  const targets = game.attackableTerritories(s);
+  assert.ok(targets.length >= 1, "开局应至少有一个可攻目标");
+  game.uiDraft.expedition = { targetId: "另一个地方", armyIds: [], plan: "assault", grain: 999 };
+  const view = game.expeditionDraftView(s, targets[0]);
+  assert.equal(view.plan, "steady", "targetId 不符时整块草稿过期，方略应回到默认");
+}
+
+// ── 出征草稿：已不是待命的军团要被剔除 ────────────────────────────────
+{
+  resetDraft();
+  const s = fresh("剔除");
+  const targets = game.attackableTerritories(s);
+  game.uiDraft.expedition = { targetId: targets[0], armyIds: ["army_不存在"], plan: "steady", grain: null };
+  const view = game.expeditionDraftView(s, targets[0]);
+  assert.ok(!view.armyIds.includes("army_不存在"), "不合格的军团必须被剔除");
+  assert.ok(view.armyIds.length >= 1, "全被剔除后应回退到勾选第一支合格军团");
+}
+
+// ── 出征草稿：携带粮食夹进 [所需, 现有存粮] ────────────────────────────
+{
+  resetDraft();
+  const s = fresh("粮食");
+  const targets = game.attackableTerritories(s);
+  game.uiDraft.expedition = { targetId: targets[0], armyIds: null, plan: "steady", grain: 999999 };
+  const view = game.expeditionDraftView(s, targets[0]);
+  assert.ok(view.grain <= Math.max(view.required, Math.floor(s.grain)), "携带粮食不得超过现有存粮");
+  assert.ok(view.grain >= view.required, "携带粮食不得低于本次所需");
+}
+
+// ── 勾选状态要渲染成 checked，否则每 5 秒回到「只勾第一支」 ─────────────
+{
+  resetDraft();
+  const s = fresh("勾选");
+  const targets = game.attackableTerritories(s);
+  const html = game.castleExpeditionHtml(s, targets[0]);
+  assert.ok(html.includes("data-expedition-army"), "出征面板应有军团勾选框");
+  assert.ok(html.includes("checked"), "默认应勾选第一支合格军团");
+}
+
 console.log("army tests passed");

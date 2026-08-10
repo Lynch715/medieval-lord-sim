@@ -239,21 +239,33 @@ function renderMap() {
     log(S, "info", S.lastAction.text);
     saveGame(); renderAll();
   }));
+  panel.querySelectorAll("[data-expedition-army]").forEach(input => input.addEventListener("change", () => {
+    uiDraft.expedition.targetId = selectedId;
+    uiDraft.expedition.armyIds = [...panel.querySelectorAll("[data-expedition-army]")].filter(item => item.checked).map(item => item.dataset.expeditionArmy);
+    uiDraft.expedition.grain = null;   // 编成变了，所需粮食跟着变，旧数字作废
+    saveGame(); renderMap();
+  }));
+  panel.querySelectorAll("[data-expedition-plan]").forEach(select => select.addEventListener("change", () => {
+    uiDraft.expedition.targetId = selectedId;
+    uiDraft.expedition.plan = select.value;
+    saveGame(); renderMap();
+  }));
+  panel.querySelectorAll("[data-expedition-grain]").forEach(input => input.addEventListener("input", () => {
+    uiDraft.expedition.targetId = selectedId;
+    uiDraft.expedition.grain = Math.max(0, Math.round(Number(input.value) || 0));
+  }));
   panel.querySelectorAll("[data-expedition-launch]").forEach(button => button.addEventListener("click", () => {
     const targetId = button.dataset.expeditionLaunch;
-    const armyIds = [...panel.querySelectorAll("[data-expedition-army]")].filter(input => input.checked).map(input => input.dataset.expeditionArmy);
+    const draft = expeditionDraftView(S, targetId);
+    const armyIds = draft.armyIds;
     const armies = armyIds.map(id => armyEntity(S, id)).filter(Boolean);
-    const plan = panel.querySelector(`[data-expedition-plan="${targetId}"]`)?.value || "steady";
-    const commanders = armies.map(army => armyCommander(S, army).id);
-    const aggregate = armyGroupComposition(S, armyIds);
-    const minimum = compositionSupply(S, aggregate, commanders);
-    const carried = Math.max(0, Math.round(Number(panel.querySelector(`[data-expedition-grain="${targetId}"]`)?.value) || 0));
-    if (!armyIds.length || armies.some(army => army.status !== "idle") || compositionTotal(aggregate) < 10) { toast("至少选择一支待命军团"); return; }
-    if (carried < minimum || carried > S.grain) { toast(`这支远征至少需要${minimum}粮食`); return; }
-    S.grain -= carried;
-    const job = startArmyGroupMarch(S, armyIds, targetId, Date.now(), { battlePlan: { leaderIds: commanders, composition: aggregate, troops: compositionTotal(aggregate), plan, armyIds }, suppliedGrain: carried });
-    if (!job) { S.grain += carried; toast("所选军团无法从当前位置合军出发"); return; }
-    S.lastAction = { name: "军团远征出发", text: `${armyIds.length > 1 ? "多支军团合军" : armies[0].name}携${carried}粮食前往${TERRITORY_DEFS[targetId].name}，预计${formatDuration(job.endAt - job.startedAt)}后抵达。` };
+    if (!armyIds.length || armies.some(army => army.status !== "idle") || compositionTotal(draft.composition) < 10) { toast("至少选择一支待命军团"); return; }
+    if (draft.grain < draft.required || draft.grain > S.grain) { toast(`这支远征至少需要${draft.required}粮食`); return; }
+    S.grain -= draft.grain;
+    const job = startArmyGroupMarch(S, armyIds, targetId, Date.now(), { battlePlan: { leaderIds: draft.leaders, composition: draft.composition, troops: compositionTotal(draft.composition), plan: draft.plan, armyIds }, suppliedGrain: draft.grain });
+    if (!job) { S.grain += draft.grain; toast("所选军团无法从当前位置合军出发"); return; }
+    uiDraft.expedition = { targetId: null, armyIds: null, plan: null, grain: null };
+    S.lastAction = { name: "军团远征出发", text: `${armyIds.length > 1 ? "多支军团合军" : armies[0].name}携${draft.grain}粮食前往${TERRITORY_DEFS[targetId].name}，预计${formatDuration(job.endAt - job.startedAt)}后抵达。` };
     log(S, "info", S.lastAction.text);
     saveGame(); renderAll();
   }));
@@ -304,22 +316,42 @@ function mapNode(id, attackable) {
   return `<button type="button" data-map-territory="${id}" class="map-node ${mine ? "mine" : ""} ${minor ? "minor" : ""} ${canAttack ? "attackable" : ""} ${locked ? "locked" : ""}" style="--owner-color:${faction.color};left:${d.x}%;top:${d.y}%">${crestSvg(t.owner, faction.name)}<span><b>${d.name}</b><small>${status}</small></span></button>`;
 }
 
+// 出征草稿按目标绑定：换了查看目标，上一块草稿整体作废。
+// 与 newArmyDraftView 同理，所有值都按当前真实状态夹取。
+function expeditionDraftView(s, id) {
+  const eligible = playerArmies(s).filter(army => army.status === "idle" && attackableTerritories(s, army.id).includes(id));
+  const eligibleIds = eligible.map(army => army.id);
+  const draft = uiDraft.expedition;
+  const current = draft.targetId === id;
+  let armyIds = current && Array.isArray(draft.armyIds) ? draft.armyIds.filter(armyId => eligibleIds.includes(armyId)) : [];
+  if (!armyIds.length) armyIds = eligibleIds.slice(0, 1);
+  const plan = current && PLANS[draft.plan] ? draft.plan : "steady";
+  const composition = armyGroupComposition(s, armyIds);
+  const leaders = armyIds.map(armyId => armyCommander(s, armyEntity(s, armyId)).id);
+  const required = armyIds.length ? compositionSupply(s, composition, leaders) : 0;
+  const maxGrain = Math.max(required, Math.floor(s.grain));
+  const wanted = current && draft.grain != null ? Number(draft.grain) : required;
+  const grain = clamp(Math.round(Number.isFinite(wanted) ? wanted : required), required, maxGrain);
+  return { eligible, armyIds, plan, composition, leaders, required, grain, maxGrain };
+}
+
 function castleExpeditionHtml(s, id) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
   if (!d || !t || t.owner === "player" || d.playable === false) return "";
-  const eligible = playerArmies(s).filter(army => army.status === "idle" && attackableTerritories(s, army.id).includes(id));
-  const previewIds = eligible.length ? [eligible[0].id] : [];
-  const preview = armyGroupComposition(s, previewIds);
-  const leaders = previewIds.map(armyId => armyCommander(s, armyEntity(s, armyId)).id);
-  const required = previewIds.length ? compositionSupply(s, preview, leaders) : 0;
+  const draft = expeditionDraftView(s, id);
+  const eligible = draft.eligible;
+  const previewIds = draft.armyIds;
+  const preview = draft.composition;
+  const leaders = draft.leaders;
+  const required = draft.required;
   const locked = d.final && !crownAccessMet(s);
   const disabled = locked || !eligible.length || compositionTotal(preview) < 10 || s.grain < required;
   const previewTroops = compositionTotal(preview);
-  // 战前预测按「默认勾选第一支军团 + 稳扎稳打」推演。勾选多支或换方略后，
-  // 实际战力会高于这里的下限，所以文案标注为「按当前预选」。
-  const est = previewTroops ? battleEstimate(s, id, leaders, previewTroops, "steady", previewIds[0], preview) : null;
-  const risk = previewTroops ? casualtyForecast(s, id, leaders, previewTroops, "steady", previewIds[0]) : null;
+  // 预测跟着实际勾选与方略走。此前恒按「第一支军团 + 稳扎稳打」推演，
+  // 玩家改了配置数字却不动，等于给了一个与实际出征无关的数。
+  const est = previewTroops ? battleEstimate(s, id, leaders, previewTroops, draft.plan, previewIds[0], preview) : null;
+  const risk = previewTroops ? casualtyForecast(s, id, leaders, previewTroops, draft.plan, previewIds[0]) : null;
   const planLevel = intelLevel(s, id);
   const forecastHtml = !est ? ""
     : planLevel === FOG_LEVELS.border
@@ -328,8 +360,8 @@ function castleExpeditionHtml(s, id) {
   return `<section class="castle-plan"><div class="castle-plan-head"><b>从这里配置远征</b><span>${eligible.length ? `可用${eligible.length}支军团 · 预计${formatDuration(Math.min(...eligible.map(army => marchDurationForDistance(s, army.locationId, id))))}` : "没有在途或待命军团"}</span></div>
     <p class="expedition-note">选择一支军团单独出征，或勾选多支军团合军。每支军团会保留自己的兵种和指挥官。</p>
     ${forecastHtml}
-    <div class="expedition-army-list">${eligible.length ? eligible.map((army, index) => { const commander = armyCommander(s, army); return `<label class="expedition-army-row"><input type="checkbox" data-expedition-army="${army.id}" ${index === 0 ? "checked" : ""}><span><b>${esc(army.name)}</b><small>${esc(commander.person?.name || "未任命")} · ${commander.isKnight ? "骑士" : "王子"} · ${compositionTotal(army.composition)}人 · ${compositionText(army.composition)}</small></span></label>`; }).join("") : `<div class="empty-state">先在军队页组建军团，再回到地图出征。</div>`}</div>
-    <div class="castle-plan-grid"><label>作战方式<select data-expedition-plan="${id}">${Object.entries(PLANS).map(([planId, plan]) => `<option value="${planId}">${plan.name}</option>`).join("")}</select></label><label>携带粮食<input type="number" min="${required}" max="${Math.max(required, Math.floor(s.grain))}" value="${required}" data-expedition-grain="${id}"><small>当前预选至少需要${required}粮。</small></label></div>
+    <div class="expedition-army-list">${eligible.length ? eligible.map(army => { const commander = armyCommander(s, army); return `<label class="expedition-army-row"><input type="checkbox" data-expedition-army="${army.id}" ${previewIds.includes(army.id) ? "checked" : ""}><span><b>${esc(army.name)}</b><small>${esc(commander.person?.name || "未任命")} · ${commander.isKnight ? "骑士" : "王子"} · ${compositionTotal(army.composition)}人 · ${compositionText(army.composition)}</small></span></label>`; }).join("") : `<div class="empty-state">先在军队页组建军团，再回到地图出征。</div>`}</div>
+    <div class="castle-plan-grid"><label>作战方式<select data-expedition-plan="${id}">${Object.entries(PLANS).map(([planId, plan]) => `<option value="${planId}" ${planId === draft.plan ? "selected" : ""}>${plan.name}</option>`).join("")}</select></label><label>携带粮食<input type="number" min="${required}" max="${draft.maxGrain}" value="${draft.grain}" data-expedition-grain="${id}"><small>当前预选至少需要${required}粮。</small></label></div>
     <button class="city-attack-btn" data-expedition-launch="${id}" ${disabled ? "disabled" : ""}>${locked ? "王冠谷 · 条件未满足" : !eligible.length ? "没有可出征军团" : s.grain < required ? "粮食不足" : `出征 · ${d.name}`}</button></section>`;
 }
 
