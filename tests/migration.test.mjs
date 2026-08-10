@@ -84,7 +84,7 @@ assert.equal(mm.knights.find(k => k.id === "knight_10").liegeLordId, null, "已�
 // 幂等
 assert.deepEqual(game.hydrateState(JSON.parse(JSON.stringify(mm))), mm, "迁移必须幂等");
 
-assert.equal(game.VERSION, 5, "存档版本应升到 5");
+assert.equal(game.VERSION, 6, "存档版本应升到 6");
 
 const SEASON_MS = game.TIME_CONFIG.seasonDurationMs;
 // v3 中盘存档：有 turn、有 seasonLocks、无 timers、无 cooldowns
@@ -131,7 +131,7 @@ v4.jobs = [{ id: "r1", type: "RESEARCH", startedAt: Date.now(), endAt: Date.now(
 
 const m5 = game.hydrateState(v4);
 assert.ok(m5, "v4 存档必须能迁移");
-assert.equal(m5.version, 5);
+assert.equal(m5.version, game.VERSION, "v4 存档应一路迁到最新版");
 assert.deepEqual(Object.keys(m5.crisis).sort(), ["famineMs", "unrestMs"], "危机字段应改为毫秒");
 assert.equal(m5.crisis.famineMs, 2 * 5 * 60 * 1000, "旧的饥荒计数按每档 5 分钟折算");
 assert.ok(m5.coronation && m5.coronation.atElapsedMs > 0, "应补上加冕倒计时");
@@ -148,6 +148,28 @@ assert.equal(game.hydrateState(v4b).endingReason, "crowned", "旧结局应折算
 const v1c = JSON.parse(JSON.stringify(v4));
 v1c.version = 1; v1c.ap = 3; delete v1c.clock; delete v1c.jobs; delete v1c.tech;
 const m1c = game.migrateSave(v1c);
-assert.ok(m1c && m1c.version === 5, "v1 应能连续迁移到 v5");
+assert.ok(m1c && m1c.version === game.VERSION, "v1 应能连续迁移到最新版");
+
+// v5 → v6：补齐说服路线的运行时字段
+const v5 = JSON.parse(JSON.stringify(game.createInitialState("v5中盘", "oath", "standard")));
+v5.version = 5;
+v5.officers.forEach(o => { delete o.rapport; delete o.promisedFief; delete o.liege; });
+
+const m6 = game.hydrateState(v5);
+assert.ok(m6, "v5 存档必须能迁移");
+assert.equal(m6.version, game.VERSION);
+for (const o of m6.officers) {
+  assert.equal(o.rapport, 0, `${o.id} 缺少 rapport`);
+  assert.equal(o.promisedFief, null, `${o.id} 缺少 promisedFief`);
+  assert.equal(o.liege, game.LORD_DEFS[o.id]?.liege ?? null, `${o.id} 的运行时 liege 应从静态表补齐`);
+}
+assert.equal(game.selfCheck(m6).ok, true, `迁移后 selfCheck 失败：${JSON.stringify(game.selfCheck(m6).errors)}`);
+// 迁移后说服路线立刻可用（不再因缺字段而算出 NaN）
+assert.ok(Number.isFinite(game.lordResistance(m6, "ysabel")), "迁移后阻力必须是有限数");
+
+const v1d = JSON.parse(JSON.stringify(v5));
+v1d.version = 1; v1d.ap = 3; delete v1d.clock; delete v1d.jobs; delete v1d.tech;
+const m1d = game.migrateSave(v1d);
+assert.ok(m1d && m1d.version === game.VERSION, "v1 应能连续迁移到最新版");
 
 console.log("migration tests passed");

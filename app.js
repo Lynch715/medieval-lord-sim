@@ -1,7 +1,7 @@
 "use strict";
 
 const SAVE_KEY = "iron-crown-lord-save-v1";
-const VERSION = 5;
+const VERSION = 6;
 // 加冕记在游戏时间（elapsedMs）上而非真实时间，这样暂停与离线都不会让公爵偷跑。
 const CORONATION_AT_MS = 48 * 5 * 60 * 1000;      // 12 游戏年
 const CORONATION_DELAY_MS = 20 * 60 * 1000;       // 每拿下一块公爵直辖地推迟 20 分钟
@@ -1821,6 +1821,20 @@ function migrateV4ToV5(raw, now = Date.now()) {
   return migrated;
 }
 
+function migrateV5ToV6(raw) {
+  const migrated = clone(raw);
+  migrated.version = 6;
+  // 说服路线的运行时字段：好感、封地承诺、可变的从属关系。
+  // liege 必须显式补齐——lordVassals 优先读运行时值，undefined 会让「自立门户」失效。
+  (migrated.officers || []).forEach(o => {
+    o.rapport ??= 0;
+    o.promisedFief ??= null;
+    if (o.liege === undefined) o.liege = LORD_DEFS[o.id]?.liege ?? null;
+  });
+  migrated.migrationLog = [...(migrated.migrationLog || []), "v5-to-v6"];
+  return migrated;
+}
+
 function migrateSave(raw, now = Date.now()) {
   if (!raw) return null;
   let migrated = clone(raw);
@@ -1828,15 +1842,16 @@ function migrateSave(raw, now = Date.now()) {
   if (migrated.version === 2) migrated = migrateV2ToV3(migrated);
   if (migrated.version === 3) migrated = migrateV3ToV4(migrated, now);
   if (migrated.version === 4) migrated = migrateV4ToV5(migrated, now);
+  if (migrated.version === 5) migrated = migrateV5ToV6(migrated);
   if (migrated.version !== VERSION) return null;
-  return hydrateV5(migrated);
+  return hydrateV6(migrated);
 }
 
 function hydrateState(raw) {
   return migrateSave(raw);
 }
 
-function hydrateV5(raw) {
+function hydrateV6(raw) {
   if (!raw || raw.version !== VERSION) return null;
   raw.selectedTerritoryId ||= "ravenstone";
   raw.clock ||= makeClock(0);
@@ -1917,7 +1932,7 @@ raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight
   delete raw.crisis.debt;
   delete raw.crisis.unrest;
   delete raw.crisis.checkedTurn;
-  raw.officers.forEach(o => { o.grievance ??= 0; o.merit ??= 0; o.injured ??= 0; o.fief ??= null; });
+  raw.officers.forEach(o => { o.grievance ??= 0; o.merit ??= 0; o.injured ??= 0; o.fief ??= null; o.rapport ??= 0; o.promisedFief ??= null; if (o.liege === undefined) o.liege = LORD_DEFS[o.id]?.liege ?? null; });
   // 旧存档曾把玩家称为“主将”。迁移时同步为领主称谓，避免旧文案继续污染新界面。
   const playerOfficer = raw.officers.find(o => o.id === "player");
   if (playerOfficer) {
@@ -3831,7 +3846,7 @@ if (typeof module !== "undefined" && module.exports) {
     enemyGuardCap, CRISIS_LIMITS, gainLegitimacy, LEGITIMACY_DELTAS, DUCHY_HOLDINGS, CROWN_GATE_HOLDING, battleRiskClass, crownRequirements, crownAccessMet, crownRequirementText, coronationRemainingMs, delayCoronation, CORONATION_AT_MS, CORONATION_DELAY_MS, VERSION, TIME_CONFIG, JOB_CONFIG, TECH_DEFS,
     initClock, turnOf, checkCampaignEnd, applyDrift, yearOf, getSeasonRemainingMs, updateWorldTime, accrueTo, advanceWorld, initTimers, nextDueEvent, TIMER_DEFS, processCompletedJobs, startJob, cancelJob, finishJob,
     getQueueUsage, researchCapacity, runningResearchJobs, getRunningJob, getJobRemainingMs, queueRecruitment, queueResearch, canResearch, techCompleted, techLevel, techCost, researchDuration, activeKnights, availableKnights, knightAction, armyEntity, playerArmies, createArmyFromMain, disbandArmy, startArmyGroupMarch, armyGroupComposition, commanderById, armyCommander, ensureAIFactions, recruitmentTerritoryId, deployGarrison, pauseWorld, resumeWorld, catchUpOffline, migrateV1ToV2, migrateV2ToV3,
-    migrateSave, migrateV3ToV4, migrateV4ToV5, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, ENVOY_RAPPORT_GAIN, ENVOY_RAPPORT_CAP, RELEASE_RAPPORT_GAIN, cityActionAvailable, KNIGHT_LIEGE
+    migrateSave, migrateV3ToV4, migrateV4ToV5, migrateV5ToV6, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, ENVOY_RAPPORT_GAIN, ENVOY_RAPPORT_CAP, RELEASE_RAPPORT_GAIN, cityActionAvailable, KNIGHT_LIEGE
   };
 }
 
