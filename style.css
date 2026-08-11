@@ -82,7 +82,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 .game-shell { min-height: 100vh; }
 .topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; min-height: 74px; padding: 10px clamp(16px,3vw,46px); border-bottom: 1px solid var(--line); background: rgba(9,10,9,.94); backdrop-filter: blur(18px); }
 .brand-lockup { display: flex; align-items: center; gap: 12px; }
-.brand-seal { display: grid; place-items: center; width: 38px; height: 44px; color: var(--gold-light); border: 1px solid var(--gold); clip-path: polygon(0 0,100% 0,100% 78%,50% 100%,0 78%); font: 20px Georgia, serif; }
+/* 盾形的下 22% 是收窄的 V，字必须居中在「未收窄的那一段」而不是整个盒子里。
+   原先 place-items:center 把 R 压到离收窄点只剩 1px —— 在装了 Georgia 的机器上
+   将将不裁，换成别的衬线回退（多数安卓没有 Georgia）字形高一点就切进 V 里。
+   padding-bottom 把居中区整体上抬，留出真正的余量。 */
+.brand-seal { display: grid; place-items: center; width: 38px; height: 44px; padding-bottom: 10px; color: var(--gold-light); border: 1px solid var(--gold); clip-path: polygon(0 0,100% 0,100% 78%,50% 100%,0 78%); font: 20px Georgia, "Times New Roman", serif; line-height: 1; }
 .brand-lockup h1 { margin: 0; font: 21px var(--serif); letter-spacing: .1em; }
 .brand-lockup p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .top-resources { display: flex; align-items: stretch; gap: 8px; }
@@ -130,6 +134,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 .turn-strip b { font-family: var(--serif); }
 .turn-strip span { color: #989b91; font-size: 12px; }
 .turn-strip .clock-live { color: var(--gold-light); letter-spacing: .08em; }
+/* 暂停时要一眼看得出世界停了：状态条转灰，顶栏按钮点亮成金色。 */
+.turn-strip .clock-live.paused { color: #8d8f86; }
+.icon-btn.paused { color: var(--gold-light); border-color: var(--gold); background: rgba(200,169,106,.12); }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
 .end-season-btn { padding: 9px 15px; color: var(--gold-light); border: 1px solid var(--line-strong); background: rgba(200,169,106,.08); cursor: pointer; }
 .end-season-btn:hover { background: rgba(200,169,106,.16); }
@@ -510,7 +517,10 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .top-resources > div { min-width: 0; padding: 5px 6px; }
   .top-resources .icon-btn:not(#restartBtn) { display: none; }
   .top-resources #restartBtn { position: absolute; right: 54px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(9,10,9,.82); }
-  .dashboard { display: flex; flex-direction: column; padding: 10px 10px 86px; }
+  /* 底部导航是 fixed，且高度里含 env(safe-area-inset-bottom)；这里的下内边距
+     必须跟着含，否则有手势条的机器（iPhone 约 34px、部分安卓 48px）会把最后
+     一行内容压在导航栏底下。无头预览的 inset 恒为 0，所以这个 bug 只在真机可见。 */
+  .dashboard { display: flex; flex-direction: column; padding: 10px 10px calc(86px + env(safe-area-inset-bottom)); }
   .main-column { order: 1; }
   .side-column { order: 2; display: grid; grid-template-columns: 150px 1fr; gap: 9px; margin: 10px 0 0; }
   .lord-card { grid-row: span 2; height: 245px; }

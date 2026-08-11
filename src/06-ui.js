@@ -15,6 +15,22 @@ function renderTop() {
   $("troopText").textContent = Math.round(S.troops);
   $("phaseText").textContent = season.phase;
   $("turnHint").textContent = S.battleSession ? "远征尚未结束" : `距离换季 ${formatDuration(getSeasonRemainingMs(S))}`;
+  // 暂停状态要在顶栏与状态条上同时看得见 —— 玩家点了暂停之后，
+  // 唯一能确认「世界真的停了」的地方就是这两处。
+  const heldBy = S.pauseState?.reason;
+  const playerHeld = heldBy === "manual" || heldBy === "away";
+  if ($("pauseBtn")) {
+    $("pauseBtn").textContent = playerHeld ? "继" : "暂";
+    $("pauseBtn").classList.toggle("paused", playerHeld);
+    $("pauseBtn").setAttribute("aria-label", playerHeld ? "继续推进" : "暂停世界");
+  }
+  const live = document.querySelector(".clock-live");
+  if (live) {
+    live.textContent = heldBy === "away" ? "已暂停 · 离开期间不推进"
+      : heldBy === "manual" ? "已暂停"
+      : heldBy ? "等待你的决定" : "实时推进";
+    live.classList.toggle("paused", !!heldBy);
+  }
   $("playerNameText").textContent = S.playerName;
   $("oathBadge").textContent = "合法继承人";
   $("territoryCount").textContent = `${ownTerritoryIds(S).length} / ${playableTerritoryIds().length}`;
@@ -201,6 +217,12 @@ function renderMap() {
     <div class="unification-track"><div><b>复国进度</b><span>收复父亲留下的旧土，逐步逼近王冠谷</span></div><strong>${Math.round(controlled / playableTerritoryIds().length * 100)}%</strong><i style="width:${Math.round(controlled / playableTerritoryIds().length * 100)}%"></i></div>
     <div class="section-head"><h2>北境地图</h2><span>城堡统辖附近附属镇 · 金边为可攻目标（与自家版图接壤即可，越远行军越久） · 点击目标配置远征</span></div>
     <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}<span class="map-legend-note">金边目标可直接配置远征 · 斥候情报按季更新 · 手机左右滑动地图</span></div><div class="map-viewport" tabindex="0" aria-label="可横向浏览的北境地图"><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div></div><div class="map-inspector">${territorySummary(S, selectedId, attackable)}</div></div>`;
+  // 先还原滚动位置再绑监听，避免还原动作自己被记成一次玩家滑动。
+  const viewport = panel.querySelector(".map-viewport");
+  if (viewport) {
+    viewport.scrollLeft = uiDraft.map.scrollLeft;
+    viewport.addEventListener("scroll", () => { uiDraft.map.scrollLeft = viewport.scrollLeft; }, { passive: true });
+  }
   panel.querySelectorAll("[data-map-territory]").forEach(button => button.addEventListener("click", () => {
     const id = button.dataset.mapTerritory;
     S.selectedTerritoryId = id;
@@ -814,17 +836,20 @@ function startWorldClock() {
 
 function boot() {
   lockZoom();
+  // 关页即停止。切到后台就冻住世界，回来仍保持暂停，由玩家自己点「继续」——
+  // 不这样的话，切个应用回来会发现田里的活儿自己干完了，而玩家没同意过。
+  // 战斗与事件自己的暂停不能被这里顶掉，所以只在没人占用暂停时才接管。
   document.addEventListener("visibilitychange", () => {
+    if (!S || S.ended) return;
     if (document.hidden) {
       hiddenAt = Date.now();
+      if (pauseWorld(S, "away", hiddenAt)) { saveGame(); renderTop(); }
     } else {
       const resumedAt = Date.now();
-      const offlineSeasons = hiddenAt && S ? catchUpOffline(S, resumedAt) : 0;
       hiddenAt = 0;
-      if (offlineSeasons && S && !S.ended) {
-        renderAll();
-        pumpDecision();
-      } else updateWorldTime(resumedAt);
+      catchUpOffline(S, resumedAt);          // 被强杀的兜底；有 pauseState 时不做事
+      if (S.pauseState?.reason === "away") { renderAll(); return; }
+      updateWorldTime(resumedAt);
     }
   });
   $("newGameBtn")?.addEventListener("click", showCreator);
@@ -852,6 +877,21 @@ function boot() {
     renderAll();
     resetPageScroll();
   }));
+  $("pauseBtn")?.addEventListener("click", () => {
+    if (!S || S.ended) return;
+    // 战斗与事件有自己的暂停，那两种不该被这个按钮解开。
+    if (S.battleSession) { toast("远征尚未结束，必须先下达战场命令"); return; }
+    if (S.pendingDecisions.length) { toast("先处理厅上等着的那件事"); return; }
+    const reason = S.pauseState?.reason;
+    if (reason === "manual" || reason === "away") {
+      resumeWorld(S, Date.now());
+      toast("世界继续推进");
+    } else if (!S.pauseState) {
+      pauseWorld(S, "manual", Date.now());
+      toast("世界已暂停，关页也不会推进");
+    } else return;
+    saveGame(); renderAll();
+  });
   $("saveBtn")?.addEventListener("click", () => { if (saveGame()) toast("进度已保存在本机"); });
   $("restartBtn")?.addEventListener("click", () => {
     if (confirm("删除当前存档并重新开始？")) { deleteSave(); S = null; showMenu(); }

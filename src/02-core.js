@@ -22,7 +22,10 @@ const foldState = { territories: new Set(), branches: new Set(), sections: new S
 // 状态若只留在 DOM 上，玩家填到一半的组建军团表单就自己清零了。
 const uiDraft = {
   newArmy: { name: "第二军团", commanderId: null, units: {} },
-  expedition: { targetId: null, armyIds: null, plan: null, grain: null }
+  expedition: { targetId: null, armyIds: null, plan: null, grain: null },
+  // 地图横向滚动位置。同理：面板一重建，.map-viewport 整个节点就被换掉，
+  // scrollLeft 归零，玩家刚滑到的位置每 5 秒被弹回原点。
+  map: { scrollLeft: 0 }
 };
 
 const $ = id => typeof document === "undefined" ? null : document.getElementById(id);
@@ -293,18 +296,23 @@ function pauseWorld(s, reason = "event", now = Date.now()) {
   return true;
 }
 
+// 把所有计划中的任务与计时器整体后移 delta，等价于「这段时间没有发生过」。
+// 暂停恢复与离线冻结共用这一份实现 —— 两处各写一份的话，迟早会有一处漏掉
+// timers 或漏掉 startedAt，而那种偏差要等玩家过完一夜才看得见。
+function shiftScheduled(s, delta) {
+  if (!s || !(delta > 0)) return 0;
+  (s.jobs || []).filter(job => job.status === "running").forEach(job => {
+    job.startedAt += delta;
+    job.endAt += delta;
+  });
+  Object.values(s.timers || {}).forEach(timer => { timer.nextAt += delta; });
+  return delta;
+}
+
 function resumeWorld(s, now = Date.now()) {
   if (!s?.pauseState) return false;
-  const pausedAt = s.pauseState.pausedAt;
-  const delta = Math.max(0, now - pausedAt);
-  if (delta > 0) {
-    (s.jobs || []).filter(job => job.status === "running").forEach(job => {
-      job.startedAt += delta;
-      job.endAt += delta;
-    });
-    Object.values(s.timers || {}).forEach(timer => { timer.nextAt += delta; });
-    if (s.clock) s.clock.lastProcessedAt = now;
-  }
+  shiftScheduled(s, Math.max(0, now - s.pauseState.pausedAt));
+  if (s.clock) s.clock.lastProcessedAt = now;
   s.pauseState = null;
   return true;
 }

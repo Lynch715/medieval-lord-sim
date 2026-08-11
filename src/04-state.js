@@ -850,21 +850,26 @@ function advanceWorld(s, now = Date.now(), options = {}) {
   return { steps, jobs };
 }
 
+// 关页即停止：离开期间世界一律不推进，一秒都不走。
+//
+// 原先这里做的是「离线补算」，上限 maxCatchUpMs = 2 小时。而一季只有 5 分钟、
+// 加冕总时限只有 4 小时游戏时间 —— 也就是说关页过一夜，回来就被补掉 24 季、
+// 6 个游戏年，正好烧掉半个战役；checkCampaignEnd 紧接着判「法统旁落」，
+// 玩家一觉醒来发现游戏自己结束了。饥荒与民变时长同样在补算里累积，
+// 2 小时远超 15 分钟的崩溃阈值，于是还有第二条通往终局的路。
+//
+// 现在两条退出路径都归到同一个结果：
+//   干净退出（visibilitychange）→ 有 pauseState，由 resumeWorld 统一补偿
+//   被强杀（划掉标签页/浏览器崩溃）→ 没有 pauseState，用 lastProcessedAt 兜底
+// 两者必须一致，否则「怎么退出游戏」会变成一种隐形的游戏机制。
 function catchUpOffline(s, now = Date.now()) {
   if (!s) return 0;
   s.clock ||= makeClock(0, now);
   s.timers ||= initTimers(s, now);
-  if (s.pauseState) { s.clock.lastProcessedAt = now; return 0; }
-  const before = turnOf(s);
-  advanceWorld(s, now, { offline: true });
-  const seasons = turnOf(s) - before;
-  if (seasons > 0) {
-    const text = `你离开期间推进了${seasons}季。离线不结算敌袭与事件，回来后照常继续。`;
-    s.lastAction = { name: "离线结算完成", text };
-    log(s, "info", text);
-    saveGame();
-  }
-  return seasons;
+  if (s.pauseState) return 0;
+  shiftScheduled(s, Math.max(0, now - (s.clock.lastProcessedAt || now)));
+  s.clock.lastProcessedAt = now;
+  return 0;
 }
 
 function updateJobCountdowns(now = Date.now()) {

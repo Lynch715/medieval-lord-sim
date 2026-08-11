@@ -813,7 +813,10 @@ function pumpDecision() {
     option.effect();
     S.pendingDecisions.shift();
     $("modalMask").classList.add("hidden");
-    if (!S.pendingDecisions.length) resumeWorld(S, Date.now());
+    // 只解开自己按下的那把锁。原先是无条件 resume，于是战斗中弹出的事件
+    // 一旦被回答，连战斗的暂停也会被一并解开；现在又多了「离开暂停」，
+    // 不按 reason 区分的话，切回来答个事件就等于替玩家点了「继续」。
+    if (!S.pendingDecisions.length && S.pauseState?.reason === "decision") resumeWorld(S, Date.now());
     saveGame();
     renderAll();
     if (!S.ended) pumpDecision();

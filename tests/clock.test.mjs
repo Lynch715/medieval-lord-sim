@@ -83,7 +83,9 @@ assert.equal(game.advanceSeasonAuto, undefined, "advanceSeasonAuto 应已删除"
 const coef = game.createInitialState("季界系数", "oath", "standard");
 const coefBase = coef.clock.lastProcessedAt;
 // 推进到第 2 季末（秋末），结算日志应报「秋」而非刚跨入的「冬」
-game.advanceWorld(coef, coefBase + SEASON * 3, { rng: () => .5 });
+// 显式给出补算上限：本用例考的是季界系数的时序，不该被全局 maxCatchUpMs 的
+// 取值牵着走（那个值是「在线被节流时的兜底」，与季界结算无关）。
+game.advanceWorld(coef, coefBase + SEASON * 3, { rng: () => .5, maxCatchUpMs: SEASON * 4 });
 const settleLogs = coef.log.filter(l => l.text.includes("季结算"));
 assert.ok(settleLogs.length >= 3, `应有至少 3 条季度结算日志，实际 ${settleLogs.length}`);
 const seasonsReported = settleLogs.map(l => l.text.slice(0, 1));
@@ -253,5 +255,73 @@ co4.clock.elapsedMs = 48 * SEASON;
 game.checkCampaignEnd(co4);
 assert.notEqual(co4.endingReason, "great_lord");
 assert.notEqual(co4.endingReason, "minor_lord");
+
+// ── 关页即停止：离开期间世界一律不推进 ────────────────────────────────
+// 原先 maxCatchUpMs 是 2 小时 = 24 季 = 6 个游戏年，而加冕总时限只有 4 小时
+// 游戏时间。玩家关页过夜，回来 loadGame() 一调 catchUpOffline 就烧掉半个
+// 战役，checkCampaignEnd 直接判「法统旁落」——一觉醒来游戏已经结束了。
+{
+  const off = game.createInitialState("离线冻结", "oath", "standard");
+  const start = 1_000_000;
+  off.clock.lastProcessedAt = start;
+  const before = { elapsed: off.clock.elapsedMs, turn: game.turnOf(off), gold: off.gold, grain: off.grain };
+  const overnight = 8 * 60 * 60 * 1000;
+  game.catchUpOffline(off, start + overnight);
+  assert.equal(off.clock.elapsedMs, before.elapsed, "离线八小时后游戏时间不得推进");
+  assert.equal(game.turnOf(off), before.turn, "离线不得换季");
+  assert.equal(off.gold, before.gold, "离线不得产出金币");
+  assert.equal(off.grain, before.grain, "离线不得产出粮食");
+  assert.notEqual(off.ended, true, "离线绝不能直接把游戏判结束");
+}
+
+// ── 冻结要把计划中的任务与计时器整体后移，而不是让它们瞬间到期 ────────
+{
+  const q = game.createInitialState("任务顺延", "oath", "standard");
+  const start = 1_000_000;
+  q.clock.lastProcessedAt = start;
+  q.gold = 9999; q.grain = 9999;
+  const job = game.queueRecruitment(q, "levy", game.recruitmentTerritoryId(q), start);
+  const jobLeft = job.endAt - start;
+  const timerLeft = q.timers.drift.nextAt - start;
+  const overnight = 8 * 60 * 60 * 1000;
+  game.catchUpOffline(q, start + overnight);
+  assert.equal(job.endAt - (start + overnight), jobLeft, "训练任务的剩余时间必须原样保留");
+  assert.equal(q.timers.drift.nextAt - (start + overnight), timerLeft, "计时器的剩余时间必须原样保留");
+  assert.equal(job.status, "running", "离线期间任务不应完成");
+}
+
+// ── 干净退出与被强杀必须得到相同结果 ──────────────────────────────────
+// 否则「怎么退出游戏」会变成一种隐形的游戏机制。
+{
+  const overnight = 8 * 60 * 60 * 1000;
+  const start = 1_000_000;
+  const clean = game.createInitialState("干净退出", "oath", "standard");
+  clean.clock.lastProcessedAt = start;
+  game.pauseWorld(clean, "away", start);
+  game.catchUpOffline(clean, start + overnight);
+  game.resumeWorld(clean, start + overnight);
+
+  const killed = game.createInitialState("被强杀", "oath", "standard");
+  killed.clock.lastProcessedAt = start;
+  game.catchUpOffline(killed, start + overnight);
+
+  assert.equal(clean.clock.elapsedMs, killed.clock.elapsedMs, "两种退出方式的游戏时间必须一致");
+  assert.equal(game.turnOf(clean), game.turnOf(killed), "两种退出方式的季节必须一致");
+  assert.equal(clean.clock.lastProcessedAt, killed.clock.lastProcessedAt, "两种退出方式的处理时刻必须一致");
+}
+
+// ── 暂停期间同样不推进 ────────────────────────────────────────────────
+{
+  const p = game.createInitialState("手动暂停", "oath", "standard");
+  const start = 1_000_000;
+  p.clock.lastProcessedAt = start;
+  game.pauseWorld(p, "manual", start);
+  const before = p.clock.elapsedMs;
+  game.advanceWorld(p, start + 30 * 60 * 1000);
+  assert.equal(p.clock.elapsedMs, before, "暂停期间 advanceWorld 不得推进世界");
+  game.resumeWorld(p, start + 30 * 60 * 1000);
+  assert.equal(p.pauseState, null, "继续后应清除暂停状态");
+  assert.equal(p.clock.elapsedMs, before, "继续本身不应补算暂停期间的时间");
+}
 
 console.log("clock tests passed");
