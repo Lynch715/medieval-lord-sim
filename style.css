@@ -515,8 +515,11 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .topbar { position: relative; align-items: flex-start; padding: 11px 12px; }
   .top-resources { display: grid; grid-template-columns: repeat(5,1fr); width: calc(100% - 132px); gap: 2px; }
   .top-resources > div { min-width: 0; padding: 5px 6px; }
-  .top-resources .icon-btn:not(#restartBtn) { display: none; }
+  /* 手机上只留必要的图标按钮。「存」有自动存档兜底，可以省；
+     「暂」不能省 —— 切应用前先停表正是手机上最常做的一件事。 */
+  .top-resources .icon-btn:not(#restartBtn):not(#pauseBtn) { display: none; }
   .top-resources #restartBtn { position: absolute; right: 54px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(9,10,9,.82); }
+  .top-resources #pauseBtn { position: absolute; right: 100px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(9,10,9,.82); }
   /* 底部导航是 fixed，且高度里含 env(safe-area-inset-bottom)；这里的下内边距
      必须跟着含，否则有手势条的机器（iPhone 约 34px、部分安卓 48px）会把最后
      一行内容压在导航栏底下。无头预览的 inset 恒为 0，所以这个 bug 只在真机可见。 */
