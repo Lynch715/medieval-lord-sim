@@ -682,8 +682,13 @@ function campaignSupply(s, troops, leaderIds = [], armyId = "army_1") {
   return compositionSupply(s, comp, leaderIds);
 }
 
+// 每多少点补给需求折 1 粮。原本是 8 —— 42 人出征只带 6 粮，打仗因此
+// 完全不构成粮食去处。压到 2.5 后同样一支队伍要 19 粮，大军团远征上百粮，
+// 「打哪、什么时候打、带多少人」终于要先看粮仓。
+const SUPPLY_PER_GRAIN = 2.5;
+
 function compositionSupply(s, comp = {}, leaderIds = []) {
-  let amount = Math.ceil(Object.entries(comp).reduce((sum, [type, count]) => sum + count * (UNIT_DEFS[type]?.supply || 1), 0) / 8);
+  let amount = Math.ceil(Object.entries(comp).reduce((sum, [type, count]) => sum + count * (UNIT_DEFS[type]?.supply || 1), 0) / SUPPLY_PER_GRAIN);
   if (seasonOf(s).id === "winter") amount = Math.ceil(amount * 1.35);
   if (leaderIds.includes("ysabel")) amount = Math.ceil(amount * .84);
   return Math.max(1, amount);

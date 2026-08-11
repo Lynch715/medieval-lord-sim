@@ -17,7 +17,8 @@ if (typeof module !== "undefined" && module.exports) {
     migrateSave, migrateV7ToV8, recordBattle, BATTLE_LOG_LIMIT, migrateV3ToV4, migrateV4ToV5, migrateV5ToV6, migrateV6ToV7, selfCheck, cityAction, cityActionOptions, cityActionAvailable, CITY_ACTION_DEFS, CITY_ACTION_COOLDOWNS, ENVOY_RAPPORT_GAIN, ENVOY_RAPPORT_CAP, RELEASE_RAPPORT_GAIN, cityActionAvailable, KNIGHT_LIEGE, intelLevel, reportedGuard, FOG_LEVELS,
     uiDraft, armyCorpsHtml, newArmyDraftView, expeditionDraftView, castleExpeditionHtml,
     redeployArmy, stationedArmies, stationedPower, applyStationedLosses, retreatStationedArmies,
-    STATIONED_DEFENSE_FACTOR, STATIONED_RECOVERING_FACTOR, runningRecruitJob, shiftScheduled
+    STATIONED_DEFENSE_FACTOR, STATIONED_RECOVERING_FACTOR, runningRecruitJob, shiftScheduled,
+    CIVILIAN_GRAIN_PER_HEAD, SUPPLY_PER_GRAIN, compositionSupply, applyShortage, forecast
   };
 }
 

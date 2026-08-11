@@ -447,6 +447,19 @@ function territoryOutput(s, id, season = seasonOf(s)) {
   };
 }
 
+// 每多少居民吃掉 1 粮/季。这是本作粮食经济的主旋钮。
+//
+// 原先领地只产粮、不吃粮，占地是纯赚：4 地净 +44/季，14 地净 +102/季，
+// 盈余随扩张越滚越大 —— 粮食因此从来不是约束，玩家「根本吃不完」。
+// 冬季的说明文字里其实一直写着「军队和居民仍会继续消耗粮食」，
+// 设计意图当初就写下了，只是从没实现过。
+//
+// 取 10：配合秋季系数下调后，全年净粮从「开局 +124 / 后期 +199」变成
+// 「开局 +72 / 后期 −9」—— 早期仍宽裕，后期不投农业就养不起扩张。
+// 玩家手上的反制是农业线（最高约 2.35 倍粮产）、农田与粮仓建筑、
+// 以及人口清册（减免总粮耗），三条都必须真的去点才够用。
+const CIVILIAN_GRAIN_PER_HEAD = 10;
+
 function forecast(s, season = seasonOf(s)) {
   const gross = ownTerritoryIds(s).reduce((acc, id) => {
     const out = territoryOutput(s, id, season);
@@ -459,13 +472,20 @@ function forecast(s, season = seasonOf(s)) {
   const armySplit = playerCompositionSplit(s);
   const army = armySplit.mobile;
   const garrison = armySplit.garrison;
-  let grainCost = Math.max(0, Math.ceil(army.levy / 4 + army.archers / 4 + army.knights / 3 + army.heavy_infantry / 3 + army.crossbowmen / 3 + army.light_cavalry / 3 + garrison.levy / 8 + garrison.archers / 8 + garrison.knights / 6) - 1) + winterExtra + seedReserve;
+  // 居民口粮与军粮一起计入，因此人口清册（census）也能减轻它 —— 那是玩家
+  // 手上除农业线之外的另一条杠杆。破坏度会压低 subjects，被打烂的地少吃也少产。
+  const rations = Math.ceil(subjects(s) / CIVILIAN_GRAIN_PER_HEAD);
+  let grainCost = Math.max(0, Math.ceil(army.levy / 4 + army.archers / 4 + army.knights / 3 + army.heavy_infantry / 3 + army.crossbowmen / 3 + army.light_cavalry / 3 + garrison.levy / 8 + garrison.archers / 8 + garrison.knights / 6) - 1) + rations + winterExtra + seedReserve;
   if (techLevel(s, "census")) grainCost = Math.ceil(grainCost * Math.max(.82, 1 - techLevel(s, "census") * .06));
   const armyGoldCost = army.levy * .12 + army.archers * .23 + army.knights * .55 + garrison.levy * .06 + garrison.archers * .12 + garrison.knights * .28;
   const goldCost = Math.ceil(armyGoldCost * Math.max(.64, 1 - techLevel(s, "professional_army") * .18)) + ownedOfficers(s).filter(o => o.id !== "player").length + activeKnights(s).length;
   const fieldLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.fields || 0), 0);
   const granaryLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.granary || 0), 0);
-  const storageCap = 105 + ownTerritoryIds(s).length * 45 + fieldLevels * 35 + granaryLevels * 32;
+  // 每块地只白送 15 仓容（原本 45）。原值下，占地既给产出又给仓库，
+  // 于是早中期能攒出上千存粮，把后期「单季接近打平」的设计整个垫平 ——
+  // 实测一局从 129 攒到 1446，玩家依旧「根本吃不完」。
+  // 压到 15 之后，想囤过冬的余粮就得真的去修粮仓和农田。
+  const storageCap = 105 + ownTerritoryIds(s).length * 15 + fieldLevels * 35 + granaryLevels * 32;
   const projected = s.grain + gross.grain - grainCost;
   const spoilageRate = Math.max(.05, .18 - granaryLevels * .018);
   const spoilage = Math.max(0, Math.round((projected - storageCap) * spoilageRate));
@@ -705,7 +725,9 @@ function recruitUnit(type) {
 }
 
 function applyShortage(s, deficit) {
-  const deserters = Math.min(armyTotal(s), Math.ceil(deficit / 3));
+  // 每欠 2 粮跑 1 人（原本 3 粮）。养不起就要真的养不起，否则缺粮只是
+  // 一条日志：军队照常留着，玩家除了看一眼什么都不用做。
+  const deserters = Math.min(armyTotal(s), Math.ceil(deficit / 2));
   removeTroops(s, deserters);
   s.support = clamp(s.support - Math.min(18, 6 + deficit));
   s.morale = clamp(s.morale - Math.min(16, 4 + deficit));

@@ -167,6 +167,9 @@ function run(seed) {
     wins: state.wins, battles: state.battles, ending: state.endingReason, casualties: state.casualties,
     renown: Math.round(state.renown), army: game.armyTotal(state, "army_1"),
     siegeTech: game.techCompleted(state, "war_engineering"), gold: Math.round(state.gold), grain: Math.round(state.grain),
+    // 缺粮次数直接数日志：applyShortage 是唯一写这句话的地方，
+    // 比在状态上另加计数器可靠，也不用改被测代码。
+    shortages: state.log.filter(entry => entry.text.includes("粮仓见底")).length,
     submittedLords: state.officers.filter(o => o.submitted).length,
     persuaded: diploTally.persuade, bribed: diploTally.bribe, envoys: diploTally.envoy
   };
@@ -192,7 +195,13 @@ console.log(JSON.stringify({
   平均威望: avg("renown"), 威望要求: 60,
   平均主力: avg("army"), 主力要求: 80,
   攻城工程达成局数: met("siegeTech"),
-  平均胜场: avg("wins"), 平均出征: avg("battles"), 平均结余金币: avg("gold"), 平均收服领主: avg("submittedLords"),
+  平均胜场: avg("wins"), 平均出征: avg("battles"), 平均结余金币: avg("gold"),
+  // 粮食现在是设计上的核心约束（居民口粮 + 出征补给），必须能在报告里看见它。
+  // 否则调粮食旋钮时只能靠结局分布间接猜——而机器人会用「少募兵、少出征」
+  // 把压力吸收掉，结局分布几乎不动，看上去像是「改了没用」。
+  平均结余粮食: avg("grain"), 最低结余粮食: Math.min(...results.map(r => r.grain)),
+  缺粮局数: results.filter(r => r.shortages > 0).length, 平均缺粮次数: avg("shortages"),
+  平均收服领主: avg("submittedLords"),
   平均说服归附: avg("persuaded"), 平均收买归附: avg("bribed"), 平均派出使者: avg("envoys"),
   结局分布: endingCounts, 崩溃局数: collapsed
 }, null, 2));

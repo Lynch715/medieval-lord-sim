@@ -82,11 +82,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 .game-shell { min-height: 100vh; }
 .topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; min-height: 74px; padding: 10px clamp(16px,3vw,46px); border-bottom: 1px solid var(--line); background: rgba(9,10,9,.94); backdrop-filter: blur(18px); }
 .brand-lockup { display: flex; align-items: center; gap: 12px; }
-/* 盾形的下 22% 是收窄的 V，字必须居中在「未收窄的那一段」而不是整个盒子里。
-   原先 place-items:center 把 R 压到离收窄点只剩 1px —— 在装了 Georgia 的机器上
-   将将不裁，换成别的衬线回退（多数安卓没有 Georgia）字形高一点就切进 V 里。
-   padding-bottom 把居中区整体上抬，留出真正的余量。 */
-.brand-seal { display: grid; place-items: center; width: 38px; height: 44px; padding-bottom: 10px; color: var(--gold-light); border: 1px solid var(--gold); clip-path: polygon(0 0,100% 0,100% 78%,50% 100%,0 78%); font: 20px Georgia, "Times New Roman", serif; line-height: 1; }
+/* 盾徽改用 SVG 描边。原先是 border + clip-path：clip-path 只做裁剪、不描边，
+   两条斜边被裁掉后没有线，底部尖端只剩一小截浮在 R 下面的短横 —— 盾形轮廓
+   根本没闭合。顺带也解决了字被 V 切掉的问题（字位由 viewBox 决定，与设备
+   装没装 Georgia 无关）。 */
+.brand-seal { display: block; width: 38px; height: 44px; }
+.brand-seal svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.brand-seal path { fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linejoin: round; }
+.brand-seal text { fill: var(--gold-light); font: 19px Georgia, "Times New Roman", serif; text-anchor: middle; }
 .brand-lockup h1 { margin: 0; font: 21px var(--serif); letter-spacing: .1em; }
 .brand-lockup p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .top-resources { display: flex; align-items: stretch; gap: 8px; }

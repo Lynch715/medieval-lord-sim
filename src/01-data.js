@@ -94,7 +94,9 @@ const TECH_BRANCH_NAMES = { agriculture: "农业", military: "军事", administr
 const SEASONS = [
   { id: "spring", name: "春", phase: "春耕", grain: .45, gold: 1, note: "土地解冻，适合开垦与整顿村庄。" },
   { id: "summer", name: "夏", phase: "备战", grain: .75, gold: 1, note: "道路畅通，是训练和远征的好时节。" },
-  { id: "autumn", name: "秋", phase: "收获", grain: 1.55, gold: 1.25, note: "秋季粮食和金币产量最高，也更容易遇到王室催税。" },
+  // 秋收从 1.55 压到 1.1：原值下一个秋天就能收 +137～+362 粮，冬季那点赤字
+  // 随手就补上了，全年净额恒为正且随扩张变大，「囤粮过冬」这个循环完全不存在。
+  { id: "autumn", name: "秋", phase: "收获", grain: 1.1, gold: 1.25, note: "秋季粮食和金币产量最高，也更容易遇到王室催税。" },
   { id: "winter", name: "冬", phase: "越冬", grain: .1, gold: .75, note: "冬季产粮很少，军队和居民仍会继续消耗粮食。" }
 ];
 
