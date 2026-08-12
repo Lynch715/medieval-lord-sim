@@ -93,6 +93,22 @@ function researchPanelHtml() {
   }).join("")}</div></section>`;
 }
 
+// 章节目标卡：只展开当前章，之前的章折成一行，之后的章只露名字。
+// 全部完成后整卡消失 —— 引导退场，不占老玩家的屏幕。
+function goalCardHtml() {
+  const view = goalView(S);
+  if (view.finished) return "";
+  const rows = view.chapters.map((ch, index) => {
+    if (index < view.activeIndex) return `<div class="goal-chapter done"><b>✓ ${ch.name}</b></div>`;
+    if (index > view.activeIndex) return `<div class="goal-chapter locked"><b>${ch.name}</b><span>待解锁</span></div>`;
+    const steps = ch.steps.map(step => `<div class="goal-step ${step.done ? "done" : ""}"><i>${step.done ? "✓" : "○"}</i><div><b>${step.text}</b><small>${step.hint}</small></div></div>`).join("");
+    return `<div class="goal-chapter active"><div class="goal-chapter-head"><b>${ch.name}</b><span>${ch.brief}</span></div>${steps}</div>`;
+  }).join("");
+  const total = view.chapters.reduce((sum, ch) => sum + ch.steps.length, 0);
+  const done = view.chapters.reduce((sum, ch) => sum + ch.steps.filter(step => step.done).length, 0);
+  return `<section class="goal-card glass"><div class="section-head"><h3>复国目标</h3><span>${done}/${total}</span></div>${rows}</section>`;
+}
+
 function renderHall() {
   const panel = $("panel");
   const f = forecast(S);
@@ -109,6 +125,7 @@ function renderHall() {
       <p>${seasonOf(S).note} 资源会自动流入，季节系数会改变金币与粮食的速度。先建设生产，再研究科技、募集兵力，最后选择出征时机。</p>
       ${metrics([[S.gold, "金币"], [S.grain, "粮食"], [armyTotal(S), "军队"], [S.support, "民心"], [S.morale, "军心"], [S.renown, "声望"]])}
     </section>
+    ${goalCardHtml()}
     ${S.lastAction ? `<div class="feedback-banner"><b>${esc(S.lastAction.name)}</b><p>${esc(S.lastAction.text)}</p></div>` : ""}
     <div class="strategy-overview"><article class="flow-card"><div class="section-head"><h3>实时资源流量（按小时）</h3><span>${seasonOf(S).name}季系数 · 金${formatSeasonCoefficient(seasonOf(S).gold)} / 粮${formatSeasonCoefficient(seasonOf(S).grain)}</span></div><div class="flow-values"><b>${formatResourceRate(flow.goldPerSecond, "金")}</b><b>${formatResourceRate(flow.grainPerSecond, "粮")}</b></div><p>本季预计净额：金币 ${f.netGold >= 0 ? "+" : "−"}${Math.abs(f.netGold)} · 粮食 ${f.netGrain >= 0 ? "+" : "−"}${Math.abs(f.netGrain)}</p></article><article class="queue-card"><div class="section-head"><h3>进行中的军政事务</h3><span>${activeJobs.length} 项</span></div>${queueHtml}</article></div>
     <div class="quick-actions"><button data-quick-tab="domain"><b>发展领地</b><small>建筑与科技</small></button><button data-quick-tab="court"><b>查看将领</b><small>招募领主、管理骑士</small></button><button data-quick-tab="campaign"><b>编组军队</b><small>兵种与军团</small></button><button data-quick-tab="map"><b>查看地图</b><small>选择军团出征</small></button></div>`;

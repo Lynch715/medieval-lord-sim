@@ -65,6 +65,9 @@
 - 金币、粮食、知识、民心、军心、威望、王室正统性
 
 ### 其他
+- **章节目标引导**：总览页常驻「复国目标」卡，四章（立足 → 出鞘 → 合围 → 加冕）顺序解锁,
+  只展开当前章；目标全部是对现有状态的纯派生谓词，不写档、老存档天然兼容,全部完成后整卡消失。
+  第三章与 `crownRequirements` 同源，`tests/goals.test.mjs` 钉死基线常量与全链路可达成
 - 24 名骑士依附于各自主君；只有两名无主游侠能用金币直接招募，其余须先收服其主君
 - 本地自动存档；存档 v1 → v7 逐级迁移
 - 无后端、无 CDN、无数据上传；所有世界观与人物均为原创架空设定
@@ -116,6 +119,7 @@ node tests/ai.test.mjs
 node tests/map.test.mjs
 node tests/army.test.mjs
 node tests/economy.test.mjs
+node tests/goals.test.mjs
 node tests/campaign-balance.sim.mjs
 python3 build_single.py
 ```

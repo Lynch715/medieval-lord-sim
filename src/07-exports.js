@@ -18,7 +18,8 @@ if (typeof module !== "undefined" && module.exports) {
     uiDraft, armyCorpsHtml, newArmyDraftView, expeditionDraftView, castleExpeditionHtml,
     redeployArmy, stationedArmies, stationedPower, applyStationedLosses, retreatStationedArmies,
     STATIONED_DEFENSE_FACTOR, STATIONED_RECOVERING_FACTOR, runningRecruitJob, shiftScheduled,
-    CIVILIAN_GRAIN_PER_HEAD, SUPPLY_PER_GRAIN, compositionSupply, applyShortage, forecast
+    CIVILIAN_GRAIN_PER_HEAD, SUPPLY_PER_GRAIN, compositionSupply, applyShortage, forecast,
+    GOAL_CHAPTERS, GOAL_BASELINES, goalView, totalBuildingLevels, anyTechCompleted
   };
 }
 

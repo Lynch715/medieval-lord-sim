@@ -1043,3 +1043,51 @@ function defenderComposition(s, targetId) {
   return result;
 }
 
+
+// ===== 章节目标（首局引导）=====
+// 纯派生、不写档：每个目标都是对现有状态的谓词，老存档读进来天然兼容，
+// 数值调整也不会在存档里留下过时的任务进度。章节顺序解锁，后面的章节只露名字，
+// 避免开局把全部任务糊玩家一脸。
+// 基线常量对应 createInitialState 的开局值，tests/goals.test.mjs 会钉死它们：
+// 开局值变了而这里没跟上，测试直接红，而不是引导默默错下去。
+const GOAL_BASELINES = { buildingLevels: 11, lords: 2, territories: 4 };
+
+function totalBuildingLevels(s) {
+  return ownTerritoryIds(s).reduce((sum, id) => sum + Object.values(s.territories[id].buildings || {}).reduce((a, b) => a + (b || 0), 0), 0);
+}
+
+function anyTechCompleted(s) {
+  return Object.values(TECH_DEFS).some(techs => techs.some(tech => techCompleted(s, tech.id)));
+}
+
+const GOAL_CHAPTERS = [
+  { id: "found", name: "第一章 · 立足", brief: "先让渡鸦堡转起来，再谈复国", steps: [
+    { id: "build", text: "把任意建筑提升一级", hint: "发展页 · 农田和集市最先回本", check: s => totalBuildingLevels(s) > GOAL_BASELINES.buildingLevels },
+    { id: "research", text: "完成一项科技研究", hint: "发展页 · 研究吃知识，学宫会加快它", check: s => anyTechCompleted(s) },
+    { id: "recruit", text: "把王国主力练到 60 人", hint: "军队页 · 六个兵种可以同时训练", check: s => armyTotal(s, "army_1") >= 60 },
+  ] },
+  { id: "march", name: "第二章 · 出鞘", brief: "旧土要一块块拿回来", steps: [
+    { id: "conquer", text: "夺回第一块领地", hint: "地图页出征 · 先看胜算预测，别碰要塞", check: s => ownTerritoryIds(s).length > GOAL_BASELINES.territories },
+    { id: "lord", text: "收服一名叛臣领主", hint: "打服、说服、收买三条路都算；兵临城下最能压低说服阻力", check: s => ownedOfficers(s).length > GOAL_BASELINES.lords },
+  ] },
+  { id: "siegeprep", name: "第三章 · 合围", brief: "凑齐进军王冠谷的四个条件", steps: [
+    { id: "renown", text: "威望达到 60", hint: "打胜仗与收复旧土最涨威望", check: s => !!crownRequirements(s).renown },
+    { id: "siege", text: "研究完成「攻城工程」", hint: "军事线 · 长弓之后", check: s => !!crownRequirements(s).siege },
+    { id: "army80", text: "王国主力达到 80 人", hint: "驻守军团不算，必须是主力", check: s => !!crownRequirements(s).army },
+    { id: "duchy", text: "切断公爵大道", hint: "拿下公爵直辖地还能把加冕往后推", check: s => !!crownRequirements(s).duchy },
+  ] },
+  { id: "crown", name: "第四章 · 加冕", brief: "王冠谷就在眼前", steps: [
+    { id: "crownvale", text: "攻下王冠谷，夺回铁冠", hint: "盯住顶栏的加冕倒计时", check: s => owns(s, "crownvale") },
+  ] },
+];
+
+// 章节视图：当前章 = 第一个未完成的章。谓词不是单调的（军队会打光、领地会丢），
+// 已完成的章节回退时会重新变成当前章 —— 这是有意的：引导反映真实状态，不记旧账。
+function goalView(s) {
+  const chapters = GOAL_CHAPTERS.map(ch => {
+    const steps = ch.steps.map(step => ({ id: step.id, text: step.text, hint: step.hint, done: !!step.check(s) }));
+    return { id: ch.id, name: ch.name, brief: ch.brief, steps, done: steps.every(step => step.done) };
+  });
+  const activeIndex = chapters.findIndex(ch => !ch.done);
+  return { chapters, activeIndex, finished: activeIndex === -1 };
+}
