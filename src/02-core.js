@@ -176,10 +176,13 @@ function formatDuration(ms) {
 }
 
 function formatResourceRate(value, unit) {
-  // 以“每小时”展示，避免低流量出现模糊的小数；这里只改变显示单位，不改变资源结算。
-  const perHour = Math.round(value * 3600);
-  if (perHour === 0 && Math.abs(value) > 0) return value > 0 ? `+1${unit}/时` : `−1${unit}/时`;
-  return `${perHour > 0 ? "+" : perHour < 0 ? "−" : ""}${Math.abs(perHour)}${unit}/时`;
+  // 按“每分钟”展示。原先是每小时：一季只有五分钟，一整局也就四小时，
+  // 于是首页最大的那个数字（+420金/时）说的是玩家永远不会经历的一段时间，
+  // 还跟它下面那行「本季预计净额 +35」差了十二倍，看着像两处数据打架。
+  // 换成每分钟之后，5 × 这个数就是本季净额，两行自洽。这里只改显示，不改结算。
+  const perMinute = Math.round(value * 60);
+  if (perMinute === 0 && Math.abs(value) > 0) return value > 0 ? `+1${unit}/分` : `−1${unit}/分`;
+  return `${perMinute > 0 ? "+" : perMinute < 0 ? "−" : ""}${Math.abs(perMinute)}${unit}/分`;
 }
 
 function formatSeasonCoefficient(value) {

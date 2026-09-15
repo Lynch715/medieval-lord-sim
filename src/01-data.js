@@ -70,8 +70,8 @@ const TECH_DEFS = {
     { id: "tax_registry", name: "税籍", desc: "所有领地金币收入 +8%。", cost: { knowledge: 10, gold: 20 }, requires: [] },
     { id: "relay_roads", name: "驿站道路", desc: "换季时额外获得 2 知识。", cost: { knowledge: 18, gold: 30 }, requires: ["tax_registry"] },
     { id: "census", name: "人口清册", desc: "降低人口粮食消耗，并提高征募上限。", cost: { knowledge: 24, gold: 38 }, requires: ["relay_roads"] },
-    { id: "provincial_offices", name: "行省官署", desc: "家臣管理领地时少损失一成收入。", cost: { knowledge: 32, gold: 52 }, requires: ["census"] },
-    { id: "law_code", name: "统一法典", desc: "稳定度偏低的领地不再继续流失金币：产出按稳定度 50 托底，每多一阶再抬 10 点。", cost: { knowledge: 42, gold: 68 }, requires: ["provincial_offices"] }
+    { id: "provincial_offices", name: "行省官署", desc: "家臣管理领地时少损失一成收入；每阶再降 8% 行政开支。", cost: { knowledge: 32, gold: 52 }, requires: ["census"] },
+    { id: "law_code", name: "统一法典", desc: "稳定度偏低的领地不再继续流失金币：产出按稳定度 50 托底，每多一阶再抬 10 点；另降 6%/阶行政开支。", cost: { knowledge: 42, gold: 68 }, requires: ["provincial_offices"] }
   ],
   commerce: [
     { id: "coinage", name: "统一铸币", desc: "所有领地金币产出 +8%。", cost: { knowledge: 12, gold: 24 }, requires: [] },
@@ -155,47 +155,47 @@ const AI_ARMY_CAP_PER_TERRITORY = 17;
 const AI_ANNEX_CHANCE_SCALE = .45;
 
 const TERRITORY_DEFS = {
-  ravenstone: { name: "渡鸦堡", region: "raven_march", x: 20, y: 56, type: "castle", terrain: "丘陵城堡", terrainTags: ["hills", "fortified"], owner: "player", gold: 10, grain: 34, people: 218, guard: 46, stability: 66, final: false, playable: true, adj: ["blackthorn", "westmarch", "ironhill", "ashfield", "pineford"], desc: "你的祖堡。城墙还在，附近三座附属镇是渡鸦家最后的粮仓、林场和铁作坊。" },
-  ashfield: { name: "灰麦原", region: "wolf_march", x: 47, y: 49, type: "town", terrain: "开阔农田", terrainTags: ["plains"], owner: "wolf", gold: 7, grain: 38, people: 142, guard: 34, stability: 61, final: false, playable: true, adj: ["ravenstone", "pineford", "crossford"], desc: "北境最肥沃的麦地。谁占住这里，谁就不怕下一个冬天。" },
-  pineford: { name: "松林渡", region: "wolf_march", x: 28, y: 25, type: "town", terrain: "密林河渡", terrainTags: ["forest", "river"], owner: "wolf", gold: 8, grain: 22, people: 96, guard: 39, stability: 69, final: false, playable: true, adj: ["ravenstone", "ashfield", "highpass"], desc: "商道穿过密林与浅滩，狼牙氏族在树后布满哨所。" },
-  highpass: { name: "北境关", region: "wolf_march", x: 53, y: 15, type: "fort", terrain: "山地要塞", terrainTags: ["mountain", "fortified"], owner: "wolf", gold: 6, grain: 13, people: 72, guard: 54, stability: 76, final: false, playable: true, adj: ["pineford", "crownvale"], desc: "扼守山口的石堡。难攻，却能挡住整个北方的袭扰。" },
+  ravenstone: { name: "渡鸦堡", region: "raven_march", x: 22, y: 56, type: "castle", terrain: "丘陵城堡", terrainTags: ["hills", "fortified"], owner: "player", gold: 10, grain: 34, people: 218, guard: 46, stability: 66, final: false, playable: true, adj: ["blackthorn", "westmarch", "ironhill", "ashfield", "pineford"], desc: "你的祖堡。城墙还在，附近三座附属镇是渡鸦家最后的粮仓、林场和铁作坊。" },
+  ashfield: { name: "灰麦原", region: "wolf_march", x: 47, y: 48, type: "town", terrain: "开阔农田", terrainTags: ["plains"], owner: "wolf", gold: 7, grain: 38, people: 142, guard: 34, stability: 61, final: false, playable: true, adj: ["ravenstone", "pineford", "crossford"], desc: "北境最肥沃的麦地。谁占住这里，谁就不怕下一个冬天。" },
+  pineford: { name: "松林渡", region: "wolf_march", x: 28, y: 26, type: "town", terrain: "密林河渡", terrainTags: ["forest", "river"], owner: "wolf", gold: 8, grain: 22, people: 96, guard: 39, stability: 69, final: false, playable: true, adj: ["ravenstone", "ashfield", "highpass"], desc: "商道穿过密林与浅滩，狼牙氏族在树后布满哨所。" },
+  highpass: { name: "北境关", region: "wolf_march", x: 49, y: 15, type: "fort", terrain: "山地要塞", terrainTags: ["mountain", "fortified"], owner: "wolf", gold: 6, grain: 13, people: 72, guard: 54, stability: 76, final: false, playable: true, adj: ["pineford", "crownvale"], desc: "扼守山口的石堡。难攻，却能挡住整个北方的袭扰。" },
   crossford: { name: "十字渡", region: "riverlands", x: 44, y: 79, type: "town", terrain: "河谷集市", terrainTags: ["river", "plains"], owner: "river", gold: 15, grain: 18, people: 116, guard: 38, stability: 72, final: false, playable: true, adj: ["ashfield", "riverwatch", "crownvale"], desc: "两条商路在此交汇。这里的税吏比守军更让商人害怕。" },
-  riverwatch: { name: "河望城", region: "riverlands", x: 72, y: 77, type: "castle", terrain: "河畔石城", terrainTags: ["river", "fortified"], owner: "river", gold: 14, grain: 24, people: 138, guard: 49, stability: 78, final: false, playable: true, adj: ["crossford", "crownvale"], desc: "艾芙琳伯爵的坚城。城下水网密布，骑兵难以展开。" },
-  crownvale: { name: "王冠谷", region: "royal_crown", x: 81, y: 42, type: "capital", terrain: "公爵王城", terrainTags: ["plains", "fortified", "capital"], owner: "crown", gold: 23, grain: 28, people: 186, guard: 68, stability: 82, final: true, playable: true, adj: ["highpass", "crossford", "riverwatch"], desc: "摄政公爵把铁冠锁在这里。只有准备好攻城器械、威望和足够主力，王城才会打开城门。" }
+  riverwatch: { name: "河望城", region: "riverlands", x: 72, y: 74, type: "castle", terrain: "河畔石城", terrainTags: ["river", "fortified"], owner: "river", gold: 14, grain: 24, people: 138, guard: 49, stability: 78, final: false, playable: true, adj: ["crossford", "crownvale"], desc: "艾芙琳伯爵的坚城。城下水网密布，骑兵难以展开。" },
+  crownvale: { name: "王冠谷", region: "royal_crown", x: 78, y: 42, type: "capital", terrain: "公爵王城", terrainTags: ["plains", "fortified", "capital"], owner: "crown", gold: 23, grain: 28, people: 186, guard: 68, stability: 82, final: true, playable: true, adj: ["highpass", "crossford", "riverwatch"], desc: "摄政公爵把铁冠锁在这里。只有准备好攻城器械、威望和足够主力，王城才会打开城门。" }
 };
 
 const EXTRA_TERRITORIES = {
-  ravenmere: ["渡鸦湖", "raven_march", 8, 68, "river", ["ravenstone", "ashfield"]],
-  blackthorn: ["黑棘林", "raven_march", 9, 39, "forest", ["ravenstone", "pineford"]],
-  oldwatch: ["旧哨塔", "raven_march", 12, 78, "fortified", ["ravenstone", "crossford"]],
-  wolfden: ["狼穴", "wolf_march", 37, 10, "mountain", ["pineford", "highpass"]],
-  redfen: ["赤泥沼", "wolf_march", 65, 20, "forest", ["highpass", "crownvale"]],
-  stonejaw: ["石颚堡", "wolf_march", 68, 8, "fortified", ["highpass", "crownvale"]],
-  millrun: ["磨坊溪", "riverlands", 20, 88, "plains", ["crossford", "ashfield"]],
-  reedbank: ["芦苇岸", "riverlands", 60, 91, "river", ["crossford", "riverwatch"]],
-  saltbridge: ["盐桥", "riverlands", 86, 73, "river", ["riverwatch", "crownvale"]],
+  ravenmere: ["渡鸦湖", "raven_march", 7, 61, "river", ["ravenstone", "ashfield"]],
+  blackthorn: ["黑棘林", "raven_march", 9, 42, "forest", ["ravenstone", "pineford"]],
+  oldwatch: ["旧哨塔", "raven_march", 12, 82, "fortified", ["ravenstone", "crossford"]],
+  wolfden: ["狼穴", "wolf_march", 35, 15, "mountain", ["pineford", "highpass"]],
+  redfen: ["赤泥沼", "wolf_march", 64, 20, "forest", ["highpass", "crownvale"]],
+  stonejaw: ["石颚堡", "wolf_march", 64, 8, "fortified", ["highpass", "crownvale"]],
+  millrun: ["磨坊溪", "riverlands", 19, 92, "plains", ["crossford", "ashfield"]],
+  reedbank: ["芦苇岸", "riverlands", 60, 85, "river", ["crossford", "riverwatch"]],
+  saltbridge: ["盐桥", "riverlands", 86, 74, "river", ["riverwatch", "crownvale"]],
   ashgate: ["灰门", "northern_lords", 64, 58, "plains", ["ashfield", "crossford"]],
   frostfield: ["霜原", "northern_lords", 78, 15, "plains", ["highpass", "crownvale"]],
   crowstep: ["鸦阶", "northern_lords", 91, 27, "mountain", ["crownvale", "frostfield"]],
   barrowhill: ["冢丘", "northern_lords", 8, 18, "hills", ["pineford", "ravenstone"]],
-  greywood: ["灰林", "northern_lords", 92, 55, "forest", ["crownvale", "riverwatch"]],
-  duchyroad: ["公爵大道", "royal_crown", 70, 37, "plains", ["crownvale", "highpass"]],
+  greywood: ["灰林", "northern_lords", 92, 54, "forest", ["crownvale", "riverwatch"]],
+  duchyroad: ["公爵大道", "royal_crown", 64, 37, "plains", ["crownvale", "highpass"]],
   // 王冠田与鸦阶原本只与王冠谷相邻，而王冠谷是必须先满足开城条件才能打的终点，
   // 于是这两块地在任何设计下都永远打不到。各补一条通往最近的可达邻居的路。
-  crownfield: ["王冠田", "royal_crown", 91, 38, "plains", ["crownvale", "greywood"]],
+  crownfield: ["王冠田", "royal_crown", 93, 38, "plains", ["crownvale", "greywood"]],
   kingsford: ["王渡", "royal_crown", 92, 84, "river", ["crownvale", "riverwatch"]],
-  ironhill: ["铁溪镇", "raven_march", 39, 58, "mountain", ["ravenstone", "ashfield"]],
-  westmarch: ["麦田镇", "raven_march", 11, 72, "plains", ["ravenstone", "crossford"]],
-  eastmarch: ["东境镇", "neutral_cities", 97, 64, "plains", ["crownvale"]],
+  ironhill: ["铁溪镇", "raven_march", 39, 59, "mountain", ["ravenstone", "ashfield"]],
+  westmarch: ["麦田镇", "raven_march", 11, 71, "plains", ["ravenstone", "crossford"]],
+  eastmarch: ["东境镇", "neutral_cities", 93, 64, "plains", ["crownvale"]],
   tradersrest: ["商旅驿", "neutral_cities", 33, 91, "river", ["crossford"]],
   bellmarket: ["钟市", "neutral_cities", 84, 95, "plains", ["riverwatch"]],
-  freehold: ["自由城", "neutral_cities", 4, 8, "hills", ["pineford"]],
-  northpass: ["北隘口", "neutral_cities", 42, 2, "mountain", ["highpass"]],
-  sunmere: ["日照湖", "neutral_cities", 14, 34, "river", ["ravenstone"]],
-  moonfen: ["月沼", "neutral_cities", 58, 93, "forest", ["crossford"]],
-  redquarry: ["赤石采场", "neutral_cities", 76, 3, "mountain", ["crownvale"]],
-  southgate: ["南门镇", "neutral_cities", 52, 96, "plains", ["riverwatch"]],
-  ashcoast: ["灰岸", "neutral_cities", 98, 8, "river", ["crownvale"]]
+  freehold: ["自由城", "neutral_cities", 7, 8, "hills", ["pineford"]],
+  northpass: ["北隘口", "neutral_cities", 42, 5, "mountain", ["highpass"]],
+  sunmere: ["日照湖", "neutral_cities", 14, 31, "river", ["ravenstone"]],
+  moonfen: ["月沼", "neutral_cities", 63, 95, "forest", ["crossford"]],
+  redquarry: ["赤石采场", "neutral_cities", 78, 5, "mountain", ["crownvale"]],
+  southgate: ["南门镇", "neutral_cities", 48, 95, "plains", ["riverwatch"]],
+  ashcoast: ["灰岸", "neutral_cities", 93, 8, "river", ["crownvale"]]
 };
 // 地形档案：扩展领地此前一律 5 金 / 12 粮 / 60 人 / 20 守 / 55 稳，
 // 24 块可占领地里有 14 块数值完全相同 —— 「下一块打哪」除了看邻接之外没有任何内容。

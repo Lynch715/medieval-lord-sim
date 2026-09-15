@@ -282,7 +282,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .map-node.minor { min-width: 91px; grid-template-columns: 23px 1fr; gap: 4px; padding: 4px 6px; background: rgba(10,12,10,.78); }
 .map-node.minor svg { width: 22px; height: 27px; }
 .map-node.minor b { font-size: 12px; }
-.map-node.minor small { font-size: 9px; }
+.map-node.minor small { font-size: 10px; }
 @keyframes borderPulse { 50% { box-shadow: 0 0 0 5px rgba(200,169,106,.06),0 8px 24px rgba(0,0,0,.64); } }
 /* 检视区只渲染一个 article（当前选中的领地），永远单列。
    分栏是 article 内部的事（.has-ops），不要在这里加列 —— 早先窄屏下的
@@ -362,7 +362,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .unit-card .unit-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .unit-card .unit-head b { font: 16px var(--serif); }
 .unit-card .unit-head strong { color: var(--gold-light); font: 24px var(--serif); }
-.unit-card .unit-head strong small { display: block; color: #8f9388; font: 9px var(--sans); letter-spacing: .02em; }
+.unit-card .unit-head strong small { display: block; color: #8f9388; font: 10px var(--sans); letter-spacing: .02em; }
 .unit-card p { min-height: 34px; margin: 6px 0 9px; color: #92948a; font-size: 11px; line-height: 1.45; }
 .unit-matchup { color: var(--gold-light); font-size: 10px; }
 .unit-card button { width: 100%; min-height: 38px; border: 1px solid var(--line-strong); color: var(--gold-light); background: rgba(200,169,106,.08); cursor: pointer; font-size: 11px; }
@@ -402,7 +402,9 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .commander-side b, .commander-side small { display: block; }
 .commander-side b { font: 16px var(--serif); }
 .commander-side small { margin-top: 3px; color: #a7a99e; font-size: 10px; }
-.battle-unit-row { position: absolute; left: 50%; bottom: 83px; transform: translateX(-50%); display: flex; gap: 6px; }
+/* 六个兵种牌一行排开，在手机上会从战场画面的两侧一起溢出（矛/轻两端各被切掉半张）。
+   改成以战场宽度为界居中换行：宽屏仍是一行，窄屏自动折成两行，谁也不出边。 */
+.battle-unit-row { position: absolute; left: 50%; bottom: 83px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; width: calc(100% - 24px); }
 .battle-unit-chip { display: flex; align-items: center; gap: 4px; padding: 5px 7px; border: 1px solid rgba(230,216,176,.2); background: rgba(7,8,7,.72); white-space: nowrap; }
 .battle-unit-chip .ui-glyph { width: 22px; height: 22px; margin: 0; }
 .battle-unit-chip b { font: 13px var(--serif); }
@@ -516,13 +518,15 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .creator-art blockquote { display: none; }
   .house-mark { left: 18px; bottom: 44px; }
   .topbar { position: relative; align-items: flex-start; padding: 11px 12px; }
-  .top-resources { display: grid; grid-template-columns: repeat(5,1fr); width: calc(100% - 132px); gap: 2px; }
+  .top-resources { display: grid; grid-template-columns: repeat(4,1fr); width: calc(100% - 150px); gap: 2px; }
   .top-resources > div { min-width: 0; padding: 5px 6px; }
   /* 手机上只留必要的图标按钮。「存」有自动存档兜底，可以省；
-     「暂」不能省 —— 切应用前先停表正是手机上最常做的一件事。 */
-  .top-resources .icon-btn:not(#restartBtn):not(#pauseBtn) { display: none; }
-  .top-resources #restartBtn { position: absolute; right: 54px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(9,10,9,.82); }
-  .top-resources #pauseBtn { position: absolute; right: 100px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(9,10,9,.82); }
+     「暂」不能省 —— 切应用前先停表正是手机上最常做的一件事；
+     「倍速」同样不能省 —— 它是引擎级的节奏开关，手机上原本被这条规则一起藏掉了。 */
+  .top-resources .icon-btn:not(#restartBtn):not(#pauseBtn):not(#speedBtn) { display: none; }
+  .top-resources #restartBtn { position: absolute; right: 12px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(9,10,9,.82); }
+  .top-resources #pauseBtn { position: absolute; right: 58px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(9,10,9,.82); }
+  .top-resources #speedBtn { position: absolute; right: 104px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(9,10,9,.82); }
   /* 底部导航是 fixed，且高度里含 env(safe-area-inset-bottom)；这里的下内边距
      必须跟着含，否则有手势条的机器（iPhone 约 34px、部分安卓 48px）会把最后
      一行内容压在导航栏底下。无头预览的 inset 恒为 0，所以这个 bug 只在真机可见。 */
@@ -530,6 +534,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .main-column { order: 1; }
   .side-column { order: 2; display: grid; grid-template-columns: 150px 1fr; gap: 9px; margin: 10px 0 0; }
   .lord-card { grid-row: span 2; height: 245px; }
+  .lord-copy p { font-size: 11px; line-height: 1.45; letter-spacing: 0; }
   .side-panel { padding: 12px; }
   .forecast-list { grid-template-columns: repeat(2,1fr); }
   .game-nav { position: fixed; z-index: 45; left: 0; right: 0; bottom: 0; overflow: hidden; grid-template-columns: repeat(6,minmax(0,1fr)); padding-bottom: env(safe-area-inset-bottom); border-width: 1px 0 0; background: rgba(9,10,9,.97); backdrop-filter: blur(18px); }
@@ -559,8 +564,8 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .brand-lockup { margin-bottom: 8px; }
   .top-resources { width: 100%; }
   .top-resources > div { border-left: 0; border-top: 1px solid var(--line); }
-  .side-column { grid-template-columns: 118px 1fr; }
-  .lord-card { height: 220px; }
+  .side-column { grid-template-columns: 132px 1fr; }
+  .lord-card { height: 236px; }
   .lord-copy { left: 11px; bottom: 11px; }
   .lord-copy h2 { font-size: 23px; }
   .side-column .side-panel:last-child { grid-column: 1 / -1; }
@@ -597,7 +602,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .map-node { min-width: 82px; padding: 4px 5px; }
   .map-node svg { width: 19px; height: 24px; }
   .map-node b { font-size: 12px; }
-  .map-node small { font-size: 9px; }
+  .map-node small { font-size: 10px; }
   .map-inspector p { font-size: 11px; }
   .city-actions { grid-template-columns: 1fr; }
   .castle-plan-grid { align-items: stretch; flex-direction: column; }
@@ -610,14 +615,16 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
   .commander-side { gap: 5px; padding: 6px; }
   .commander-side .crest { width: 28px; height: 34px; }
   .commander-side b { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-  .commander-side small { font-size: 9px; }
-  .battle-unit-row { bottom: 65px; }
+  .commander-side small { font-size: 10px; }
+  .battle-unit-row { bottom: 65px; width: calc(100% - 16px); gap: 4px; }
   .battle-unit-chip { padding: 4px; }
   .battle-unit-chip span:last-child { display: none; }
   .battle-stage { grid-template-columns: 58px 1fr; gap: 10px; }
   .decision-modal { display: block; max-height: calc(100vh - 20px); }
   .modal-mask { padding: 10px; }
-  .modal-portrait { min-height: 230px; height: 32vh; }
+  /* 立绘原本吃掉 32vh，加上标题、正文和资源条，三个选项在手机上全落到折叠线以下，
+     玩家得先滑一段才看得到能选什么。压到 22vh：脸还在，选项也上来了。 */
+  .modal-portrait { min-height: 158px; height: 22vh; }
   .modal-portrait::after { background: linear-gradient(0deg,#11130f 0,transparent 55%); }
   .modal-copy { padding: 21px 18px; }
   .modal-resources { position: sticky; top: 0; z-index: 2; background: #11130f; }
@@ -636,7 +643,7 @@ button:disabled { opacity: .38; cursor: not-allowed !important; filter: none !im
 .lord-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .lord-actions button { flex: 1 1 auto; }
 
-.city-role{color:var(--accent,#c8a45c);font-size:.86em;letter-spacing:.02em}
+.city-role{color:var(--accent,#c8a45c);font-size:.92em;letter-spacing:.02em}
 
 /* 发展页的折叠行。收起时只留一行摘要，展开后才铺开建筑或科技。 */
 .domain-fold { border: 1px solid var(--line); background: linear-gradient(145deg,rgba(31,34,28,.93),rgba(15,17,14,.96)); }

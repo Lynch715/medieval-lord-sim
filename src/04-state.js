@@ -468,6 +468,26 @@ function territoryOutput(s, id, season = seasonOf(s)) {
 // 以及人口清册（减免总粮耗），三条都必须真的去点才够用。
 const CIVILIAN_GRAIN_PER_HEAD = 10;
 
+// 行政开支：每季按领地数收的一笔金币。
+//
+// 粮食那边早就有「居民口粮」这条随规模增长的支出，金币这边却一直只有军饷、
+// 家臣和骑士——三项都不随领地数长。结果是 120 局模拟里，第 17 季之后金币
+// 一路滚到结局：平均结余 1753 金，末期每季还净入一百多，建筑和科技早已点完，
+// 钱在后半局彻底不是一个需要考虑的东西。
+//
+// 这里补上对称的一条：起家的四块地不计，之后每块地每季 1.4 金，
+// 由行政线（行省官署、统一法典）往下压，最低压到六成。
+// 于是「再打一块地」这件事有了持续成本，行政科技也终于有了明确的理由。
+const ADMIN_GOLD_PER_TERRITORY = 1.4;
+const ADMIN_FREE_TERRITORIES = 4;
+
+function administrationCost(s) {
+  const billed = Math.max(0, ownTerritoryIds(s).length - ADMIN_FREE_TERRITORIES);
+  if (!billed) return 0;
+  const relief = Math.max(.6, 1 - techLevel(s, "provincial_offices") * .08 - techLevel(s, "law_code") * .06);
+  return Math.ceil(billed * ADMIN_GOLD_PER_TERRITORY * relief);
+}
+
 function forecast(s, season = seasonOf(s)) {
   const gross = ownTerritoryIds(s).reduce((acc, id) => {
     const out = territoryOutput(s, id, season);
@@ -486,7 +506,8 @@ function forecast(s, season = seasonOf(s)) {
   let grainCost = Math.max(0, Math.ceil(army.levy / 4 + army.archers / 4 + army.knights / 3 + army.heavy_infantry / 3 + army.crossbowmen / 3 + army.light_cavalry / 3 + garrison.levy / 8 + garrison.archers / 8 + garrison.knights / 6) - 1) + rations + winterExtra + seedReserve;
   if (techLevel(s, "census")) grainCost = Math.ceil(grainCost * Math.max(.82, 1 - techLevel(s, "census") * .06));
   const armyGoldCost = army.levy * .12 + army.archers * .23 + army.knights * .55 + garrison.levy * .06 + garrison.archers * .12 + garrison.knights * .28;
-  const goldCost = Math.ceil(armyGoldCost * Math.max(.64, 1 - techLevel(s, "professional_army") * .18)) + ownedOfficers(s).filter(o => o.id !== "player").length + activeKnights(s).length;
+  const adminCost = administrationCost(s);
+  const goldCost = Math.ceil(armyGoldCost * Math.max(.64, 1 - techLevel(s, "professional_army") * .18)) + ownedOfficers(s).filter(o => o.id !== "player").length + activeKnights(s).length + adminCost;
   const fieldLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.fields || 0), 0);
   const granaryLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.granary || 0), 0);
   // 每块地只白送 15 仓容（原本 45）。原值下，占地既给产出又给仓库，
@@ -497,7 +518,7 @@ function forecast(s, season = seasonOf(s)) {
   const projected = s.grain + gross.grain - grainCost;
   const spoilageRate = Math.max(.05, .18 - granaryLevels * .018);
   const spoilage = Math.max(0, Math.round((projected - storageCap) * spoilageRate));
-  return { ...gross, grainCost, goldCost, storageCap, spoilage, netGold: gross.gold - goldCost, netGrain: gross.grain - grainCost - spoilage };
+  return { ...gross, grainCost, goldCost, adminCost, storageCap, spoilage, netGold: gross.gold - goldCost, netGrain: gross.grain - grainCost - spoilage };
 }
 
 // 每季知识产出。学宫每级 1.5 点：原本是 1 点，投入与回报太不成比例 ——
