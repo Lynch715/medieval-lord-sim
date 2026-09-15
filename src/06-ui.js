@@ -28,8 +28,12 @@ function renderTop() {
   if (live) {
     live.textContent = heldBy === "away" ? "已暂停 · 离开期间不推进"
       : heldBy === "manual" ? "已暂停"
-      : heldBy ? "等待你的决定" : "实时推进";
+      : heldBy ? "等待你的决定" : (worldSpeed() > 1 ? `${worldSpeed()}× 推进` : "实时推进");
     live.classList.toggle("paused", !!heldBy);
+  }
+  if ($("speedBtn")) {
+    $("speedBtn").textContent = `${worldSpeed()}×`;
+    $("speedBtn").classList.toggle("fast", worldSpeed() > 1);
   }
   $("playerNameText").textContent = S.playerName;
   $("oathBadge").textContent = "合法继承人";
@@ -46,6 +50,21 @@ function renderTop() {
     ["金币流量", formatResourceRate(flow.goldPerSecond, "金")], ["粮食流量", formatResourceRate(flow.grainPerSecond, "粮")], ["本季净金", `${f.netGold >= 0 ? "+" : "−"}${Math.abs(f.netGold)}`], ["本季净粮", `${f.netGrain >= 0 ? "+" : "−"}${Math.abs(f.netGrain)}`], ["粮仓容量", `${f.storageCap}`]
   ].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
   $("gameNav").querySelectorAll("[data-tab]").forEach(button => button.classList.toggle("active", button.dataset.tab === S.tab));
+  renderThreatStrip();
+}
+
+// 来袭红条：挂在状态条下面，每 250ms 跟着 renderTop 刷。点一下跳到地图看那座城。
+function renderThreatStrip() {
+  const host = $("threatStrip");
+  if (!host) return;
+  const threats = S.battleSession ? [] : incomingThreats(S, worldNow());
+  if (!threats.length) { host.classList.add("hidden"); host.innerHTML = ""; return; }
+  host.classList.remove("hidden");
+  const html = threats.map(th => `<button type="button" class="threat-row" data-threat-target="${th.targetId}"><b>${th.beacon ? "烽火" : "急报"}</b><span>${esc(th.factionName)} · ${esc(th.armyName)} ${th.troops}人 → ${esc(th.targetName)}</span><i>${formatDuration(th.remainingMs)}</i></button>`).join("");
+  if (host.dataset.sig !== html) { host.innerHTML = html; host.dataset.sig = html; }
+  host.querySelectorAll("[data-threat-target]").forEach(button => button.onclick = () => {
+    S.tab = "map"; S.selectedTerritoryId = button.dataset.threatTarget; saveGame(); renderAll();
+  });
 }
 
 function renderAll() {
@@ -121,8 +140,8 @@ function renderHall() {
   panel.innerHTML = `
     <section class="hero-panel">
       <span class="eyebrow">STRATEGY OVERVIEW</span>
-      <h2>${turnOf(S) === 0 ? "第一年春：先发展，再出征" : `第${yearOf(S)}年${seasonOf(S).name}季 · 军政总览`}</h2>
-      <p>${seasonOf(S).note} 资源会自动流入，季节系数会改变金币与粮食的速度。先建设生产，再研究科技、募集兵力，最后选择出征时机。</p>
+      <h2>${turnOf(S) === 0 ? "第一年春。雪化了" : `第${yearOf(S)}年${seasonOf(S).name}季`}</h2>
+      <p>${seasonOf(S).note}</p>
       ${metrics([[S.gold, "金币"], [S.grain, "粮食"], [armyTotal(S), "军队"], [S.support, "民心"], [S.morale, "军心"], [S.renown, "声望"]])}
     </section>
     ${goalCardHtml()}
@@ -176,7 +195,7 @@ function renderDomain() {
     const first = ownTerritoryIds(S)[0];
     if (first) foldState.territories.add(first);
   }
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">RESTORATION ECONOMY</span><h2>发展复国根基</h2><p>农田养军，市场聚财，铁匠铺和兵营把资源变成收复旧土的军力。建筑最高五级，每块领地同时只进行一项建设。</p>${metrics([[ownTerritoryIds(S).length, "收复领地"], [S.support, "民心"], [forecast(S).grain, "本季产粮"], [forecast(S).gold, "本季金币"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">RESTORATION ECONOMY</span><h2>领地</h2><p>每块地一次只能盖一样，最高五级。</p>${metrics([[ownTerritoryIds(S).length, "收复领地"], [S.support, "民心"], [forecast(S).grain, "本季产粮"], [forecast(S).gold, "本季金币"]])}</section>
     <div class="section-head"><h2>领地建设</h2><span>点开一块领地，展开它的十类建筑</span></div>
     <div class="domain-grid">${ownTerritoryIds(S).map(domainCard).join("")}</div>${researchPanelHtml()}`;
   // 折叠状态记在 foldState 里，renderAll() 重建面板后按它还原，
@@ -230,7 +249,7 @@ function renderMap() {
   const selectedId = S.selectedTerritoryId || "ravenstone";
   const controlled = ownTerritoryIds(S).length;
   const interactiveCount = Object.keys(TERRITORY_DEFS).length;
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE RESTORATION MAP</span><h2>把父亲的旧领土夺回来</h2><p>每个城堡和城镇都是复国路线上的一站。点击敌方城堡，查看守军、侦察情报并直接配置远征。<br><b>${mapArmyStatus}</b></p>${metrics([[`${controlled} / ${playableTerritoryIds().length}`, "已收复"], [attackable.length, "可攻目标"], [playableTerritoryIds().length, "可占领地点"], [interactiveCount, "地图地点"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE RESTORATION MAP</span><h2>北境</h2><p>点一座城，看守军、看是谁在守、从这儿出征。<br><b>${mapArmyStatus}</b></p>${metrics([[`${controlled} / ${playableTerritoryIds().length}`, "已收复"], [attackable.length, "可攻目标"], [playableTerritoryIds().length, "可占领地点"], [interactiveCount, "地图地点"]])}</section>
     <div class="unification-track"><div><b>复国进度</b><span>收复父亲留下的旧土，逐步逼近王冠谷</span></div><strong>${Math.round(controlled / playableTerritoryIds().length * 100)}%</strong><i style="width:${Math.round(controlled / playableTerritoryIds().length * 100)}%"></i></div>
     <div class="section-head"><h2>北境地图</h2><span>城堡统辖附近附属镇 · 金边为可攻目标（与自家版图接壤即可，越远行军越久） · 点击目标配置远征</span></div>
     <div class="map-shell"><div class="map-legend">${Object.entries(FACTIONS).map(([id, f]) => `<span style="--crest-color:${f.color}">${crestSvg(id, f.name)}${f.name}</span>`).join("")}<span class="map-legend-note">金边目标可直接配置远征 · 斥候情报按季更新 · 手机左右滑动地图</span></div><div class="map-viewport" tabindex="0" aria-label="可横向浏览的北境地图"><div class="realm-map">${mapRoutes(S)}${Object.keys(TERRITORY_DEFS).map(id => mapNode(id, attackable)).join("")}</div></div><div class="map-inspector">${territorySummary(S, selectedId, attackable)}</div></div>`;
@@ -277,7 +296,7 @@ function renderMap() {
     if (!army || army.status !== "idle" || total < 10 || total > armyTotal(S, army.id) || Object.keys(UNIT_DEFS).some(type => composition[type] > (army.composition[type] || 0))) { toast("请先选择不超过主力现有数量的兵种，至少出兵10人"); return; }
     if (carried < minimum || carried > S.grain) { toast(`至少需要携带${minimum}粮食`); return; }
     S.grain -= carried;
-    const job = startMarch(S, "army_1", targetId, Date.now(), { battlePlan: { leaderIds, knightIds: knight ? [knight] : [], composition, troops: total, plan, suppliedGrain: carried } });
+    const job = startMarch(S, "army_1", targetId, worldNow(), { battlePlan: { leaderIds, knightIds: knight ? [knight] : [], composition, troops: total, plan, suppliedGrain: carried } });
     if (!job) { S.grain += carried; toast("王国主力当前无法长途出征"); return; }
     S.lastAction = { name: "远征出发", text: `王国主力携${compositionText(composition)}和${carried}粮食出发，预计${formatDuration(job.endAt - job.startedAt)}后抵达${TERRITORY_DEFS[targetId].name}。` };
     log(S, "info", S.lastAction.text);
@@ -306,7 +325,7 @@ function renderMap() {
     if (!armyIds.length || armies.some(army => army.status !== "idle") || compositionTotal(draft.composition) < 10) { toast("至少选择一支待命军团"); return; }
     if (draft.grain < draft.required || draft.grain > S.grain) { toast(`这支远征至少需要${draft.required}粮食`); return; }
     S.grain -= draft.grain;
-    const job = startArmyGroupMarch(S, armyIds, targetId, Date.now(), { battlePlan: { leaderIds: draft.leaders, composition: draft.composition, troops: compositionTotal(draft.composition), plan: draft.plan, armyIds }, suppliedGrain: draft.grain });
+    const job = startArmyGroupMarch(S, armyIds, targetId, worldNow(), { battlePlan: { leaderIds: draft.leaders, composition: draft.composition, troops: compositionTotal(draft.composition), plan: draft.plan, armyIds }, suppliedGrain: draft.grain });
     if (!job) { S.grain += draft.grain; toast("所选军团无法从当前位置合军出发"); return; }
     uiDraft.expedition = { targetId: null, armyIds: null, plan: null, grain: null };
     S.lastAction = { name: "军团远征出发", text: `${armyIds.length > 1 ? "多支军团合军" : armies[0].name}携${draft.grain}粮食前往${TERRITORY_DEFS[targetId].name}，预计${formatDuration(job.endAt - job.startedAt)}后抵达。` };
@@ -445,7 +464,7 @@ function territorySummary(s, id, attackable = []) {
   const lordLine = lord && level === FOG_LEVELS.dark
     ? `<span class="city-lord city-fogged">城头挂着旗号，但看不清是谁在守 —— 派一队斥候过去。</span><br>`
     : lord
-    ? `<span class="city-lord"><b>${esc(lord.name)}</b> · ${esc(lordDef?.title || "")}<br>${esc(lordDef?.oldTie || "")} · 抵抗 ${Math.round(lord.defiance ?? 0)} · 说服阻力 ${Math.max(0, Math.ceil(lordResistance(s, lord.id)))}${lordDef?.liege ? ` · 主君 ${esc(LORD_DEFS[lordDef.liege].name)}` : " · 独立割据"}</span><br>`
+    ? `<span class="city-lord"><b>${esc(lord.name)}</b> · ${esc(lordDef?.title || "")}<br>${esc(lordDef?.oldTie || "")} · 抵抗 ${Math.round(lord.defiance ?? 0)} · ${(() => { const p = lordPrice(s, lord.id); return !p.def ? "" : !p.known ? "开价 ？？？" : p.met ? "开价已做到" : `开价：${esc(p.text)}`; })()}${lordDef?.liege ? ` · 主君 ${esc(LORD_DEFS[lordDef.liege].name)}` : " · 独立割据"}</span><br>`
     : "";
   const seenGuard = reportedGuard(s, id);
   const guardLine = t.owner === "player" ? `守军 ${t.guard}` : `守军 ${seenGuard.text}`;
@@ -550,7 +569,7 @@ function renderCampaign() {
   const armies = playerArmies(S);
   const totalMobile = armies.reduce((sum, army) => sum + compositionTotal(army.composition), 0);
   const activeUnits = new Set(armies.flatMap(army => Object.entries(army.composition).filter(([, count]) => count > 0).map(([type]) => type))).size;
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>军队与军团</h2><p>军队页负责募兵和编制。先把兵卒分成几支由王子或骑士带领的军团，再去地图选择目标出征；地图上可以单独出征，也可以多军团合军。</p>${metrics([[totalMobile, "机动兵力"], [activeUnits, "现役兵种"], [armies.length, "军团数量"], [activeKnights(S).length, "在列骑士"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE WAR COUNCIL</span><h2>军队</h2><p>这里练兵、编军团。出征在地图页。</p>${metrics([[totalMobile, "机动兵力"], [activeUnits, "现役兵种"], [armies.length, "军团数量"], [activeKnights(S).length, "在列骑士"]])}</section>
     ${armyCorpsHtml()}
     <div class="section-head"><h2>兵种与补充</h2><span>训练完成后进入本地驻军，再编入渡鸦第一军团</span></div>${armyRosterHtml()}
     ${renderBattleLog()}`;
@@ -572,7 +591,7 @@ function renderActiveBattle() {
   const situation = battleSituation(session);
   const phaseNames = ["接近敌军", "正面交战", "最后阶段"];
   panel.innerHTML = `<section class="battle-session"><div class="battle-visual" style="background-image:url('${battleBackground(session.targetId)}')"><div class="battle-unit-row">${Object.entries(UNIT_DEFS).map(([type, unit]) => `<span class="battle-unit-chip">${glyphSvg(type)}<span>${unit.short}</span><b>${session.composition[type] || 0}</b></span>`).join("")}</div><div class="battle-commanders"><div class="commander-side" style="--crest-color:${FACTIONS.player.color}"><span class="crest">${crestSvg("player", FACTIONS.player.name)}</span><div><b>${playerLeaders.map(o => esc(o.name)).join("、")}</b><small>${FACTIONS.player.name} · ${compositionText(session.composition)}</small></div></div><div class="commander-side enemy" style="--crest-color:${FACTIONS[enemyFaction].color}"><span class="crest">${crestSvg(enemyFaction, FACTIONS[enemyFaction].name)}</span><div><b>${esc(enemyCommander?.name || FACTIONS[enemyFaction].name)}</b><small>${target.name} · 守军 ${S.territories[session.targetId].guard}</small></div></div></div></div><div class="battle-session-head"><span class="eyebrow">CAMPAIGN IN PROGRESS · ${esc(target.terrain)}</span><h2>${target.name}之战 · ${stageName}</h2><div class="battle-timeline">${phaseNames.map((name, index) => `<span class="battle-phase ${index < session.stage ? "done" : index === session.stage ? "active" : ""}"><i>${index + 1}</i>${name}</span>`).join("")}</div><div class="stat-chips"><span>出征 ${session.troops}</span><span>${compositionText(session.composition)}</span><span>损失 ${compositionText(session.lossesByType || {})}</span><span>${PLANS[session.plan].name}</span></div><div class="momentum-label"><span>我军劣势</span><b>${battleMomentumText(session.momentum)}</b><span>我军优势</span></div><div class="momentum-track"><i style="left:${marker}%"></i></div></div><div class="battle-situation"><b>战况推演 · ${situation.title}</b><p>${situation.text}</p></div>
-    <div class="battle-stage-list">${session.history.length ? session.history.map(h => `<article class="battle-stage"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}</h3><p>${esc(h.text)}</p></div></article>`).join("") : `<div class="empty-state">两军尚未接触。请选择第一道军令。</div>`}</div>
+    <div class="battle-stage-list">${session.history.length ? session.history.map(h => `<article class="battle-stage"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}</h3><p>${esc(h.text)}</p>${h.quip ? `<q class="battle-quip"><b>${esc(h.speaker || "")}</b>“${esc(h.quip)}”</q>` : ""}</div></article>`).join("") : `<div class="empty-state">两军尚未接触。请选择第一道军令。</div>`}</div>
     <div class="battle-choices"><h3>${stageName}：选择军令</h3><div class="choice-stack">${options.map(o => `<button class="stage-choice" data-stage-choice="${o.id}"><b>${esc(o.name)}</b><small>${esc(o.by)} · ${esc(o.desc)}</small><em>${battleChoiceHint(o)}</em></button>`).join("")}</div></div></section>`;
   panel.querySelectorAll("[data-stage-choice]").forEach(button => button.addEventListener("click", () => {
     applyBattleChoice(S, button.dataset.stageChoice);
@@ -619,7 +638,7 @@ function renderLastBattle(report) {
   const label = report.outcome === "win" ? "胜利" : report.outcome === "retreat" ? "撤退" : "战败";
   const lossText = report.lossesByType ? `（${compositionText(report.lossesByType)}）` : "";
   const costText = report.garrisoned ? ` · 抽调${report.garrisoned}人驻守` : report.lostGold || report.lostGrain ? ` · 丢失${report.lostGold || 0}金币和${report.lostGrain || 0}粮食` : "";
-  return `<div class="section-head"><h2>上一场战报</h2><span>${label}</span></div><div class="battle-session"><div class="battle-result"><span class="eyebrow">战斗结果 · AFTER ACTION REPORT</span><strong>${label}</strong><p>${esc(report.targetName)} · 我军损失${report.losses}人${lossText} · 敌军约损失${report.enemyLoss}人${costText}${report.injured?.length ? ` · ${esc(report.injured.join("、"))}负伤` : ""}</p></div><div class="battle-stage-list">${report.history.map(h => `<article class="battle-stage"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}</h3><p>${esc(h.text)}</p></div></article>`).join("")}</div></div>`;
+  return `<div class="section-head"><h2>上一场战报</h2><span>${label}</span></div><div class="battle-session"><div class="battle-result"><span class="eyebrow">战斗结果 · AFTER ACTION REPORT</span><strong>${label}</strong><p>${esc(report.targetName)} · 我军损失${report.losses}人${lossText} · 敌军约损失${report.enemyLoss}人${costText}${report.injured?.length ? ` · ${esc(report.injured.join("、"))}负伤` : ""}</p></div><div class="battle-stage-list">${report.history.map(h => `<article class="battle-stage"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}</h3><p>${esc(h.text)}</p>${h.quip ? `<q class="battle-quip"><b>${esc(h.speaker || "")}</b>“${esc(h.quip)}”</q>` : ""}</div></article>`).join("")}</div></div>`;
 }
 
 function talkOfficer(id) {
@@ -631,7 +650,7 @@ function talkOfficer(id) {
   o.loyalty = clamp(o.loyalty + gain);
   o.grievance = clamp(o.grievance - 5);
   S.lastAction = { name: `召见${o.name}`, text: `花费3金币安排私宴与赏赐。忠诚 +${gain}，不满 −5。` };
-  log(S, "info", `你在私室召见${o.name}，听取了他对领地近况的意见。`);
+  log(S, "info", `你和${o.name}在私室喝了一顿。他说了些平时不说的话。`);
   saveGame(); renderAll();
 }
 
@@ -651,7 +670,7 @@ function knightAction(id, actionId, state = S) {
   if (state.gold < cost) { if (state === S) toast(`需要${cost}金币`); return false; }
   state.gold -= cost;
   const job = startJob(state, {
-    type: "KNIGHT_ACTION", startedAt: Date.now(), durationMs: JOB_CONFIG.KNIGHT_RECRUIT.durationMs,
+    type: "KNIGHT_ACTION", startedAt: worldNow(), durationMs: JOB_CONFIG.KNIGHT_RECRUIT.durationMs,
     queueKey: `knight:${id}`, payload: { knightId: id, actionId, loyalty: actionId === "surrender" ? 42 : 58, gold: cost }
   });
   if (job) {
@@ -684,7 +703,7 @@ function renderCourt() {
   const captured = enemies.filter(o => o.captured);
   const averageLoyalty = own.length > 1 ? Math.round(own.filter(o => o.id !== "player").reduce((sum, o) => sum + o.loyalty, 0) / (own.length - 1)) : 100;
   const knights = S.knights || [];
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">COMMANDERS & KNIGHTS</span><h2>将领与骑士</h2><p>父亲死后，旧日臣属各自独立。打下他们的最后一座城，才能决定其去留；骑士随主君进退，只有无主的游侠才能用金币直接招募。</p>${metrics([[own.length, "我方领主"], [enemies.length, "在野叛臣"], [captured.length, "待处置俘虏"], [activeKnights(S).length, "我方骑士"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">COMMANDERS & KNIGHTS</span><h2>将领</h2><p>二十个叛臣，每人一个价。派使者去问，做到了再谈；不谈的，打。</p>${metrics([[own.length, "我方领主"], [enemies.length, "在野叛臣"], [captured.length, "待处置俘虏"], [activeKnights(S).length, "我方骑士"]])}</section>
     <div class="section-head"><h2>将领名册</h2><span>点开一栏展开其中的卡片</span></div>
     ${foldBlock("court", "own", "我方领主", `平均忠诚 ${averageLoyalty}`, `${own.length} 人`,
       `<div class="officer-grid">${own.map(o => `<div class="officer-slot">${officerCard(o)}</div>`).join("")}</div>`, foldState.sections)}
@@ -699,6 +718,7 @@ function renderCourt() {
       return `<article class="officer-card enemy">${def.portrait ? `<img src="${def.portrait}" alt="${esc(def.name)}">` : `<div class="knight-mark">${esc(def.name.slice(0, 1))}</div>`}
         <div class="card-copy"><div class="role-line"><h3>${esc(def.name)}</h3><span>${esc(def.title)}</span></div>
         <p>${esc(def.oldTie || "")}<br>主君：${esc(liege)} · 抵抗 ${Math.round(lord.defiance ?? def.defiance)}</p>
+        ${(() => { if (!lord.envoyed) return ""; const q = lordLine(S, lord.id, routes.persuade.available || routes.price?.met ? "soften" : "refuse"); return q ? `<q class="lord-quote">“${esc(q)}”</q>` : ""; })()}
         <div class="loyalty-line"><span>${esc(status)}</span><b>${holdings.length}座城</b></div>
         <div class="lord-routes">
           <span class="route ${routes.force.available ? "on" : ""}">打服 · ${esc(routes.force.detail)}</span>
@@ -707,6 +727,8 @@ function renderCourt() {
         </div>
         <div class="lord-actions">
           ${routes.persuade.available ? `<button class="secondary-btn" data-demand-fealty="${lord.id}">要求效忠</button>` : ""}
+          ${routes.price?.known && routes.price.def?.kind === "gold" && !lord.pricePaid ? `<button class="secondary-btn" data-pay-price="${lord.id}" ${S.gold < routes.price.def.value ? "disabled" : ""}>付清 · ${routes.price.def.value}金</button>` : ""}
+          ${!lord.envoyed && lordHoldings(S, lord.id)[0] && cityActionAvailable(S, lordHoldings(S, lord.id)[0], "envoy") ? `<button class="ghost-btn" data-envoy-lord="${lordHoldings(S, lord.id)[0]}" ${S.gold < 8 ? "disabled" : ""}>派使者问价 · 8金</button>` : ""}
           ${routes.bribe.available ? `<button class="ghost-btn" data-bribe-lord="${lord.id}">收买 · ${lordBribeCost(S, lord.id)}金</button>` : ""}
         </div></div></article>`;
     }).join("") : `<div class="empty-state">北境已经没有仍举着旧旗的叛臣。</div>`}</div>`, foldState.sections)}
@@ -724,22 +746,31 @@ function renderCourt() {
     if (!bribeLord(S, id, lordHoldings(S, id)[0] || null)) { toast("金币不足，或此人不收钱"); return; }
     saveGame(); renderAll();
   }));
+  panel.querySelectorAll("[data-pay-price]").forEach(button => button.addEventListener("click", () => {
+    if (!payLordPrice(S, button.dataset.payPrice)) { toast("钱不够"); return; }
+    saveGame(); renderAll();
+  }));
+  panel.querySelectorAll("[data-envoy-lord]").forEach(button => button.addEventListener("click", () => {
+    if (rejectDuringBattle(S)) return;
+    if (!cityAction(S, button.dataset.envoyLord, "envoy")) { toast("使者派不出去"); return; }
+    saveGame(); renderAll();
+  }));
 }
 
 function renderChronicle() {
   const panel = $("panel");
-  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE CHRONICLE</span><h2>复国编年史</h2><p>这里记录建设、侦察、封赏、战争和重大事件。</p>${metrics([[S.battles, "出征次数"], [S.wins, "胜场"], [S.casualties, "累计伤亡"], [ownTerritoryIds(S).length, "控制领地"]])}</section>
+  panel.innerHTML = `<section class="hero-panel"><span class="eyebrow">THE CHRONICLE</span><h2>编年史</h2><p>这一局做过的事，都在这儿。</p>${metrics([[S.battles, "出征次数"], [S.wins, "胜场"], [S.casualties, "累计伤亡"], [ownTerritoryIds(S).length, "控制领地"]])}</section>
     <div class="section-head"><h2>渡鸦家编年史</h2><span>最近120条</span></div><div class="chronicle">${S.log.map(item => `<article class="log-row"><time>第${Math.floor(item.turn / 4) + 1}年 · ${SEASONS[item.turn % 4].name}</time><div><b>${item.kind === "good" ? "进展" : item.kind === "bad" ? "损失" : item.kind === "warn" ? "警示" : "记录"}</b><p>${cleanDisplayText(item.text)}</p></div></article>`).join("")}</div>`;
 }
 
 function endingCopy(s) {
   const style = currentStyle(s);
-  if (s.endingReason === "fallen") return { title: "渡鸦堡陷落", text: "清晨，敌军从东门进入渡鸦堡。城墙上的守军已经不足一队，渡鸦旗在午前被扯下。" };
-  if (s.endingReason === "collapsed") return { title: "领地崩溃", text: "没有敌军攻破城墙。军饷拖欠后，士兵先散去；冬粮见底后，村民开始逃亡。最后一次议事，没有家臣到场。" };
-  if (s.endingReason === "crowned") return { title: "铁冠加于他人之头", text: "钟声从王冠谷传来时，你还在自己的城墙上。摄政公爵完成了加冕，渡鸦家的继承权从此只是一段无人过问的旧事。" };
-  if (style === "oath") return { title: "守信领主统一北境", text: "王冠谷陷落后，旧领主、村镇代表和渡鸦家的功臣在大厅宣誓效忠。你曾答应保留的土地、旧规矩和封赏，大多得到了兑现。" };
-  if (style === "iron") return { title: "强硬领主统一北境", text: "最后一面敌旗落下后，各地守军被重新编制，税册和军令统一送往渡鸦堡。北境很少再发生公开反抗，城堡地牢却始终没有空过。" };
-  return { title: "经营领主统一北境", text: "战争结束后，七领使用了同一套税册和度量。商路重新开放，磨坊和集市按季向渡鸦堡纳税，你的金库足以维持一支常备军。" };
+  if (s.endingReason === "fallen") return { title: "渡鸦堡陷落", text: "天亮的时候，敌军从东门进来了。墙上的守军不到一队。渡鸦旗中午被扯下来，扔在护城河里，漂了一下午。" };
+  if (s.endingReason === "collapsed") return { title: "领地崩溃", text: "没有人攻城。先是军饷拖了三季，兵一个个走了；然后粮仓见了底，村民一户户走了。最后一次议事，大厅里只有你和奥斯温。他也没坐下。" };
+  if (s.endingReason === "crowned") return { title: "铁冠戴在了别人头上", text: "钟声从王冠谷传来的时候，你站在自己的城墙上。摄政公爵戴上了那顶冠。从今天起，渡鸦家的继承权是一段旧事，酒馆里有人会讲，没人会信。" };
+  if (style === "oath") return { title: "北境统一", text: "王冠谷破城那天，旧领主、村镇代表和你的功臣都到了大厅。你许过的地、留过的旧规矩、赏过的东西，大多数兑了现。有人记得你食过的言，但更多人记得你守过的。" };
+  if (style === "iron") return { title: "北境统一", text: "最后一面叛旗倒下之后，各地守军重新编了制，税册和军令统一送渡鸦堡。北境很少再有人公开反抗。城堡的地牢也一直没空过。" };
+  return { title: "北境统一", text: "仗打完了，七领用上了同一套税册、同一杆秤。商路开了，磨坊和集市按季交税，金库够养一支常备军。伊莎贝尔说，这是她记过的最好看的账。" };
 }
 
 function endingVisual(s) {
@@ -748,6 +779,37 @@ function endingVisual(s) {
   if (s.endingReason === "minor_lord") return { src: "assets/player.webp", alt: "守住渡鸦堡的领主", cls: "ending-minor" };
   if (s.endingReason === "great_lord") return { src: "assets/northern-march-map.webp", alt: "北境领地图", cls: "ending-great" };
   return { src: "assets/player.webp", alt: "戴上铁冠的北境之主", cls: `ending-unified ending-${currentStyle(s)}` };
+}
+
+// 这一局的账。全部从状态里拼，没有模板腔：做过什么念什么，没做过的一句不提。
+function endingChronicle(s) {
+  const names = ids => (ids || []).map(id => officer(s, id)?.name || LORD_DEFS[id]?.name || id);
+  const list = ids => names(ids).join("、");
+  const d = s.deeds || {};
+  const years = yearOf(s);
+  const lines = [];
+  lines.push(`这一局走了${years}年${(turnOf(s) % 4) ? `零${turnOf(s) % 4}季` : ""}，出兵${s.battles || 0}次，赢了${s.wins || 0}次。`);
+  const worst = (s.battleLog || []).filter(e => e.dir === "attack").sort((a, b) => (b.ourLoss || 0) - (a.ourLoss || 0))[0];
+  if (worst && worst.ourLoss > 0) lines.push(`最惨的一仗在${worst.targetName}，${worst.outcome === "win" ? "赢是赢了，" : worst.outcome === "retreat" ? "撤了，" : "败了，"}扔下${worst.ourLoss}具尸体。`);
+  const lost = (s.battleLog || []).filter(e => e.dir === "defend" && e.outcome === "lost").length;
+  if (lost) lines.push(`自己的城被人攻破${lost}次。`);
+  if (d.sworn?.length) lines.push(`打服了${list(d.sworn)}，他们跪着重新宣了誓。`);
+  if (d.persuaded?.length) lines.push(`${list(d.persuaded)}是谈下来的，一兵一卒没折。`);
+  if (d.bribed?.length) lines.push(`${list(d.bribed)}是拿钱买的。`);
+  if (d.kept?.length || d.broken?.length) {
+    const parts = [];
+    if (d.kept?.length) parts.push(`许给${list(d.kept)}的地兑了现`);
+    if (d.broken?.length) parts.push(`许给${list(d.broken)}的地食了言`);
+    lines.push(parts.join("；") + "。");
+  }
+  if (d.executed?.length) lines.push(`处死了${list(d.executed)}。${d.executed.length >= 2 ? "北境记得每一颗头。" : "北境记得。"}`);
+  if (d.exiled?.length) lines.push(`把${list(d.exiled)}赶出了北境。`);
+  if (d.ransomed?.length) lines.push(`${list(d.ransomed)}花钱赎了自己的命。`);
+  const gone = (s.officers || []).filter(o => o.side === "gone" && o.submitted);
+  if (gone.length) lines.push(`${list(gone.map(o => o.id))}归附过，后来又走了。`);
+  const cut = (s.flags?.hands_cut != null) ? "禁林里那三个孩子的手，是你下令砍的。" : (s.flags?.hands_spared != null) ? "禁林里那三个孩子，你放了。" : "";
+  if (cut) lines.push(cut);
+  return lines.map(l => `<p>${esc(l)}</p>`).join("");
 }
 
 function showEnding(s) {
@@ -766,7 +828,7 @@ function showEnding(s) {
   $("endingPortrait").src = visual.src;
   $("endingPortrait").alt = visual.alt;
   const victory = s.endingReason === "unified";
-  $("endingBody").innerHTML = `<span class="eyebrow">${victory ? "THE IRON CROWN" : "THE CHRONICLE CLOSES"}</span><h1>${copy.title}</h1><div class="story-body"><p>${copy.text}</p><p class="ending-style"><b>本局统治风格：${STYLES[currentStyle(s)].short}</b></p></div><div class="ending-stats"><div><b>${turnOf(s) + 1}</b><span>经过季度</span></div><div><b>${ownTerritoryIds(s).length}</b><span>最终领地</span></div><div><b>${s.wins}</b><span>胜场</span></div><div><b>${ownedOfficers(s).length}</b><span>最终家臣</span></div></div><button id="endingRestart" class="primary-btn" type="button">重新继承渡鸦堡</button>`;
+  $("endingBody").innerHTML = `<span class="eyebrow">${victory ? "THE IRON CROWN" : "THE CHRONICLE CLOSES"}</span><h1>${copy.title}</h1><div class="story-body"><p>${copy.text}</p><div class="ending-chronicle">${endingChronicle(s)}</div><p class="ending-style"><b>本局统治风格：${STYLES[currentStyle(s)].short}</b></p></div><div class="ending-stats"><div><b>${turnOf(s) + 1}</b><span>经过季度</span></div><div><b>${ownTerritoryIds(s).length}</b><span>最终领地</span></div><div><b>${s.wins}</b><span>胜场</span></div><div><b>${ownedOfficers(s).length}</b><span>最终家臣</span></div></div><button id="endingRestart" class="primary-btn" type="button">重新继承渡鸦堡</button>`;
   $("endingRestart").addEventListener("click", () => {
     if (confirm("删除当前存档并重新开始？")) { deleteSave(); S = null; showMenu(); }
   });
@@ -848,7 +910,7 @@ function lockZoom() {
 
 function startWorldClock() {
   if (worldTimer) clearInterval(worldTimer);
-  worldTimer = setInterval(() => updateWorldTime(Date.now()), TIME_CONFIG.uiTickMs);
+  worldTimer = setInterval(() => updateWorldTime(worldNow()), TIME_CONFIG.uiTickMs);
 }
 
 function boot() {
@@ -859,10 +921,10 @@ function boot() {
   document.addEventListener("visibilitychange", () => {
     if (!S || S.ended) return;
     if (document.hidden) {
-      hiddenAt = Date.now();
+      hiddenAt = worldNow();
       if (pauseWorld(S, "away", hiddenAt)) { saveGame(); renderTop(); }
     } else {
-      const resumedAt = Date.now();
+      const resumedAt = worldNow();
       hiddenAt = 0;
       catchUpOffline(S, resumedAt);          // 被强杀的兜底；有 pauseState 时不做事
       if (S.pauseState?.reason === "away") { renderAll(); return; }
@@ -876,6 +938,7 @@ function boot() {
     $("difficultyPicker").querySelectorAll("button").forEach(other => other.classList.toggle("active", other === button));
   }));
   $("startGameBtn")?.addEventListener("click", () => {
+    setWorldSpeed(1, Date.now());
     S = createInitialState($("playerName").value, "oath", creatorDifficulty);
     prologueIndex = 0;
     $("creator").classList.add("hidden");
@@ -901,13 +964,20 @@ function boot() {
     if (S.pendingDecisions.length) { toast("先处理厅上等着的那件事"); return; }
     const reason = S.pauseState?.reason;
     if (reason === "manual" || reason === "away") {
-      resumeWorld(S, Date.now());
+      resumeWorld(S, worldNow());
       toast("世界继续推进");
     } else if (!S.pauseState) {
-      pauseWorld(S, "manual", Date.now());
+      pauseWorld(S, "manual", worldNow());
       toast("世界已暂停，关页也不会推进");
     } else return;
     saveGame(); renderAll();
+  });
+  $("speedBtn")?.addEventListener("click", () => {
+    if (!S || S.ended) return;
+    const next = WORLD_SPEEDS[(WORLD_SPEEDS.indexOf(worldSpeed()) + 1) % WORLD_SPEEDS.length];
+    setWorldSpeed(next, Date.now());
+    toast(next === 1 ? "回到实时" : `时间 ${next} 倍速`);
+    saveGame(); renderTop();
   });
   $("saveBtn")?.addEventListener("click", () => { if (saveGame()) toast("进度已保存在本机"); });
   $("restartBtn")?.addEventListener("click", () => {

@@ -194,39 +194,66 @@ assert.equal(game.crownAccessMet(cw), true, "切断公爵大道后应开城");
 assert.ok(game.DUCHY_HOLDINGS.includes(game.CROWN_GATE_HOLDING));
 assert.equal(game.DUCHY_HOLDINGS.length, 3, "三块直辖地仍是加冕推迟的目标");
 
-// 说服阻力 = defiance − (正统性×0.4 + 好感×0.4 + 邻近压力×1.2) × routes.persuade
-// 邻近压力是主导项：说服要建立在武力威慑之上，不能靠使者刷好感刷出来。
+// 说服阻力 = defiance − (邻近压力×1.2 + 正统性×0.4 + 开价杠杆) × routes.persuade
+// 开价杠杆只有在「他要的东西做到了」才有；否则为 0。邻近压力仍是主导项。
 const rs = game.createInitialState("阻力", "oath", "standard");
 rs.legitimacy = 0;
-rs.officers.find(o => o.id === "ysabel").rapport = 0;
-assert.equal(game.lordResistance(rs, "ysabel"), 45, "无正统性无好感时阻力等于 defiance");
+assert.equal(game.lordResistance(rs, "ysabel"), 45, "无正统性、开价未做到时阻力等于 defiance");
 
-rs.legitimacy = 50;
+rs.legitimacy = 40;
 const withLegit = game.lordResistance(rs, "ysabel");
-assert.ok(withLegit < 45, "正统性应降低阻力");
-assert.ok(Math.abs(withLegit - (45 - 50 * 0.4 * 1.3)) < 0.01, `阻力公式不符，实际 ${withLegit}`);
+assert.ok(Math.abs(withLegit - (45 - 40 * 0.4)) < 0.01, `阻力公式不符，实际 ${withLegit}`);
+assert.equal(game.lordPrice(rs, "ysabel").met, false, "正统性 40 时伊莎贝尔的开价（50）未做到");
+rs.legitimacy = 50;
+assert.equal(game.lordPrice(rs, "ysabel").met, true, "正统性到 50 即做到伊莎贝尔的开价");
+assert.ok(Math.abs(game.lordResistance(rs, "ysabel") - (45 - 50 * 0.4 - game.LORD_PRICES.ysabel.leverage)) < 0.01, "开价做到后加上她的杠杆");
 
-// 邻近压力必须比好感更能压低阻力，否则「以武力统治为主」只是一句文案。
-const lever = game.createInitialState("杠杆对比", "oath", "standard");
-lever.legitimacy = 0;
-const leverLord = lever.officers.find(o => o.id === "ysabel");
-leverLord.rapport = game.ENVOY_RAPPORT_CAP;              // 使者刷到封顶
-const byRapport = game.lordResistance(lever, "ysabel");
-leverLord.rapport = 0;
-lever.territories[game.lordHoldings(lever, "ysabel")[0]] // 换成军事包围
-  && Object.keys(game.TERRITORY_DEFS).forEach(id => {
-    const holds = new Set(game.lordHoldings(lever, "ysabel"));
-    if (!holds.has(id) && [...holds].some(h => game.TERRITORY_DEFS[h].adj.includes(id)) && lever.territories[id]) {
-      lever.territories[id].owner = "player";
-    }
-  });
-const byPressure = game.lordResistance(lever, "ysabel");
-assert.ok(byPressure < byRapport,
-  `满额邻近压力应比刷满好感更能压低阻力，实际 压力${byPressure} vs 好感${byRapport}`);
+// 开价未做到是硬门槛：阻力压到零也不宣誓
+// 卢卡（王渡，贪财）的开价是金库 160；两面包围 + 正统性 100 能把阻力压到零，但金库空着
+const gate = game.createInitialState("硬门槛", "oath", "standard");
+gate.legitimacy = 100;
+gate.gold = 10;
+["crownvale", "riverwatch"].forEach(id => { gate.territories[id].owner = "player"; gate.territories[id].lordId = null; });
+assert.ok(game.lordResistance(gate, "luca") <= 0, "两面 + 正统 100 应把卢卡的阻力压到零");
+assert.equal(game.lordPrice(gate, "luca").met, false, "金库空着，开价未做到");
+assert.equal(game.canPersuadeLord(gate, "luca"), false, "开价没做到，阻力再低也免谈");
+gate.gold = 160;
+assert.equal(game.lordPrice(gate, "luca").met, true);
+assert.equal(game.canPersuadeLord(gate, "luca"), true, "开价做到后即可说服");
+
+// 每种开价各验一种
+const pr = game.createInitialState("开价", "oath", "standard");
+assert.equal(game.lordPrice(pr, "bran").def.kind, "none", "布兰不谈");
+assert.equal(game.LORD_DEFS.bran.routes.persuade, 0, "布兰 persuade 为 0");
+assert.equal(game.lordPrice(pr, "renard").met, false);
+pr.victories = ["ashfield"];                                  // 灰麦原与灰门相邻
+assert.equal(game.lordPrice(pr, "renard").met, true, "在雷纳德辖地邻边打赢一仗即做到");
+assert.equal(game.lordPrice(pr, "aveline").met, false);
+pr.territories.crossford.owner = "player"; pr.territories.crossford.lordId = null;
+assert.equal(game.lordPrice(pr, "aveline").met, true, "拿下十字渡即做到艾芙琳的开价");
+pr.renown = 60;
+assert.equal(game.lordPrice(pr, "edmund").met, true, "威望 60 做到埃德蒙的开价");
+assert.equal(game.lordPrice(pr, "roderic").met, false);
+pr.gold = 10;
+assert.equal(game.payLordPrice(pr, "roderic"), false, "钱不够付不了欠饷");
+pr.gold = 100;
+assert.ok(game.payLordPrice(pr, "roderic"));
+assert.equal(pr.gold, 10, "付清 90 金");
+assert.equal(game.lordPrice(pr, "roderic").met, true);
+assert.equal(game.payLordPrice(pr, "roderic"), false, "不能重复付");
+// 原型开价
+assert.equal(game.lordPrice(pr, "harald").def.kind, "liege_down");
+assert.equal(game.lordPrice(pr, "harald").met, false, "布兰还在，哈拉尔不换旗");
+pr.officers.find(o => o.id === "bran").side = "gone";
+assert.equal(game.lordPrice(pr, "harald").met, true, "主君除名后做到");
+assert.equal(game.lordPrice(pr, "selma").def.kind, "treasury");
+pr.gold = 160;
+assert.equal(game.lordPrice(pr, "selma").met, true, "金库 160 做到贪财者的开价");
+assert.equal(game.lordPrice(pr, "morton").def.kind, "neighbour");
+assert.equal(game.lordPrice(pr, "otto").def.kind, "besieged");
 
 // 摄政公爵 persuade 为 0，阻力恒等于 defiance
 rs.legitimacy = 100;
-rs.officers.find(o => o.id === "regent").rapport = 100;
 assert.equal(game.lordResistance(rs, "regent"), game.LORD_DEFS.regent.defiance, "摄政公爵不可被说服");
 
 // 邻近压力
@@ -246,8 +273,7 @@ assert.equal(game.adjacencyPressure(ap, "selma"), 0, "已失去全部辖地的�
 // 阻力归零即可要求效忠
 const rd = game.createInitialState("可说服", "oath", "standard");
 rd.legitimacy = 100;
-rd.officers.find(o => o.id === "ysabel").rapport = 40;
-assert.ok(game.lordResistance(rd, "ysabel") <= 0, "高正统性 + 高好感应把伊莎贝尔的阻力压到零");
+assert.ok(game.lordResistance(rd, "ysabel") <= 0, "高正统性（开价已做到）应把伊莎贝尔的阻力压到零");
 assert.equal(game.canPersuadeLord(rd, "ysabel"), true);
 assert.equal(game.canPersuadeLord(rd, "regent"), false, "公爵永远不可说服");
 
@@ -276,49 +302,44 @@ const dup = game.createInitialState("重复归附", "oath", "standard");
 assert.ok(game.submitLord(dup, "selma", "persuade"));
 assert.equal(game.submitLord(dup, "selma", "persuade"), false, "不能重复归附");
 
-// 使者提高个人好感，冷却用时间戳而非「本季已用」
+// 使者：一局对每人只派一次，作用是探开价
 const en = game.createInitialState("使者", "oath", "standard");
 en.gold = 500;
 assert.deepEqual(Object.keys(game.CITY_ACTION_DEFS).sort(), ["envoy", "scout"], "说服路线恢复使者行动");
 const selmaE = en.officers.find(o => o.id === "selma");
-assert.equal(selmaE.rapport, 0);
+assert.equal(game.lordPrice(en, "selma").known, false, "没派使者前不知道开价");
+assert.ok(game.lordRouteStatus(en, "selma").persuade.detail.includes("？？？"), "界面应显示 ？？？");
 assert.ok(game.cityAction(en, "ashfield", "envoy"), "对叛臣领地应可派使者");
 game.processCompletedJobs(en, en.jobs.at(-1).endAt);
-assert.equal(selmaE.rapport, 8, "一次使者 +8 好感");
-assert.ok(en.cooldowns["envoy:ashfield"] > Date.now(), "使者应写入冷却到期时间戳");
-assert.equal(game.cityActionAvailable(en, "ashfield", "envoy"), false, "冷却期内不可再派");
+assert.equal(selmaE.envoyed, true);
+assert.equal(game.lordPrice(en, "selma").known, true, "使者回来即知道开价");
+assert.equal(game.cityActionAvailable(en, "ashfield", "envoy"), false, "同一人不可再派");
 assert.equal(en.seasonLocks, undefined, "不得引入任何按季的锁");
+assert.equal(selmaE.rapport, 0, "使者不再刷好感");
 
-// 好感有上限：单靠使者堆不到能说服布兰的程度
-const cap = game.createInitialState("好感上限", "oath", "standard");
+// 使者对不谈的人也能去（回来挨一句骂），但说不动
+const cap = game.createInitialState("不谈", "oath", "standard");
 cap.gold = 5000;
-const branC = cap.officers.find(o => o.id === "bran");
-for (let i = 0; i < 20; i++) {
-  cap.cooldowns["envoy:highpass"] = 0;
-  if (!game.cityAction(cap, "highpass", "envoy")) break;
-  game.processCompletedJobs(cap, cap.jobs.at(-1).endAt);
-}
-assert.ok(branC.rapport <= 40, `单靠使者好感上限为 40，实际 ${branC.rapport}`);
-assert.ok(game.lordResistance(cap, "bran") > 0, "只靠使者说不动布兰");
+assert.ok(game.cityAction(cap, "highpass", "envoy"), "使者能去布兰那里");
+game.processCompletedJobs(cap, cap.jobs.at(-1).endAt);
+assert.ok(game.lordResistance(cap, "bran") > 0, "布兰说不动");
+assert.equal(game.canPersuadeLord(cap, "bran"), false);
 
-// 对自己的领地和摄政公爵的王城不派使者
+// 对自己的领地不派使者
 assert.equal(game.cityActionAvailable(en, "ravenstone", "envoy"), false, "不对自己的领地派使者");
-assert.equal(game.cityActionAvailable(en, "crownvale", "envoy"), false, "篡位者不接受使者");
 
-// 归还俘虏骑士也能提高其原主君的好感
+// 归还俘虏骑士提高正统性
 const rk = game.createInitialState("归还骑士", "oath", "standard");
 const cap13 = rk.knights.find(k => k.id === "knight_13");
 cap13.status = "captured"; cap13.captured = true;
-const selmaR = rk.officers.find(o => o.id === "selma");
-assert.equal(selmaR.rapport, 0);
+const rkLegit = rk.legitimacy;
 assert.ok(game.knightAction("knight_13", "release", rk));
 game.processCompletedJobs(rk, rk.jobs.at(-1).endAt);
-assert.equal(selmaR.rapport, 12, "归还俘虏骑士 +12 好感");
+assert.ok(rk.legitimacy > rkLegit, "归还俘虏骑士 +正统性");
 
 // 要求效忠：阻力归零才成立，成功后 +6 正统性
 const df = game.createInitialState("要求效忠", "oath", "standard");
 df.legitimacy = 100;
-df.officers.find(o => o.id === "ysabel").rapport = 40;
 assert.ok(game.lordResistance(df, "ysabel") <= 0);
 const fealtyLegitBefore = df.legitimacy;
 assert.ok(game.demandFealty(df, "ysabel"));
@@ -356,7 +377,7 @@ assert.equal(bb2.gold, 99999, "对不可收买者也不应扣钱");
 // 大叛臣归附后，附庸做跟随判定
 const fl = game.createInitialState("附庸跟随", "oath", "standard");
 fl.legitimacy = 100;
-game.lordVassals(fl, "bran").forEach(v => { v.rapport = 100; });
+fl.gold = 500;
 assert.ok(game.lordVassals(fl, "bran").length >= 4, "布兰应有多名附庸");
 game.submitLord(fl, "bran", "persuade", () => 0.01);
 const followed = fl.officers.filter(o => game.LORD_DEFS[o.id]?.liege === "bran" && o.side === "player");
@@ -392,21 +413,20 @@ assert.equal(lg.legitimacy, lgBefore, "未知理由不应改动数值");
 // 三条路线的可用性要能被 UI 查询到，且各自给出明确的缺口说明
 const ui = game.createInitialState("界面", "oath", "standard");
 const opts = game.lordRouteStatus(ui, "selma");
-assert.deepEqual(Object.keys(opts).sort(), ["bribe", "force", "persuade"]);
+assert.deepEqual(Object.keys(opts).sort(), ["bribe", "force", "persuade", "price"]);
 assert.equal(opts.persuade.available, false, "开局阻力未清，说服不可用");
-assert.ok(opts.persuade.detail.includes("阻力"), `说服应说明还差多少阻力，实际：${opts.persuade.detail}`);
+assert.ok(opts.persuade.detail.includes("开价"), `说服应说明开价，实际：${opts.persuade.detail}`);
 assert.ok(opts.bribe.detail.includes("金"), `收买应给出价格，实际：${opts.bribe.detail}`);
 
 const uiReady = game.createInitialState("界面2", "oath", "standard");
 uiReady.legitimacy = 100;
-uiReady.officers.find(o => o.id === "ysabel").rapport = 40;
 assert.equal(game.lordRouteStatus(uiReady, "ysabel").persuade.available, true, "阻力归零后说服应可用");
 
 // 公爵三条路里只有武力
 const duke = game.lordRouteStatus(ui, "regent");
 assert.equal(duke.persuade.available, false);
 assert.equal(duke.bribe.available, false);
-assert.ok(duke.persuade.detail.includes("篡位"), `公爵应明说不可说服，实际：${duke.persuade.detail}`);
+assert.ok(duke.persuade.detail.includes("只能打"), `公爵应明说不可说服，实际：${duke.persuade.detail}`);
 
 // ── 封地承诺：收买时许下的地，到期要么兑现要么背弃 ────────────────────
 // 此前 promisedFief 只被写入、迁移里维护，没有任何地方读它；
@@ -444,7 +464,7 @@ assert.ok(duke.persuade.detail.includes("篡位"), `公爵应明说不可说服�
   const keep = pledge();
   keep.s.clock.elapsedMs = keep.lord.promisedAt + game.FIEF_PROMISE_DUE_MS;
   game.queueSeasonEvents(keep.s);
-  const keepView = game.decisionView(keep.s, keep.s.pendingDecisions.at(-1));
+  const keepView = game.decisionView(keep.s, keep.s.pendingDecisions.find(d => d.type === "fief_promise"));
   const goldBefore = game.territoryOutput(keep.s, keep.seat).gold;
   const legitBefore = keep.s.legitimacy;
   keepView.options[0].effect();
@@ -459,7 +479,7 @@ assert.ok(duke.persuade.detail.includes("篡位"), `公爵应明说不可说服�
   const brk = pledge();
   brk.s.clock.elapsedMs = brk.lord.promisedAt + game.FIEF_PROMISE_DUE_MS;
   game.queueSeasonEvents(brk.s);
-  const brkView = game.decisionView(brk.s, brk.s.pendingDecisions.at(-1));
+  const brkView = game.decisionView(brk.s, brk.s.pendingDecisions.find(d => d.type === "fief_promise"));
   const brkGold = game.territoryOutput(brk.s, brk.seat).gold;
   const brkLegit = brk.s.legitimacy;
   const brkGrievance = brk.lord.grievance;

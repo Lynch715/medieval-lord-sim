@@ -28,7 +28,45 @@ const uiDraft = {
   map: { scrollLeft: 0 }
 };
 
+// 时间倍速。引擎里所有「现在几点」都走 worldNow()，它是一条虚拟时间轴：
+//   worldNow = 真实时刻 + offset + (真实时刻 − realAt) × (speed − 1)
+// 任务到期、计时器、冷却、时钟的 lastProcessedAt 全在这条轴上，所以 2× 时
+// 三十秒的建设真的十五秒完成，倒计时也跟着跑。speed 为 1 且 offset 为 0 时
+// worldNow 严格等于 Date.now()，测试台接管 Date.now 的做法因此原样有效。
+// 读档时要 alignWorldClock：存档里的时间戳可能领先真实时钟几个小时（4× 玩了一小时
+// 就领先三小时），必须把轴对回 lastProcessedAt，否则所有任务都要多等那三小时。
+const WORLD_CLOCK = { offset: 0, realAt: 0, speed: 1 };
+const WORLD_SPEEDS = [1, 2, 4];
+function worldNow(real = Date.now()) {
+  return real + WORLD_CLOCK.offset + (WORLD_CLOCK.speed === 1 ? 0 : (real - WORLD_CLOCK.realAt) * (WORLD_CLOCK.speed - 1));
+}
+function setWorldSpeed(speed, real = Date.now()) {
+  const next = WORLD_SPEEDS.includes(speed) ? speed : 1;
+  const virtual = worldNow(real);
+  WORLD_CLOCK.offset = virtual - real;
+  WORLD_CLOCK.realAt = real;
+  WORLD_CLOCK.speed = next;
+  if (S?.clock) S.clock.speed = next;
+  return next;
+}
+function alignWorldClock(s, real = Date.now()) {
+  const target = s?.pauseState?.pausedAt ?? s?.clock?.lastProcessedAt;
+  const speed = WORLD_SPEEDS.includes(s?.clock?.speed) ? s.clock.speed : 1;
+  if (!Number.isFinite(target)) { WORLD_CLOCK.speed = speed; return; }
+  WORLD_CLOCK.offset = target - real;
+  WORLD_CLOCK.realAt = real;
+  WORLD_CLOCK.speed = speed;
+}
+function worldSpeed() { return WORLD_CLOCK.speed; }
+
 const $ = id => typeof document === "undefined" ? null : document.getElementById(id);
+// 本局的账：结局页要把这一局做过的事一条条念出来，所以处置、承诺、归附方式都记下来。
+const DEED_KEYS = ["executed", "exiled", "ransomed", "sworn", "persuaded", "bribed", "kept", "broken"];
+const recordDeed = (s, key, lordId) => {
+  if (!s || !DEED_KEYS.includes(key) || !lordId) return;
+  s.deeds ||= {};
+  (s.deeds[key] ||= []).push(lordId);
+};
 const clamp = (n, min = 0, max = 100) => Math.max(min, Math.min(max, n));
 const esc = value => String(value ?? "").replace(/[&<>'"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -93,11 +131,11 @@ function availableKnights(s) {
   return (s?.knights || []).filter(knight => knight.status === "available" && knight.side === "neutral" && !knight.liegeLordId);
 }
 
-function makeClock(elapsedMs = 0, now = Date.now()) {
-  return { startedAt: now, elapsedMs: Math.max(0, Math.round(elapsedMs)), lastProcessedAt: now };
+function makeClock(elapsedMs = 0, now = worldNow()) {
+  return { startedAt: now, elapsedMs: Math.max(0, Math.round(elapsedMs)), lastProcessedAt: now, speed: 1 };
 }
 
-function initClock(s, now = Date.now()) {
+function initClock(s, now = worldNow()) {
   if (!s) return null;
   s.clock = makeClock(0, now);
   return s.clock;
@@ -112,7 +150,7 @@ function getSeasonRemainingMs(s) {
   return TIME_CONFIG.seasonDurationMs - (elapsed % TIME_CONFIG.seasonDurationMs);
 }
 
-function initTimers(s, now = Date.now()) {
+function initTimers(s, now = worldNow()) {
   s.timers = {};
   Object.entries(TIMER_DEFS).forEach(([key, def]) => { s.timers[key] = { nextAt: now + def.intervalMs }; });
   return s.timers;
@@ -286,11 +324,11 @@ function recruitmentTerritoryId(s) {
   return army && army.owner === "player" && army.status === "idle" && owns(s, army.locationId) ? army.locationId : primaryTerritoryId(s);
 }
 
-function getJobRemainingMs(job, now = Date.now()) {
+function getJobRemainingMs(job, now = worldNow()) {
   return Math.max(0, (job?.endAt || now) - now);
 }
 
-function pauseWorld(s, reason = "event", now = Date.now()) {
+function pauseWorld(s, reason = "event", now = worldNow()) {
   if (!s || s.pauseState) return false;
   s.pauseState = { pausedAt: now, reason };
   return true;
@@ -309,7 +347,7 @@ function shiftScheduled(s, delta) {
   return delta;
 }
 
-function resumeWorld(s, now = Date.now()) {
+function resumeWorld(s, now = worldNow()) {
   if (!s?.pauseState) return false;
   shiftScheduled(s, Math.max(0, now - s.pauseState.pausedAt));
   if (s.clock) s.clock.lastProcessedAt = now;
@@ -320,7 +358,7 @@ function resumeWorld(s, now = Date.now()) {
 function startJob(s, job = {}) {
   if (!s) return null;
   s.jobs ||= [];
-  const now = Number.isFinite(job.startedAt) ? job.startedAt : Date.now();
+  const now = Number.isFinite(job.startedAt) ? job.startedAt : worldNow();
   const endAt = Number.isFinite(job.endAt) ? job.endAt : now + Math.max(0, job.durationMs || 0);
   const record = {
     id: job.id || `job_${now}_${Math.random().toString(36).slice(2, 8)}`,
@@ -337,7 +375,7 @@ function startJob(s, job = {}) {
   return record;
 }
 
-function finishJob(s, job, now = Date.now(), rng = Math.random) {
+function finishJob(s, job, now = worldNow(), rng = Math.random) {
   if (!job || job.status !== "running") return false;
   job.status = "completed";
   job.completedAt = now;
@@ -349,7 +387,7 @@ function cancelJob(s, jobId) {
   const job = (s?.jobs || []).find(item => item.id === jobId && item.status === "running");
   if (!job) return false;
   job.status = "cancelled";
-  job.cancelledAt = Date.now();
+  job.cancelledAt = worldNow();
   if (job.type === "MARCH") {
     const groupIds = job.payload?.armyIds || [job.armyId];
     groupIds.map(id => armyEntity(s, id)).filter(Boolean).forEach(army => { army.destinationId = null; army.status = "idle"; army.jobId = null; });
@@ -357,7 +395,7 @@ function cancelJob(s, jobId) {
   return true;
 }
 
-function processCompletedJobs(s, now = Date.now(), rng = Math.random) {
+function processCompletedJobs(s, now = worldNow(), rng = Math.random) {
   let completed = 0;
   (s?.jobs || []).slice().sort((a, b) => a.endAt - b.endAt).forEach(job => {
     if (job.status === "running" && getJobRemainingMs(job, now) <= 0 && finishJob(s, job, now, rng)) completed++;
@@ -365,7 +403,7 @@ function processCompletedJobs(s, now = Date.now(), rng = Math.random) {
   return completed;
 }
 
-function startArmyRecovery(s, army, durationMs = JOB_CONFIG.RECOVER.durationMs, now = Date.now()) {
+function startArmyRecovery(s, army, durationMs = JOB_CONFIG.RECOVER.durationMs, now = worldNow()) {
   if (!s || !army) return null;
   const existing = army.jobId && (s.jobs || []).find(job => job.id === army.jobId && job.status === "running");
   if (existing) return existing;
@@ -427,7 +465,6 @@ function applyCompletedJob(s, job, rng = Math.random) {
       knight.side = "neutral";
       knight.liegeLordId = null;
       if (formerLiege && formerLiege.side !== "player" && formerLiege.side !== "gone") {
-        formerLiege.rapport = Math.min(100, (formerLiege.rapport || 0) + RELEASE_RAPPORT_GAIN);
         gainLegitimacy(s, "returnKnight");
         log(s, "good", `${formerLiege.name}听说你放回了他的骑士，对渡鸦家的态度缓和了。`);
       }
@@ -498,7 +535,7 @@ function applyCompletedJob(s, job, rng = Math.random) {
     // AI 抵达非自家领地即交战：打玩家是袭击，打中立割据是吞并。
     const arrivedOwner = s.territories[destinationId]?.owner;
     if (army.owner !== "player" && (arrivedOwner === "player" || arrivedOwner === "neutral")) {
-      const arrivedAt = job.completedAt || Date.now();
+      const arrivedAt = job.completedAt || worldNow();
       const result = resolveAIAttack(s, army, destinationId, rng, originId, arrivedAt);
       if (result !== "captured") army.locationId = originId;
       startArmyRecovery(s, army, result === "captured" ? 110 * 1000 : 90 * 1000, arrivedAt);

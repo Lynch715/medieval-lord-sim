@@ -325,3 +325,44 @@ assert.notEqual(co4.endingReason, "minor_lord");
 }
 
 console.log("clock tests passed");
+
+// ── 时间倍速：虚拟时间轴 ────────────────────────────────────────────
+{
+  const realNow = Date.now;
+  let real = 5_000_000;
+  Date.now = () => real;
+  try {
+    assert.equal(game.worldNow(), real, "1× 且未调过速时 worldNow 严格等于 Date.now");
+    const s = game.createInitialState("倍速", "oath", "standard");
+    game.startJob(s, { type: "BUILD", territoryId: "ravenstone", durationMs: 30 * 1000, queueKey: "build:ravenstone", startedAt: game.worldNow() });
+    const job = s.jobs.at(-1);
+    game.setWorldSpeed(2);
+    assert.equal(s.clock.speed, 1, "setWorldSpeed 只写当前 S；这里 S 为空，存档里仍是 1");
+    real += 10_000;
+    assert.equal(game.worldNow(), 5_000_000 + 20_000, "2× 下真实 10 秒等于虚拟 20 秒");
+    assert.equal(game.getJobRemainingMs(job), 10_000, "30 秒的建设在 2× 下 10 秒后只剩 10 秒");
+    real += 5_000;
+    game.advanceWorld(s, game.worldNow(), { rng: () => 0.5 });
+    assert.equal(job.status, "completed", "真实 15 秒后建设完成");
+    assert.equal(s.clock.elapsedMs, 30_000, "世界时间走了 30 秒");
+    // 切回 1× 时轴不跳
+    const before = game.worldNow();
+    game.setWorldSpeed(1);
+    assert.equal(game.worldNow(), before, "切速那一刻虚拟时间连续");
+    real += 1_000;
+    assert.equal(game.worldNow(), before + 1_000, "1× 下一秒就是一秒");
+
+    // 读档对轴：存档时间戳领先真实时钟三小时，对回去之后不多等
+    const saved = game.createInitialState("对轴", "oath", "standard");
+    saved.clock.lastProcessedAt = real + 3 * 3600 * 1000;
+    saved.clock.speed = 4;
+    game.alignWorldClock(saved, real);
+    assert.equal(game.worldNow(), saved.clock.lastProcessedAt, "对轴后 worldNow 落在 lastProcessedAt 上");
+    assert.equal(game.worldSpeed(), 4, "读档恢复倍速");
+    game.setWorldSpeed(1);
+    game.WORLD_CLOCK.offset = 0; game.WORLD_CLOCK.realAt = 0;
+  } finally {
+    Date.now = realNow;
+  }
+}
+console.log("clock.test speed ok");

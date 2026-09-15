@@ -84,6 +84,9 @@ function diplomacy(state) {
     const lord = state.officers.find(o => o.id === id);
     if (!lord || lord.side === "player" || lord.side === "gone" || lord.captured) continue;
     if (game.demandFealty(state, id)) { used.persuade++; continue; }
+    // 开价是 gold 的，钱宽裕就付
+    const price = game.lordPrice(state, id);
+    if (price.known && price.def?.kind === "gold" && !lord.pricePaid && state.gold > price.def.value + 80) game.payLordPrice(state, id);
     const cost = game.lordBribeCost(state, id);
     if (Number.isFinite(cost) && state.gold > cost + 120) {
       if (game.bribeLord(state, id, game.lordHoldings(state, id)[0] || null)) { used.bribe++; continue; }
@@ -169,7 +172,7 @@ function run(seed) {
     siegeTech: game.techCompleted(state, "war_engineering"), gold: Math.round(state.gold), grain: Math.round(state.grain),
     // 缺粮次数直接数日志：applyShortage 是唯一写这句话的地方，
     // 比在状态上另加计数器可靠，也不用改被测代码。
-    shortages: state.log.filter(entry => entry.text.includes("粮仓见底")).length,
+    shortages: state.log.filter(entry => entry.text.includes("粮仓空了")).length,
     submittedLords: state.officers.filter(o => o.submitted).length,
     persuaded: diploTally.persuade, bribed: diploTally.bribe, envoys: diploTally.envoy
   };

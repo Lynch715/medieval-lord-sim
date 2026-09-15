@@ -24,7 +24,7 @@ function createInitialState(name, startingStyle, difficulty) {
       id, ...clone(d), side, recruitable: false,
       name: id === "player" ? (name.trim() || "罗恩") : d.name,
       loyalty: d.loyalty, ambition: d.ambition, grievance: 0, merit: 0, injured: 0, fief: null,
-      captured: false, rapport: 0, submitted: false, promisedFief: null
+      captured: false, rapport: 0, submitted: false, promisedFief: null, envoyed: false, priceKnown: false, pricePaid: false
     };
   });
   const style = { oath: 0, iron: 0, wealth: 0 };
@@ -62,6 +62,10 @@ function createInitialState(name, startingStyle, difficulty) {
     battleLog: [],
     battleSession: null,
     pendingDecisions: [],
+    victories: [],
+    deeds: {},
+    eventSeenAt: {},
+    lastWorldEventMs: null,
     seenEvents: [],
     seenNpcEvents: [],
     flags: { firstWinter: false, cousinDemand: false, taxDemand: false },
@@ -73,11 +77,11 @@ function createInitialState(name, startingStyle, difficulty) {
   ensureAIFactions(state);
   initClock(state);
   initTimers(state, state.clock.startedAt);
-  log(state, "info", `${state.playerName}在雨夜接过渡鸦堡的领主印戒。`);
+  log(state, "info", `${state.playerName}在雨夜戴上了渡鸦堡的印戒。`);
   return state;
 }
 
-function migrateV1ToV2(raw, now = Date.now()) {
+function migrateV1ToV2(raw, now = worldNow()) {
   const migrated = clone(raw);
   migrated.version = 2;
   delete migrated.ap;
@@ -132,7 +136,7 @@ function migrateV2ToV3(raw) {
   return migrated;
 }
 
-function migrateV3ToV4(raw, now = Date.now()) {
+function migrateV3ToV4(raw, now = worldNow()) {
   const migrated = clone(raw);
   migrated.version = 4;
   // 由旧的 turn 反推 elapsedMs，保证季节与年份不跳变
@@ -152,7 +156,7 @@ function migrateV3ToV4(raw, now = Date.now()) {
   return migrated;
 }
 
-function migrateV4ToV5(raw, now = Date.now()) {
+function migrateV4ToV5(raw, now = worldNow()) {
   const migrated = clone(raw);
   migrated.version = 5;
   // 危机从「连续 N 季」折算为毫秒累计，每档按一季 5 分钟计
@@ -210,7 +214,7 @@ function migrateV7ToV8(raw) {
   return migrated;
 }
 
-function migrateSave(raw, now = Date.now()) {
+function migrateSave(raw, now = worldNow()) {
   if (!raw) return null;
   let migrated = clone(raw);
   if (migrated.version === 1 || migrated.version == null) migrated = migrateV1ToV2(migrated, now);
@@ -232,7 +236,7 @@ function hydrateLatest(raw) {
   if (!raw || raw.version !== VERSION) return null;
   raw.selectedTerritoryId ||= "ravenstone";
   raw.clock ||= makeClock(0);
-  raw.timers ||= initTimers(raw, Date.now());
+  raw.timers ||= initTimers(raw, worldNow());
   raw.pauseState ||= null;
   raw.jobs = Array.isArray(raw.jobs) ? raw.jobs : [];
   raw.knowledge ??= 12;
@@ -249,6 +253,9 @@ function hydrateLatest(raw) {
   delete raw.cityRelations;
   delete raw.cityTradeposts;
   raw.pendingDecisions ||= [];
+  raw.victories ||= [];
+  raw.deeds ||= {};
+  raw.eventSeenAt ||= {};
   raw.seenEvents ||= [];
   raw.seenNpcEvents ||= [];
   raw.officers ||= [];
@@ -309,7 +316,7 @@ raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight
   delete raw.crisis.debt;
   delete raw.crisis.unrest;
   delete raw.crisis.checkedTurn;
-  raw.officers.forEach(o => { o.grievance ??= 0; o.merit ??= 0; o.injured ??= 0; o.fief ??= null; o.rapport ??= 0; o.promisedFief ??= null; o.promisedAt ??= (o.promisedFief ? 0 : null); if (o.liege === undefined) o.liege = LORD_DEFS[o.id]?.liege ?? null; });
+  raw.officers.forEach(o => { o.grievance ??= 0; o.merit ??= 0; o.injured ??= 0; o.fief ??= null; o.rapport ??= 0; o.envoyed ??= false; o.priceKnown ??= false; o.pricePaid ??= false; o.promisedFief ??= null; o.promisedAt ??= (o.promisedFief ? 0 : null); if (o.liege === undefined) o.liege = LORD_DEFS[o.id]?.liege ?? null; });
   // 旧存档曾把玩家称为“主将”。迁移时同步为领主称谓，避免旧文案继续污染新界面。
   const playerOfficer = raw.officers.find(o => o.id === "player");
   if (playerOfficer) {
@@ -396,7 +403,8 @@ function loadGame() {
   try {
     const loaded = hydrateState(JSON.parse(localStorage.getItem(SAVE_KEY)));
     if (!loaded) return null;
-    catchUpOffline(loaded, Date.now());
+    alignWorldClock(loaded, Date.now());
+    catchUpOffline(loaded, worldNow());
     return loaded;
   }
   catch (_) { return null; }
@@ -587,7 +595,7 @@ function upgradeBuilding(id, type) {
   startJob(S, {
     type: "BUILD",
     territoryId: id,
-    startedAt: Date.now(),
+    startedAt: worldNow(),
     durationMs: JOB_CONFIG.BUILD.durationMs,
     queueKey: `build:${id}`,
     payload: { buildingType: type, targetLevel, cost }
@@ -612,7 +620,7 @@ function canRecruitUnit(s, type, territoryId = recruitmentTerritoryId(s)) {
   return true;
 }
 
-function queueRecruitment(s, type, territoryId = recruitmentTerritoryId(s), now = Date.now()) {
+function queueRecruitment(s, type, territoryId = recruitmentTerritoryId(s), now = worldNow()) {
   if (!s || !canRecruitUnit(s, type, territoryId)) return null;
   const unit = UNIT_DEFS[type];
   const amount = recruitAmount(s, type, territoryId);
@@ -628,7 +636,7 @@ function queueRecruitment(s, type, territoryId = recruitmentTerritoryId(s), now 
   });
 }
 
-function queueResearch(s, branch, techId, now = Date.now()) {
+function queueResearch(s, branch, techId, now = worldNow()) {
   if (!canResearch(s, branch, techId)) return null;
   const tech = techDefinition(branch, techId);
   const level = techLevel(s, techId) + 1;
@@ -644,7 +652,7 @@ function queueResearch(s, branch, techId, now = Date.now()) {
   });
 }
 
-function startMarch(s, armyId, destinationId, now = Date.now(), payload = {}) {
+function startMarch(s, armyId, destinationId, now = worldNow(), payload = {}) {
   const army = armyEntity(s, armyId);
   const originId = army?.locationId;
   const longExpedition = payload?.battlePlan && s.territories[destinationId]?.owner !== "player";
@@ -667,7 +675,7 @@ function startMarch(s, armyId, destinationId, now = Date.now(), payload = {}) {
   return job;
 }
 
-function startArmyGroupMarch(s, armyIds, destinationId, now = Date.now(), payload = {}) {
+function startArmyGroupMarch(s, armyIds, destinationId, now = worldNow(), payload = {}) {
   const ids = [...new Set((armyIds || []).filter(Boolean))];
   const armies = ids.map(id => armyEntity(s, id));
   if (!ids.length || armies.some(army => !army || army.owner !== "player" || army.status !== "idle")) return null;
@@ -686,7 +694,7 @@ function startArmyGroupMarch(s, armyIds, destinationId, now = Date.now(), payloa
 
 // 调动只做单军团。合军是出征专用概念（多支军团合成一场战斗会话），
 // 调防没有这个需求，两支军团各点一次即可。
-function redeployArmy(s, armyId, destinationId, now = Date.now()) {
+function redeployArmy(s, armyId, destinationId, now = worldNow()) {
   if (!s || s.battleSession) return null;
   if (s.territories?.[destinationId]?.owner !== "player") return null;
   const army = armyEntity(s, armyId);
@@ -733,14 +741,14 @@ function applyShortage(s, deficit) {
   s.morale = clamp(s.morale - Math.min(16, 4 + deficit));
   ownTerritoryIds(s).forEach(id => s.territories[id].stability = clamp(s.territories[id].stability - 6));
   ownedOfficers(s).forEach(o => { if (o.id !== "player") o.loyalty = clamp(o.loyalty - 3); });
-  log(s, "bad", `粮仓见底，${deserters}名士兵离队，村庄开始宰杀来年的种畜。`);
+  log(s, "bad", `粮仓空了。${deserters}个兵夜里走了，村里开始杀明年的种畜。`);
 }
 
 function applyUnrest(s) {
   const deserters = Math.min(armyTotal(s), Math.max(1, Math.ceil((25 - s.support) / 4)));
   removeTroops(s, deserters);
   ownTerritoryIds(s).forEach(id => { s.territories[id].stability = clamp(s.territories[id].stability - 4); s.territories[id].devastated = Math.max(s.territories[id].devastated, 1); });
-  log(s, "bad", `民心跌破底线，${deserters}名驻军离队，领地生产受到影响。`);
+  log(s, "bad", `民心塌了。${deserters}个驻军走了，地里的活没人干。`);
 }
 
 function enemyGuardCap(s, id) {
@@ -806,12 +814,12 @@ function fireTimer(s, key, at, rng, options = {}) {
     s.officers.forEach(o => { o.injured = 0; });
     s.warWeariness = 0;
     handleOfficerPolitics(s);
-    if (!options.offline) queueSeasonEvents(s);
+    if (!options.offline) queueSeasonEvents(s, rng);
     return true;
   }
   if (def.faction) { runFactionTurn(s, def.faction, rng, at); return true; }
   if (key === "drift") { applyDrift(s, def.intervalMs); return true; }
-  if (key === "events") { queueSeasonEvents(s); return true; }
+  if (key === "events") { queueSeasonEvents(s, rng); return true; }
   return false;
 }
 
@@ -830,7 +838,7 @@ function delayCoronation(s, territoryId) {
   if (s.coronation.delayedBy.includes(territoryId)) return false;
   s.coronation.delayedBy.push(territoryId);
   s.coronation.delayedMs = (s.coronation.delayedMs || 0) + CORONATION_DELAY_MS;
-  log(s, "good", `${TERRITORY_DEFS[territoryId].name}易主，摄政公爵的加冕大典被迫推迟。`);
+  log(s, "good", `${TERRITORY_DEFS[territoryId].name}易主。王冠谷那边的加冕，只好往后挪。`);
   return true;
 }
 
@@ -843,7 +851,7 @@ function checkCampaignEnd(s) {
   return true;
 }
 
-function advanceWorld(s, now = Date.now(), options = {}) {
+function advanceWorld(s, now = worldNow(), options = {}) {
   if (!s || s.ended || s.battleSession || s.pauseState) return { steps: 0, jobs: 0 };
   s.clock ||= makeClock(0, now);
   s.timers ||= initTimers(s, now);
@@ -884,7 +892,7 @@ function advanceWorld(s, now = Date.now(), options = {}) {
 //   干净退出（visibilitychange）→ 有 pauseState，由 resumeWorld 统一补偿
 //   被强杀（划掉标签页/浏览器崩溃）→ 没有 pauseState，用 lastProcessedAt 兜底
 // 两者必须一致，否则「怎么退出游戏」会变成一种隐形的游戏机制。
-function catchUpOffline(s, now = Date.now()) {
+function catchUpOffline(s, now = worldNow()) {
   if (!s) return 0;
   s.clock ||= makeClock(0, now);
   s.timers ||= initTimers(s, now);
@@ -894,7 +902,7 @@ function catchUpOffline(s, now = Date.now()) {
   return 0;
 }
 
-function updateJobCountdowns(now = Date.now()) {
+function updateJobCountdowns(now = worldNow()) {
   if (typeof document === "undefined" || !S) return;
   document.querySelectorAll("[data-job-countdown]").forEach(node => {
     const job = (S.jobs || []).find(item => item.id === node.dataset.jobCountdown);
@@ -904,7 +912,7 @@ function updateJobCountdowns(now = Date.now()) {
   });
 }
 
-function updateWorldTime(now = Date.now()) {
+function updateWorldTime(now = worldNow()) {
   if (!S || S.ended || S.pauseState) {
     updateJobCountdowns(now);
     return { steps: 0, jobs: 0 };
@@ -939,15 +947,63 @@ function handleOfficerPolitics(s) {
         s.territories[fiefId].fiefHolder = null;
         s.territories[fiefId].stability = clamp(s.territories[fiefId].stability - 10);
         o.fief = null;
-        log(s, "warn", `${TERRITORY_DEFS[fiefId].name}失去管理者，重新改由你管理，地方稳定下降。`);
+        log(s, "warn", `${TERRITORY_DEFS[fiefId].name}没人管了，先由你直管。那儿的人不太高兴。`);
       }
       o.side = "gone";
-      log(s, "bad", `${o.name}因长期没有得到领地管理权，带着${gone}名追随者离开渡鸦堡。`);
+      log(s, "bad", `${o.name}等封地等烦了，带着${gone}个人走了。没告别。`);
     }
   });
 }
 
-function queueSeasonEvents(s) {
+// 世界事件不再按数组顺序一个个放（那样每局第 2 季必是春季洪水，而且不看季节）。
+// 现在按当前季节从池子里随机抽；带 requires 的后续事件优先，上一次的选择
+// 总会在几季后找上门。池子抽干了，隔了 8 季以上的老事件可以再来一次。
+// 节奏：距上一个世界事件至少一季，之后每次计时器（120 秒）有一半机会弹。
+const WORLD_EVENT_MIN_GAP_MS = 5 * 60 * 1000;
+const WORLD_EVENT_CHANCE = .5;
+const WORLD_EVENT_REPEAT_AFTER = 8;
+
+function eventRequirementMet(s, ev) {
+  const r = ev.requires;
+  if (!r) return true;
+  const turn = turnOf(s);
+  if (r.flag) {
+    const at = s.flags?.[r.flag];
+    if (typeof at !== "number") return false;
+    if (turn - at < (r.gap || 0)) return false;
+  }
+  if (r.notFlag && s.flags?.[r.notFlag] != null) return false;
+  if (r.stat) {
+    const v = s[r.stat] || 0;
+    if (r.min != null && v < r.min) return false;
+    if (r.max != null && v > r.max) return false;
+  }
+  return true;
+}
+
+function eventSeasonMet(s, ev) {
+  return !ev.seasons || ev.seasons.includes(seasonOf(s).id);
+}
+
+function pickWorldEvent(s, rng = Math.random) {
+  const now = s.clock?.elapsedMs || 0;
+  if (now - (s.lastWorldEventMs ?? -Infinity) < WORLD_EVENT_MIN_GAP_MS) return null;
+  if (s.pendingDecisions.some(d => d.type === "world_event")) return null;
+  const turn = turnOf(s);
+  const seenAt = id => s.eventSeenAt?.[id] ?? (s.seenEvents.includes(id) ? -Infinity : null);
+  const fresh = ev => seenAt(ev.id) === null;
+  const pool = WORLD_EVENTS.filter(ev => eventSeasonMet(s, ev) && eventRequirementMet(s, ev));
+  // 后续事件（有 requires）只弹一次，而且一到时候就弹，不掷骰子
+  const followUp = pool.find(ev => ev.requires && fresh(ev));
+  if (followUp) return followUp;
+  if (rng() >= WORLD_EVENT_CHANCE) return null;
+  let candidates = pool.filter(ev => !ev.requires && fresh(ev));
+  if (!candidates.length) candidates = pool.filter(ev => !ev.requires && Number.isFinite(seenAt(ev.id)) && turn - seenAt(ev.id) >= WORLD_EVENT_REPEAT_AFTER);
+  if (!candidates.length) return null;
+  return candidates[Math.floor(rng() * candidates.length) % candidates.length];
+}
+
+function queueSeasonEvents(s, rng = Math.random) {
   const season = seasonOf(s);
   // 收买时许下的封地到期了：他来讨那块地。
   // 用 pendingDecisions 里是否已有同一条来去重，就不必再多存一个「已排队」标志位。
@@ -969,23 +1025,36 @@ function queueSeasonEvents(s) {
     s.flags.taxDemand = true;
     s.pendingDecisions.push({ type: "royal_tax" });
   }
-  if (turnOf(s) >= 2 && turnOf(s) % 2 === 0) {
-    const nextWorld = WORLD_EVENTS.find(event => !s.seenEvents.includes(event.id));
-    if (nextWorld) {
-      s.seenEvents.push(nextWorld.id);
-      s.pendingDecisions.push({ type: "world_event", eventId: nextWorld.id });
+  // 世界事件：见 pickWorldEvent。季界与 events 计时器都会走到这里，
+  // 由 lastWorldEventMs 保证不会在同一口气里连弹两个。
+  if (turnOf(s) >= 1) {
+    const picked = pickWorldEvent(s, rng);
+    if (picked) {
+      s.seenEvents.push(picked.id);
+      s.eventSeenAt ||= {};
+      s.eventSeenAt[picked.id] = turnOf(s);
+      s.lastWorldEventMs = s.clock?.elapsedMs || 0;
+      s.pendingDecisions.push({ type: "world_event", eventId: picked.id });
     }
   }
   if (turnOf(s) >= 3 && turnOf(s) % 3 === 0) {
+    let npcOfficerId = null;
     const nextNpc = NPC_ARCS.find(event => {
       if (s.seenNpcEvents.includes(event.id) || turnOf(s) < event.minTurn) return false;
+      // 按原型写的附庸事件：落在任何一个已归附、还在的同原型领主头上
+      if (event.archetype) {
+        const who = (s.officers || []).find(o => o.side === "player" && LORD_DEFS[o.id]?.archetype === event.archetype);
+        if (!who) return false;
+        npcOfficerId = who.id;
+        return true;
+      }
       const person = officer(s, event.officerId);
       if (!person || person.side === "gone") return false;
       return event.side !== "player" || person.side === "player";
     });
     if (nextNpc) {
       s.seenNpcEvents.push(nextNpc.id);
-      s.pendingDecisions.push({ type: "npc_arc", eventId: nextNpc.id });
+      s.pendingDecisions.push({ type: "npc_arc", eventId: nextNpc.id, officerId: nextNpc.officerId || npcOfficerId });
     }
   }
 }
@@ -1068,7 +1137,7 @@ const GOAL_CHAPTERS = [
   ] },
   { id: "march", name: "第二章 · 出鞘", brief: "旧土要一块块拿回来", steps: [
     { id: "conquer", text: "夺回第一块领地", hint: "地图页出征 · 先看胜算预测，别碰要塞", check: s => ownTerritoryIds(s).length > GOAL_BASELINES.territories },
-    { id: "lord", text: "收服一名叛臣领主", hint: "打服、说服、收买三条路都算；兵临城下最能压低说服阻力", check: s => ownedOfficers(s).length > GOAL_BASELINES.lords },
+    { id: "lord", text: "收服一名叛臣领主", hint: "打服、说服、收买三条路都算；派使者问清他的开价，做到了再谈", check: s => ownedOfficers(s).length > GOAL_BASELINES.lords },
   ] },
   { id: "siegeprep", name: "第三章 · 合围", brief: "凑齐进军王冠谷的四个条件", steps: [
     { id: "renown", text: "威望达到 60", hint: "打胜仗与收复旧土最涨威望", check: s => !!crownRequirements(s).renown },

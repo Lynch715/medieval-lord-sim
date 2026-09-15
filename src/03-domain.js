@@ -35,36 +35,88 @@ function adjacencyPressure(s, lordId) {
   return Math.min(20, [...neighbours].filter(id => owns(s, id)).length * 4);
 }
 
-// 说服阻力。routes.persuade 为 0 的领主（摄政公爵）阻力恒等于 defiance，
-// 无论正统性和好感堆到多高都说不动——主线的军事高潮因此得以保留。
+// 开价：每个领主一条明码条件（见 01-data.js 的 LORD_PRICES / ARCHETYPE_PRICES）。
+// 返回 { def, known, met, text, hint }。known 为 false 时界面只显示「？？？」，
+// 玩家得先派一趟使者才看得到他要什么 —— 这是使者现在唯一的用处。
+function lordPrice(s, lordId) {
+  const lord = officer(s, lordId);
+  const def = LORD_DEFS[lordId]?.price || null;
+  if (!lord || !def) return { def: null, known: true, met: false, text: "", hint: "" };
+  const known = !!lord.envoyed || !!lord.priceKnown;
+  let met = false;
+  switch (def.kind) {
+    case "none": met = false; break;
+    case "battle_near": {
+      const holdings = lordHoldings(s, lordId);
+      const near = new Set(holdings);
+      holdings.forEach(id => (TERRITORY_DEFS[id]?.adj || []).forEach(nb => near.add(nb)));
+      met = (s.victories || []).some(id => near.has(id));
+      break;
+    }
+    case "legitimacy": met = (s.legitimacy || 0) >= def.value; break;
+    case "renown": met = (s.renown || 0) >= def.value; break;
+    case "own": met = owns(s, def.territoryId); break;
+    case "gold": met = !!lord.pricePaid; break;
+    case "treasury": met = (s.gold || 0) >= def.value; break;
+    case "neighbour": met = adjacencyPressure(s, lordId) >= 4; break;
+    case "besieged": met = adjacencyPressure(s, lordId) >= 8; break;
+    case "liege_down": {
+      const liegeId = lord.liege !== undefined ? lord.liege : LORD_DEFS[lordId]?.liege;
+      const liege = liegeId ? officer(s, liegeId) : null;
+      met = !liege || liege.side === "player" || liege.side === "gone";
+      break;
+    }
+    default: met = false;
+  }
+  return { def, known, met, text: def.text, hint: def.hint };
+}
+
+// 付清一笔明码开价（kind 为 gold）。付过就记在他身上，不退。
+function payLordPrice(s, lordId) {
+  const lord = officer(s, lordId);
+  const price = LORD_DEFS[lordId]?.price;
+  if (!lord || !price || price.kind !== "gold" || lord.pricePaid) return false;
+  if (lord.side === "player" || lord.side === "gone" || lord.captured) return false;
+  if ((s.gold || 0) < price.value) return false;
+  s.gold -= price.value;
+  lord.pricePaid = true;
+  lord.priceKnown = true;
+  log(s, "info", `${price.value}金送到了${lord.name}手上。他数了两遍，没说谢。`);
+  return true;
+}
+
+// 说服阻力。routes.persuade 为 0 的领主（摄政公爵、布兰）阻力恒等于 defiance，
+// 无论正统性堆到多高都说不动——主线的军事高潮因此得以保留。
 function lordResistance(s, lordId) {
   const lord = officer(s, lordId);
   const def = LORD_DEFS[lordId];
   if (!lord || !def) return Infinity;
   const persuade = def.routes?.persuade || 0;
   const parts = persuasionLeverage(s, lordId);
-  return (lord.defiance ?? def.defiance) - (parts.pressure + parts.legitimacy + parts.rapport) * persuade;
+  return (lord.defiance ?? def.defiance) - (parts.pressure + parts.legitimacy + parts.price) * persuade;
 }
 
 // 说服杠杆的三项来源，拆开返回是为了让将领页能告诉玩家「该往哪使劲」。
 //
-// 权重取向：说服建立在武力威慑之上，不是靠使者刷好感刷出来的。邻近压力
-// （他的辖地被我方版图包住多少）是主导项，正统性与好感只是加成。
-// 旧权重 0.6/0.8/0.5 让好感成了最大单项来源（上限 40 × 0.8 = 32），
-// 光靠外交就能翻掉大半个北境，武力反而退成次要路线。
+// 邻近压力（他的辖地被我方版图包住多少）仍是主导项，正统性是加成；
+// 第三项不再是使者刷出来的好感，而是「他的开价做到了没有」——做到了给一笔
+// 固定杠杆（各人不同，见 price.leverage），没做到就是 0。
 function persuasionLeverage(s, lordId) {
-  const lord = officer(s, lordId);
+  const price = lordPrice(s, lordId);
   return {
     pressure: adjacencyPressure(s, lordId) * 1.2,
     legitimacy: (s?.legitimacy || 0) * 0.4,
-    rapport: (lord?.rapport || 0) * 0.4
+    price: price.met ? (price.def?.leverage || 0) : 0
   };
 }
 
+// 开价是硬门槛：没做到，阻力再低也不宣誓。做到了，还得把阻力压到零。
 function canPersuadeLord(s, lordId) {
   const lord = officer(s, lordId);
   if (!lord || lord.side === "player" || lord.side === "gone" || lord.captured) return false;
   if (!(LORD_DEFS[lordId]?.routes?.persuade > 0)) return false;
+  const price = lordPrice(s, lordId);
+  if (price.def && !price.met) return false;
   return lordResistance(s, lordId) <= 0;
 }
 
@@ -92,6 +144,10 @@ function submitLord(s, lordId, route = "persuade", rng = Math.random) {
   lord.captured = false;
   lord.submitted = true;
   lord.loyalty = SUBMIT_LOYALTY[route] ?? SUBMIT_LOYALTY.persuade;
+  lord.submitRoute = route;
+  recordDeed(s, route === "force" ? "sworn" : route === "bribe" ? "bribed" : "persuaded", lordId);
+  const said = lordLine(s, lordId, route === "force" ? "submitForce" : route === "bribe" ? "submitBribe" : "submitTalk");
+  if (said) log(s, "info", `${lord.name}：“${said}”`);
   lord.grievance = route === "force" ? clamp((lord.grievance || 0) + 10) : 0;
   // 打服时辖地已在战斗结算里易主；说服与收买则整片带过来
   if (route !== "force") {
@@ -121,7 +177,7 @@ function submitLord(s, lordId, route = "persuade", rng = Math.random) {
       if (total > 0) {
         const lost = Object.entries(LORD_DEFS).filter(([id, d]) => d.liege === liegeId && officer(s, id)?.side === "player").length;
         liege.defiance = Math.max(liegeDef.defiance * 0.7, liegeDef.defiance - liegeDef.defiance * 0.3 * (lost / total));
-        log(s, "info", `${liege.name}又失去一名附庸，抵抗意志降到 ${Math.round(liege.defiance)}。`);
+        log(s, "info", `${liege.name}又少了一个附庸。他嘴上没说，抵抗降到了 ${Math.round(liege.defiance)}。`);
       }
     }
   }
@@ -130,14 +186,14 @@ function submitLord(s, lordId, route = "persuade", rng = Math.random) {
   // 跟随者成建制倒向；不跟随者自立门户，而不是继续挂在已归附的主君名下。
   if (LORD_DEFS[lordId]?.tier === "liege") {
     lordVassals(s, lordId).forEach(vassal => {
-      const chance = 0.35 + (s.legitimacy || 0) / 250 + (vassal.rapport || 0) / 200
+      const chance = 0.35 + (s.legitimacy || 0) / 250 + (lordPrice(s, vassal.id).met ? 0.15 : 0)
         - (vassal.defiance ?? LORD_DEFS[vassal.id].defiance) / 300;
       if (rng() < chance) {
         submitLord(s, vassal.id, route, rng);
-        log(s, "good", `${vassal.name}随${lord.name}一同归附。`);
+        log(s, "good", `${vassal.name}跟着${lord.name}一起换了旗。`);
       } else {
         vassal.liege = null;
-        log(s, "warn", `${vassal.name}拒绝跟随，自立门户。`);
+        log(s, "warn", `${vassal.name}不跟。他自己挂了旗。`);
       }
     });
   }
@@ -154,16 +210,23 @@ function lordRouteStatus(s, lordId) {
   const cost = lordBribeCost(s, lordId);
   const holdings = lordHoldings(s, lordId).length;
   const persuadable = (def.routes?.persuade || 0) > 0;
+  const price = lordPrice(s, lordId);
+  const priceLine = !price.def ? ""
+    : !price.known ? "开价：？？？（派一趟使者去问）"
+    : price.met ? `开价「${price.text}」已做到`
+    : `开价：${price.text}`;
   return {
+    price,
     force: {
       available: holdings > 0,
       detail: holdings > 0 ? `攻下他最后一座城即可俘获（现有 ${holdings} 座）` : "他已无城可守"
     },
     persuade: {
       available: canPersuadeLord(s, lordId),
-      detail: !persuadable ? "篡位者不接受任何使者，只能兵戎相见"
-        : resistance <= 0 ? "阻力已清，可要求他效忠"
-        : `还需消解 ${Math.ceil(resistance)} 点阻力 · 当前杠杆：兵临城下 ${Math.round(leverage.pressure)}、正统 ${Math.round(leverage.legitimacy)}、好感 ${Math.round(leverage.rapport)}（占他的辖地邻边最有效）`
+      detail: !persuadable ? (price.known ? `${price.text}。只能打` : "不谈。只能打")
+        : canPersuadeLord(s, lordId) ? `${priceLine} · 阻力已清，可要求他效忠`
+        : price.def && !price.met ? `${priceLine} · 没做到之前免谈`
+        : `${priceLine} · 还差 ${Math.ceil(resistance)} 点阻力：兵临城下 ${Math.round(leverage.pressure)}、正统 ${Math.round(leverage.legitimacy)}、开价 ${Math.round(leverage.price)}`
     },
     bribe: {
       available: Number.isFinite(cost) && s.gold >= cost && lord.side !== "player" && lord.side !== "gone" && !lord.captured,
@@ -188,7 +251,7 @@ function demandFealty(s, lordId) {
   if (!submitLord(s, lordId, "persuade")) return false;
   s.legitimacy = clamp(s.legitimacy + PERSUADE_LEGITIMACY_GAIN);
   s.style.oath++;
-  log(s, "good", `${lord.name}承认渡鸦家的继承权，重新宣誓效忠。`);
+  log(s, "good", `${lord.name}认了渡鸦家，重新宣了誓。`);
   return true;
 }
 
@@ -252,12 +315,11 @@ function cityActionAvailable(s, id, action) {
   const d = TERRITORY_DEFS[id];
   const t = s.territories[id];
   if (!d || !t || !CITY_ACTION_DEFS[action] || s.battleSession) return false;
-  if (cityActionJob(s, id) || (s.cooldowns?.[cityActionLockKey(id, action)] || 0) > Date.now()) return false;
+  if (cityActionJob(s, id) || (s.cooldowns?.[cityActionLockKey(id, action)] || 0) > worldNow()) return false;
   if (action === "scout") return !owns(s, id);
   if (action === "envoy") {
     const lord = lordAt(s, id);
-    return !!lord && lord.side !== "player" && lord.side !== "gone" && !lord.captured
-      && (LORD_DEFS[lord.id]?.routes?.persuade || 0) > 0;
+    return !!lord && lord.side !== "player" && lord.side !== "gone" && !lord.captured && !lord.envoyed;
   }
   return false;
 }
@@ -279,11 +341,11 @@ function cityAction(s, id, action) {
   s.gold -= cost.gold || 0;
   s.grain -= cost.grain || 0;
   s.cooldowns ||= {};
-  s.cooldowns[cityActionLockKey(id, action)] = Date.now() + (CITY_ACTION_COOLDOWNS[action] || 60000);
+  s.cooldowns[cityActionLockKey(id, action)] = worldNow() + (CITY_ACTION_COOLDOWNS[action] || 60000);
   const job = startJob(s, {
     type: "CITY_ACTION",
     territoryId: id,
-    startedAt: Date.now(),
+    startedAt: worldNow(),
     durationMs: CITY_ACTION_DURATIONS[action],
     queueKey: `city:${id}`,
     payload: { actionId: action, gold: cost.gold || 0, grain: cost.grain || 0 }
@@ -302,18 +364,60 @@ function resolveCityAction(s, id, action) {
   if (action === "envoy") {
     const lord = lordAt(s, id);
     if (!lord) return false;
-    lord.rapport = Math.min(ENVOY_RAPPORT_CAP, (lord.rapport || 0) + ENVOY_RAPPORT_GAIN);
-    const envoyText = `使者带着渡鸦家的礼物见到了${lord.name}，好感提高到 ${lord.rapport}。`;
-    s.lastAction = { name: `${d.name} · 派使者`, text: envoyText };
+    lord.envoyed = true;
+    lord.priceKnown = true;
+    const price = lordPrice(s, lord.id);
+    const envoyText = envoyReplyText(s, lord.id, price);
+    s.lastAction = { name: `${d.name} · 使者回来了`, text: envoyText };
     log(s, "info", envoyText);
     return true;
   }
   if (action !== "scout") return false;
   s.cityIntel[id] = turnOf(s) + 2;
-  const text = `斥候从${d.name}带回城防、粮道与地形记录。`;
+  const text = `斥候从${d.name}回来了：守军多少、粮道在哪、地怎么走，都记下了。`;
   s.lastAction = { name: `${d.name} · ${CITY_ACTION_DEFS[action].name}`, text };
   log(s, "info", text);
   return true;
+}
+
+// 人物台词。深写领主查 LORD_LINES，浅写附庸查原型；同一键有几句就按当季轮。
+// 「……」表示这个人在这种场合不说话（布兰不谈，所以没有 soften），返回 null。
+function lordLine(s, lordId, key) {
+  const def = LORD_DEFS[lordId];
+  if (!def) return null;
+  const table = LORD_LINES[lordId] || (def.archetype ? ARCHETYPE_LINES[def.archetype] : null);
+  const pool = table?.[key];
+  if (!Array.isArray(pool) || !pool.length) return null;
+  const raw = pool[(turnOf(s) + lordId.length) % pool.length];
+  if (!raw || raw === "……") return null;
+  const lord = officer(s, lordId);
+  const liegeId = lord?.liege !== undefined ? lord.liege : def.liege;
+  return raw
+    .replace(/\{player\}/g, s.playerName || "罗恩")
+    .replace(/\{seat\}/g, TERRITORY_DEFS[def.seat]?.name || "")
+    .replace(/\{liege\}/g, (liegeId && LORD_DEFS[liegeId]?.name) || "他主君");
+}
+
+// 带兵者在战场上每阶段说的话。王子、深写领主各有剧本，骑士与附庸走通用。
+function commanderBattleLine(s, commanderId, tier) {
+  const lordTable = LORD_LINES[commanderId]?.battle;
+  const archetype = LORD_DEFS[commanderId]?.archetype;
+  const table = lordTable || (archetype ? ARCHETYPE_LINES[archetype]?.battle : null) || KNIGHT_BATTLE_LINES;
+  const pool = table?.[tier] || [];
+  if (!pool.length) return null;
+  const raw = pool[(s.battles || 0) % pool.length];
+  const liegeId = officer(s, commanderId)?.liege ?? LORD_DEFS[commanderId]?.liege;
+  return raw.replace(/\{liege\}/g, (liegeId && LORD_DEFS[liegeId]?.name) || "主君");
+}
+
+// 使者回来带的话。人物专属台词在 LORD_LINES 里（见 01-data.js），没写的按开价兜底。
+function envoyReplyText(s, lordId, price = lordPrice(s, lordId)) {
+  const lord = officer(s, lordId);
+  const line = lordLine(s, lordId, "envoy");
+  if (line) return `${lord.name}：“${line}”`;
+  if (!price.def) return `使者见到了${lord.name}，他什么也没说。`;
+  if (price.def.kind === "none") return `${lord.name}把使者赶了出来。他不谈。`;
+  return `使者从${lord.name}那里带回一句话：${price.text}。`;
 }
 
 function cityActionOptions(s, id) {
@@ -361,6 +465,15 @@ function applyEventEffects(s, changes = {}, officerId = null) {
     o.grievance = clamp(o.grievance + (changes.grievanceAll || 0));
   });
   Object.keys(UNIT_DEFS).forEach(type => { if (changes[type]) addUnits(s, type, changes[type]); });
+  // 记号：后续事件靠它找上门。记的是当季 turn，方便算「隔了几季」。
+  if (changes.flag) { s.flags ||= {}; s.flags[changes.flag] = turnOf(s); }
+  // 某个势力全部领地守军抬一截（石匠跑去给狼牙修墙那种）
+  if (Array.isArray(changes.guardFaction)) {
+    const [faction, amount] = changes.guardFaction;
+    Object.keys(s.territories).forEach(id => { if (s.territories[id].owner === faction) s.territories[id].guard = Math.max(0, s.territories[id].guard + amount); });
+  }
+  // 直接挪动加冕倒计时（分钟，正数推迟，负数提前）
+  if (changes.coronationMin && s.coronation) s.coronation.delayedMs = (s.coronation.delayedMs || 0) + changes.coronationMin * 60 * 1000;
   const person = officerId ? officer(s, officerId) : null;
   if (person) {
     if (changes.loyalty) person.loyalty = clamp(person.loyalty + changes.loyalty);

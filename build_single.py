@@ -16,7 +16,7 @@ OUTPUT = ROOT / "模拟中世纪领主-单文件版.html"
 
 # 同一张图在数据表里可能被引用几十次；打包时每张只编码一次，
 # JS 里的字符串引用改为查 GAME_ASSETS 表 —— 这是单文件版从 5.7MB 回到实际资源体量的关键。
-ASSET_RE = re.compile(r"assets/[a-z0-9.-]+\.(?:webp|png)")
+ASSET_RE = re.compile(r"(?:assets|icon)/[a-z0-9.-]+\.(?:webp|png)")
 
 
 def encode_asset(relative: str) -> str:
@@ -52,7 +52,7 @@ def build() -> Path:
 
     # HTML 里的静态 <img>：src 改成 data-asset，由内联脚本开头统一回填。
     # 脚本块在 </body> 前，执行时这些 img 都已存在。
-    html = re.sub(r'src="(assets/[a-z0-9.-]+\.(?:webp|png))"', r'data-asset="\1"', html)
+    html = re.sub(r'src="((?:assets|icon)/[a-z0-9.-]+\.(?:webp|png))"', r'data-asset="\1"', html)
 
     prelude = (
         "var GAME_ASSETS = " + json.dumps(assets, ensure_ascii=False) + ";\n"

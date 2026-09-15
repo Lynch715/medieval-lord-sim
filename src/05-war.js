@@ -186,9 +186,9 @@ function stageOptions(s, session) {
 function battleNarrative(session, choice, delta, loss, enemyLoss) {
   const target = TERRITORY_DEFS[session.targetId];
   const stageNames = ["接近敌军", "正面交战", "最后阶段"];
-  const direction = delta >= 8 ? "我军取得优势" : delta <= -8 ? "我军陷入劣势" : "双方仍在僵持";
-  const special = choice.surrender ? "号手发出劝降信号，部分敌军放下武器。" : choice.id === "scout" ? "斥候发现一条未设防的小路。" : choice.id === "charge" ? "披甲骑士正面冲击敌军盾牌队伍。" : choice.id === "volley" ? "弓手完成三轮齐射，敌军开始后退。" : choice.id === "feint" ? "敌军追入缺口后，退路被我军切断。" : choice.id === "hold" ? "我军停止追击并守住现有位置。" : "我军按命令继续推进。";
-  return { name: stageNames[session.stage], title: `${choice.by}：${choice.name}`, text: `${special}${direction}。本阶段我军损失${loss}人，敌军约损失${enemyLoss}人。` };
+  const direction = delta >= 8 ? "这一阵是我们的" : delta <= -8 ? "这一阵吃了亏" : "谁也没占到便宜";
+  const special = choice.surrender ? "号手吹了三遍。对面有人扔了矛，有人没扔。" : choice.id === "scout" ? "斥候摸到一条没人守的小路，队伍从林子里绕了过去。" : choice.id === "charge" ? "骑士撞进了盾墙。木头和铁的声音，然后是人的。" : choice.id === "volley" ? "弓手三轮齐射，对面的前排开始往后挪。" : choice.id === "feint" ? "他们追进了缺口，然后发现缺口合上了。" : choice.id === "hold" ? "停下。守住脚下这块地。" : choice.id === "ridge" ? "先占了高处。对面得仰着头打。" : choice.id === "shield" ? "盾墙立住了，一步没退。" : choice.id === "forced" ? "不等了，直接压上去。" : choice.id === "press" ? "趁他们乱，再往前顶。" : "队伍照命令往前走。";
+  return { name: stageNames[session.stage], title: `${choice.by}：${choice.name}`, text: `${special}${direction}。这一阵我方倒下${loss}人，对面大约${enemyLoss}人。` };
 }
 
 function battleChoiceHint(choice) {
@@ -199,9 +199,9 @@ function battleChoiceHint(choice) {
 function battleSituation(session) {
   const stage = ["接敌", "交锋", "决胜"][session.stage] || "决胜";
   const momentum = Math.round(session.momentum);
-  const state = momentum >= 12 ? "我军掌握主动" : momentum <= -12 ? "敌军正在压迫战线" : "双方仍在争夺主动";
+  const state = momentum >= 12 ? "我方压着打" : momentum <= -12 ? "对面压过来了" : "还在拉锯";
   const terrain = TERRITORY_DEFS[session.targetId]?.terrain || "战场";
-  return { stage, title: `${stage}阶段 · ${state}`, text: `${terrain}地形正在影响推进。下一道军令会同时改变推进速度和伤亡。` };
+  return { stage, title: `${stage}阶段 · ${state}`, text: `${terrain}。下一道军令决定推得多快、死多少人。` };
 }
 
 function applyBattleChoice(s, choiceId, rng = Math.random) {
@@ -236,7 +236,12 @@ function applyBattleChoice(s, choiceId, rng = Math.random) {
   session.lossesByType = allocateLosses(session.composition, session.playerLoss);
   session.enemyLoss = Math.min(defender, session.enemyLoss + enemyLoss);
   const history = battleNarrative(session, choice, delta, loss, enemyLoss);
-  if (counterBlow > 0) history.text += ` 连续强攻被敌军看穿，我军优势下降${Math.round(counterBlow)}点。`;
+  if (counterBlow > 0) history.text += ` 连着强攻，对面看出来了，早就等着——优势掉了${Math.round(counterBlow)}点。`;
+  // 带兵的人开口。按这一阶段的走势分三档，谁带兵谁说。
+  const speakerId = session.commanderId || session.leaderIds?.[0] || "player";
+  const tier = delta >= 8 ? "good" : delta <= -8 ? "bad" : "even";
+  const quip = commanderBattleLine(s, speakerId, tier);
+  if (quip) { history.quip = quip; history.speaker = commanderById(s, speakerId)?.name || "指挥官"; }
   session.history.push(history);
   session.stage++;
   if (session.stage >= 3) {
@@ -290,6 +295,7 @@ function finishBattle(s, outcome, rng = Math.random) {
     t.devastated = 2;
     t.fiefHolder = null;
     s.wins++;
+    (s.victories ||= []).push(targetId);
     s.renown = clamp(s.renown + 8);
     gainLegitimacy(s, "battleWin");
     gainLegitimacy(s, "reclaim");
@@ -303,17 +309,17 @@ function finishBattle(s, outcome, rng = Math.random) {
         // 失去最后一块辖地才被俘；仍有其他城的领主只是退走。
         fallenLord.captured = true;
         s.pendingDecisions.push({ type: "lord_capture", lordId: fallenLord.id, territoryId: targetId });
-        log(s, "info", `${fallenLord.name}失去最后一座城，在${targetName}城下被俘。`);
+        log(s, "info", `${fallenLord.name}没城了。在${targetName}城下被按住的时候还在骂。`);
       } else {
-        log(s, "warn", `${fallenLord.name}退往${TERRITORY_DEFS[lordHoldings(s, fallenLord.id)[0]].name}，仍有${stillHolds}座城在手。`);
+        log(s, "warn", `${fallenLord.name}连夜退去了${TERRITORY_DEFS[lordHoldings(s, fallenLord.id)[0]].name}。他手里还有${stillHolds}座城。`);
       }
       // 该领主名下的骑士按 45% 被俘，其余战死
       (s.knights || []).filter(k => k.liegeLordId === fallenLord.id && k.status === "available").forEach(knight => {
-        if (rng() < .45) { knight.status = "captured"; knight.captured = true; log(s, "info", `${knight.name}在${targetName}城下被俘。`); }
+        if (rng() < .45) { knight.status = "captured"; knight.captured = true; log(s, "info", `${knight.name}在${targetName}城下被俘，马死了，人没死。`); }
         else { knight.status = "gone"; knight.side = "gone"; knight.liegeLordId = null; }
       });
     }
-    log(s, "good", `${targetName}被占领。此战我军损失${session.playerLoss}人，敌军约损失${session.enemyLoss}人。另抽调${garrisoned}名士兵驻守新领地。`);
+    log(s, "good", `${targetName}是你的了。这一仗死了${session.playerLoss}个自己人，对面大约${session.enemyLoss}个。留${garrisoned}人守城。`);
   } else if (outcome === "retreat") {
     const t = s.territories[targetId];
     persistentEnemyLoss = Math.min(Math.max(0, t.guard - 8), Math.round(session.enemyLoss * .72));
@@ -322,7 +328,7 @@ function finishBattle(s, outcome, rng = Math.random) {
     s.morale = clamp(s.morale - (session.leaderIds.includes("ysabel") ? 2 : 6));
     s.renown = clamp(s.renown - 2);
     if (session.flags.pushed && session.momentum > 10 && session.leaderIds.includes("renard")) officer(s, "renard").grievance = clamp(officer(s, "renard").grievance + 8);
-    log(s, "warn", `军队从${targetName}撤回，我军损失${session.playerLoss}人。敌方守军减少${persistentEnemyLoss}人，之后会缓慢补充。`);
+    log(s, "warn", `从${targetName}撤了回来，丢下${session.playerLoss}人。对面也少了${persistentEnemyLoss}个守军，他们会慢慢补。`);
   } else {
     const t = s.territories[targetId];
     persistentEnemyLoss = Math.min(Math.max(0, t.guard - 8), Math.round(session.enemyLoss * .72));
@@ -336,9 +342,9 @@ function finishBattle(s, outcome, rng = Math.random) {
     s.gold -= lostGold;
     s.grain -= lostGrain;
     leaders.forEach(o => { if (o.loyalty != null) o.loyalty = clamp(o.loyalty - 2); if (o.grievance != null) o.grievance = clamp(o.grievance + 3); });
-    log(s, "bad", `${targetName}进攻失败，我军损失${session.playerLoss}人。战败时丢失${lostGold}金币和${lostGrain}粮食；敌方守军减少${persistentEnemyLoss}人，之后会缓慢补充。`);
+    log(s, "bad", `${targetName}没打下来。死了${session.playerLoss}人，跑的时候丢了${lostGold}金和${lostGrain}粮。对面守军少了${persistentEnemyLoss}个，他们会慢慢补。`);
   }
-  const resumedAt = Date.now();
+  const resumedAt = worldNow();
   resumeWorld(s, resumedAt);
   const recoveryAt = resumedAt;
   engagedArmies.forEach(engagedArmy => {
@@ -414,7 +420,7 @@ function applyStationedLosses(s, territoryId, share) {
 
 // 城破后撤往最近的自有领地并进入整补。距离相同时取 ownTerritoryIds 里
 // 靠前的那个 —— 该函数返回顺序由 TERRITORY_DEFS 的键序决定，是确定的。
-function retreatStationedArmies(s, territoryId, now = Date.now()) {
+function retreatStationedArmies(s, territoryId, now = worldNow()) {
   const armies = stationedArmies(s, territoryId);
   const havens = ownTerritoryIds(s).filter(id => id !== territoryId);
   // 无处可退说明渡鸦堡也已失守，紧接着就会置 s.ended，游戏已经结束。
@@ -500,7 +506,7 @@ function resolveAIAnnex(s, army, targetId, rng = Math.random) {
     lord.side = "gone";
     lord.captured = false;
     (s.knights || []).forEach(k => { if (k.liegeLordId === lord.id) { k.liegeLordId = null; k.side = "gone"; } });
-    log(s, "warn", `${FACTIONS[faction].name}吞并了${TERRITORY_DEFS[targetId].name}，${lord.name}就此除名。他不会再听任何人的条件。`);
+    log(s, "warn", `${FACTIONS[faction].name}吞了${TERRITORY_DEFS[targetId].name}。${lord.name}没了，以后谁的条件他都听不到了。`);
   } else {
     log(s, "warn", `${FACTIONS[faction].name}占据了${TERRITORY_DEFS[targetId].name}。`);
   }
@@ -521,8 +527,8 @@ function recordBattle(s, entry) {
 }
 
 // now 必须由调用方给出（行军任务的 completedAt）。世界由 clock 驱动，
-// 这里若退回 Date.now()，撤离产生的整补任务就会和模拟时间线脱节。
-function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.locationId, now = Date.now()) {
+// 这里若退回 worldNow()，撤离产生的整补任务就会和模拟时间线脱节。
+function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.locationId, now = worldNow()) {
   const faction = army.owner;
   const t = s.territories[targetId];
   if (t && t.owner === "neutral") return resolveAIAnnex(s, army, targetId, rng);
@@ -545,7 +551,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
     t.stability = 42;
     t.guard = Math.max(18, Math.round(attack * .34));
     t.devastated = 2;
-    log(s, "bad", `${army.name}攻占${TERRITORY_DEFS[targetId].name}。`);
+    log(s, "bad", `${TERRITORY_DEFS[targetId].name}丢了。${army.name}进了城。`);
     recordBattle(s, { dir: "defend", targetId, targetName: TERRITORY_DEFS[targetId].name, outcome: "lost", attacker: FACTIONS[faction]?.name || "敌军" });
     // 先扣伤亡再撤离：applyStationedLosses 按 locationId 找军团，撤走了就找不到。
     // retreatStationedArmies 要在 t.owner 已改判之后调，这样 ownTerritoryIds 拿到的是城破后的名单。
@@ -559,7 +565,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
   s.grain -= grainLoss; s.gold -= goldLoss;
   t.stability = clamp(t.stability - 5);
   t.devastated = Math.max(t.devastated, 1);
-  log(s, "warn", `${army.name}袭扰${TERRITORY_DEFS[targetId].name}，抢走${grainLoss}粮食和${goldLoss}金币。`);
+  log(s, "warn", `${army.name}抢了${TERRITORY_DEFS[targetId].name}一把：${grainLoss}粮、${goldLoss}金，人没进城。`);
   recordBattle(s, {
     dir: "defend", targetId, targetName: TERRITORY_DEFS[targetId].name,
     outcome: "raided", attacker: FACTIONS[army.owner]?.name || "敌军",
@@ -570,15 +576,49 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
   return attack > defense * .92 ? "raided" : "repulsed";
 }
 
-function startAIMarch(s, factionId, army, targetId, now = Date.now()) {
+// 来袭预警。敌军行军是一个 MARCH 任务，所以「谁正在往哪打」完全能从任务队列
+// 派生出来，不必另存状态。看不看得见分两档：
+//   目标或它相邻的自有领地有烽火台 —— 从敌军出发那一刻就看见，整段行军时间都能调兵；
+//   没有烽火台 —— 只在最后 THREAT_LATE_WINDOW_MS 看见，基本来不及。
+// 烽火台的描述早就写着「提前发现敌军反攻」，现在它终于是真的。
+const THREAT_LATE_WINDOW_MS = 15 * 1000;
+
+function beaconCovers(s, targetId) {
+  const t = s.territories[targetId];
+  if (!t || t.owner !== "player") return false;
+  if ((t.buildings?.watchtower || 0) > 0) return true;
+  return (TERRITORY_DEFS[targetId]?.adj || []).some(nb => owns(s, nb) && (s.territories[nb]?.buildings?.watchtower || 0) > 0);
+}
+
+function incomingThreats(s, now = worldNow()) {
+  if (!s?.jobs) return [];
+  return s.jobs.filter(job => job.status === "running" && job.type === "MARCH" && job.payload?.factionId && owns(s, job.payload.destinationId)).map(job => {
+    const faction = s.factions?.[job.payload.factionId];
+    const army = faction?.armies?.find(a => a.id === job.armyId);
+    const remainingMs = Math.max(0, job.endAt - now);
+    const beacon = beaconCovers(s, job.payload.destinationId);
+    return {
+      jobId: job.id, factionId: job.payload.factionId, factionName: FACTIONS[job.payload.factionId]?.name || "敌军",
+      armyName: army?.name || "敌军", troops: army ? compositionTotal(army.composition) : 0,
+      targetId: job.payload.destinationId, targetName: TERRITORY_DEFS[job.payload.destinationId]?.name || "",
+      remainingMs, beacon, visible: beacon || remainingMs <= THREAT_LATE_WINDOW_MS
+    };
+  }).filter(threat => threat.visible).sort((a, b) => a.remainingMs - b.remainingMs);
+}
+
+function startAIMarch(s, factionId, army, targetId, now = worldNow()) {
   if (!army || army.status !== "idle" || !TERRITORY_DEFS[targetId]) return null;
   // 目标由 aiTargets 按版图边界给出，未必挨着大军当前所在地；和玩家的长征一样，
   // 距离体现在行军时间上，而不是「够不着就不许打」。
   if (!aiTargets(s, factionId).includes(targetId)) return null;
-  const job = startJob(s, { type: "MARCH", armyId: army.id, startedAt: now, endAt: now + marchDurationForDistance(s, army.locationId, targetId), queueKey: `march:${army.id}`, payload: { originId: army.locationId, destinationId: targetId, factionId } });
+  const durationMs = marchDurationForDistance(s, army.locationId, targetId);
+  const job = startJob(s, { type: "MARCH", armyId: army.id, startedAt: now, endAt: now + durationMs, queueKey: `march:${army.id}`, payload: { originId: army.locationId, destinationId: targetId, factionId } });
   army.destinationId = targetId;
   army.status = "marching";
   army.jobId = job.id;
+  if (owns(s, targetId) && beaconCovers(s, targetId)) {
+    log(s, "warn", `烽火台亮了。${FACTIONS[factionId]?.name || "敌军"}的${army.name}（${compositionTotal(army.composition)}人）正朝${TERRITORY_DEFS[targetId].name}来，${formatDuration(durationMs)}后到。`);
+  }
   return job;
 }
 
@@ -586,7 +626,7 @@ function startAIMarch(s, factionId, army, targetId, now = Date.now()) {
 // 因此增长与开战概率都要按「本次间隔占一季的比例」摊薄，否则 AI 会被放大数倍。
 const FACTION_TIMER_KEY = { wolf: "aiWolf", river: "aiRiver", crown: "aiCrown" };
 
-function runFactionTurn(s, factionId, rng = Math.random, now = Date.now()) {
+function runFactionTurn(s, factionId, rng = Math.random, now = worldNow()) {
   if (!s || s.ended) return null;
   ensureAIFactions(s);
   const def = AI_FACTION_DEFS[factionId];
@@ -655,7 +695,12 @@ function decisionView(s, decision) {
   }
   if (decision.type === "npc_arc") {
     const event = NPC_ARCS.find(item => item.id === decision.eventId);
-    return event ? scriptedEventView(s, event, event.officerId) : null;
+    if (!event) return null;
+    const officerId = event.officerId || decision.officerId;
+    const who = officer(s, officerId);
+    // 原型事件的标题里有 {name}，换成落到的那个人
+    const view = scriptedEventView(s, { ...event, title: String(event.title).replace(/\{name\}/g, who?.name || "") }, officerId);
+    return view;
   }
   if (decision.type === "fief_promise") {
     const lord = officer(s, decision.lordId);
@@ -666,10 +711,10 @@ function decisionView(s, decision) {
     const settle = () => { lord.promisedFief = null; lord.promisedAt = null; };
     const share = techLevel(s, "provincial_offices") ? "约四分之三" : "七成";
     return {
-      kicker: "旧账", title: `${lord.name}来讨当初许下的${d.name}`,
+      kicker: "讨账", title: `${lord.name}来要你许的${d.name}`,
       portrait: lord.portrait || "assets/player.webp",
-      body: `<p>收下金币换旗的时候，你答应把${esc(d.name)}交给他打理。他今天带着随从来了，站在厅上没有坐下。</p>`
-        + `<p>“殿下当时说的话，北境都听见了。”</p>`,
+      body: `<p>收他的时候，你答应把${esc(d.name)}给他管。他今天带着随从来了，站在厅上，没坐。</p>`
+        + `<p>“殿下当时那句话，北境都听见了。”</p>`,
       options: [
         { name: `兑现承诺，把${d.name}封给他`, note: `该地税收降到${share}；王室正统性 +${LEGITIMACY_DELTAS.keepPromise}；他死心塌地`, effect() {
           s.territories[fiefId].fiefHolder = lord.id;
@@ -678,16 +723,18 @@ function decisionView(s, decision) {
           lord.grievance = clamp((lord.grievance || 0) - 20);
           gainLegitimacy(s, "keepPromise");
           s.style.oath++;
+          recordDeed(s, "kept", lord.id);
           settle();
-          log(s, "good", `${d.name}正式封给${lord.name}。消息传开，北境记住了渡鸦家说话算数。`);
+          log(s, "good", `${d.name}封给了${lord.name}。北境这回知道了：渡鸦家说的话，算数。`);
         } },
         { name: "食言，这块地留在自己手里", note: `保住全额税收；王室正统性 ${LEGITIMACY_DELTAS.breakPromise}；他记恨，可能带兵出走`, effect() {
           lord.loyalty = clamp((lord.loyalty || 0) - 30);
           lord.grievance = clamp((lord.grievance || 0) + 45);
           gainLegitimacy(s, "breakPromise");
           s.style.iron++;
+          recordDeed(s, "broken", lord.id);
           settle();
-          log(s, "bad", `${lord.name}空手离开大厅。他没有争辩，只是记下了这一笔。`);
+          log(s, "bad", `${lord.name}空着手走了。没吵，一个字没说。这种人记仇记得最牢。`);
         } }
       ]
     };
@@ -700,25 +747,25 @@ function decisionView(s, decision) {
     // 赎金与放逐都让他离场，但离场理由不同，正统性代价也不同。
     const sendAway = () => { lord.captured = false; lord.side = "gone"; lord.liegeLordId = null; };
     return {
-      kicker: "战后处置", title: `${lord.name}被押到你面前`, portrait: lord.portrait || "assets/player.webp",
-      body: `<p>${esc(d.name)}已经换旗。${esc(lord.name)}——${esc(lord.oldTie || "父亲旧部")}——在城下被俘，等待你的处置。</p><p>他名下的骑士也在等同一个结果。</p>`,
+      kicker: "战后", title: `${lord.name}押到了厅上`, portrait: lord.portrait || "assets/player.webp",
+      body: `<p>${esc(d.name)}换了旗。${esc(lord.name)}——${esc(lord.oldTie || "父亲旧部")}——被反绑着押进大厅，膝盖上全是泥。</p>${lordLine(s, lord.id, "captured") ? `<p>“${esc(lordLine(s, lord.id, "captured"))}”</p>` : ""}<p>他名下的骑士在门外等同一个结果。</p>`,
       options: [
         { name: "接受效忠，让他重新宣誓", note: "加入你的领主议会，忠诚 45；王室正统性 +4", effect() {
           submitLord(s, lord.id, "force");
           s.legitimacy = clamp(s.legitimacy + 4); s.style.oath++;
-          log(s, "good", `${lord.name}重新向渡鸦家宣誓效忠。`);
+          log(s, "good", `${lord.name}跪在厅上重新宣了誓。膝盖上的泥还没干。`);
         } },
         { name: `收取赎金 ${ransom} 金币`, note: `金币 +${ransom}；王室正统性 −2；该领主离场`, effect() {
-          sendAway(); s.gold += ransom; s.legitimacy = clamp(s.legitimacy - 2); s.style.wealth += 2;
-          log(s, "info", `${lord.name}付清赎金后离开北境。`);
+          sendAway(); s.gold += ransom; s.legitimacy = clamp(s.legitimacy - 2); s.style.wealth += 2; recordDeed(s, "ransomed", lord.id);
+          log(s, "info", `${lord.name}付了${ransom}金，出了北境。钱是他的人凑的。`);
         } },
         { name: "放逐他，禁止再次返回", note: "军心 +5；王室正统性 −3", effect() {
-          sendAway(); s.morale = clamp(s.morale + 5); s.legitimacy = clamp(s.legitimacy - 3); s.style.iron++;
-          log(s, "warn", `${lord.name}被逐出北境。`);
+          sendAway(); s.morale = clamp(s.morale + 5); s.legitimacy = clamp(s.legitimacy - 3); s.style.iron++; recordDeed(s, "exiled", lord.id);
+          log(s, "warn", `${lord.name}被押到边境放了。没给马。`);
         } },
         { name: "处死他，立威于北境", note: "邻近领主抵抗 −5；王室正统性 −10；其骑士永为死敌", effect() {
           lord.captured = false; lord.side = "gone";
-          s.legitimacy = clamp(s.legitimacy - 10); s.style.iron += 2;
+          s.legitimacy = clamp(s.legitimacy - 10); s.style.iron += 2; recordDeed(s, "executed", lord.id);
           (s.knights || []).filter(k => k.liegeLordId === lord.id && k.status !== "gone").forEach(k => {
             k.status = "hostile"; k.side = "gone"; k.captured = false;
           });
@@ -726,42 +773,42 @@ function decisionView(s, decision) {
             const neighbour = lordAt(s, id);
             if (neighbour) neighbour.defiance = Math.max(0, (neighbour.defiance || 0) - 5);
           });
-          log(s, "bad", `${lord.name}在${d.name}城前被处死。消息传遍北境。`);
+          const last = lordLine(s, lord.id, "execute");
+          log(s, "bad", `${lord.name}在${d.name}城前被处死。${last ? `最后一句话是：“${last}”` : "消息传遍北境。"}`);
         } }
       ]
     };
   }
   if (decision.type === "first_winter") {
     return {
-      kicker: "第一场雪", title: "城门外来了三十户没有粮食的人", portrait: "assets/oswin.webp",
-      body: `<p>灰麦原的战乱烧掉了他们的村庄。奥斯温说仓库勉强能接济；伊莎贝尔提醒你，冬天才刚开始。</p><p>大厅里的人都在看你如何对待第一批求助者。</p>`,
+      kicker: "第一个冬天", title: "城门外来了三十户人，没有粮", portrait: "assets/oswin.webp",
+      body: `<p>灰麦原打仗，烧了他们的村。奥斯温说仓里勉强能挤出一些；伊莎贝尔说，冬天才刚开始。</p><p>大厅里所有人都在看你怎么对第一批来要饭的。</p>`,
       options: [
-        { name: "打开粮仓，让他们进城", note: "粮食 −22，民心 +12，王室认可 +2；奥斯温忠诚 +5", disabled: s.grain < 22, effect() { s.grain -= 22; s.support = clamp(s.support + 12); s.legitimacy = clamp(s.legitimacy + 2); officer(s, "oswin").loyalty = clamp(officer(s, "oswin").loyalty + 5); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance - 5); s.style.oath += 2; log(s, "good", "渡鸦堡为失去家园的人打开了粮仓。"); } },
-        { name: "给他们10袋粮，让他们去南边", note: "粮食 −10，民心 +3；奥斯温不满 +3", disabled: s.grain < 10, effect() { s.grain -= 10; s.support = clamp(s.support + 3); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance + 3); s.style.wealth++; log(s, "info", "难民拿到十袋麦子，被指向了南方的道路。"); } },
-        { name: "关门。城堡先养活自己人", note: "粮食不变，军心 +3，民心 −10；奥斯温忠诚 −7、不满 +12", effect() { s.morale = clamp(s.morale + 3); s.support = clamp(s.support - 10); officer(s, "oswin").loyalty = clamp(officer(s, "oswin").loyalty - 7); officer(s, "oswin").grievance = clamp(officer(s, "oswin").grievance + 12); s.style.iron += 2; log(s, "bad", "城门保持关闭，难民继续向南。奥斯温的忠诚下降，不满上升。"); } }
+        { name: "开仓，放他们进城", note: "粮食 −22，民心 +12，王室认可 +2；奥斯温忠诚 +5", disabled: s.grain < 22, effect() { s.grain -= 22; s.support = clamp(s.support + 12); s.legitimacy = clamp(s.legitimacy + 2); const o = officer(s, "oswin"); if (o) { o.loyalty = clamp(o.loyalty + 5); o.grievance = clamp((o.grievance || 0) - 5); } s.style.oath += 2; log(s, "good", "仓开了。三十户人进了城，挤在马厩和下城。奥斯温一晚上没睡，在分粮。"); } },
+        { name: "给十袋粮，让他们往南走", note: "粮食 −10，民心 +3；奥斯温不满 +3", disabled: s.grain < 10, effect() { s.grain -= 10; s.support = clamp(s.support + 3); const o = officer(s, "oswin"); if (o) o.grievance = clamp((o.grievance || 0) + 3); s.style.wealth++; log(s, "info", "十袋麦子，一条往南的路。他们走了，走得很慢。"); } },
+        { name: "关门。先养活自己人", note: "粮食不变，军心 +3，民心 −10；奥斯温忠诚 −7、不满 +12", effect() { s.morale = clamp(s.morale + 3); s.support = clamp(s.support - 10); const o = officer(s, "oswin"); if (o) { o.loyalty = clamp(o.loyalty - 7); o.grievance = clamp((o.grievance || 0) + 12); } s.style.iron += 2; log(s, "bad", "门没开。他们在门外站到半夜，然后往南去了。奥斯温回屋的时候没跟你说晚安。"); } }
       ]
     };
   }
   if (decision.type === "cousin_demand") {
-    const edmund = officer(s, "edmund");
     return {
-      kicker: "家族暗流", title: "埃德蒙希望独自指挥下一次远征", portrait: "assets/edmund.webp",
-      body: `<p>“让我单独领一次兵。”埃德蒙盯着桌上的军旗，“我打得赢，他们自然会闭嘴。”</p><p>已经有几名骑士开始跟随埃德蒙。让他单独领军，会增加他的功劳，也可能让他的野心更大。</p>`,
+      kicker: "家事", title: "埃德蒙要单独带一次兵", portrait: "assets/edmund.webp",
+      body: `<p>“让我单独领一次兵。”他盯着桌上的军旗，“我打得赢，他们自然闭嘴。堂弟，你也一样。”</p><p>已经有几个骑士跟在他后头了。让他领兵，他的功劳会涨，野心也会。</p>`,
       options: [
-        { name: "同意让他单独领军", note: "埃德蒙忠诚 +8、功劳 +5；王室认可 −3", effect() { edmund.loyalty = clamp(edmund.loyalty + 8); edmund.merit += 5; s.legitimacy = clamp(s.legitimacy - 3); s.style.oath++; log(s, "info", "埃德蒙接过军旗，下一次会议由他汇报商路和军情。"); } },
-        { name: "当众拒绝他的请求", note: "王室认可 +4；埃德蒙忠诚 −10、不满 +14", effect() { s.legitimacy = clamp(s.legitimacy + 4); edmund.loyalty = clamp(edmund.loyalty - 10); edmund.grievance = clamp(edmund.grievance + 14); s.style.iron += 2; log(s, "warn", "埃德蒙交还军旗，忠诚下降，不满上升。"); } },
-        { name: "让他先去保护商路", note: "金币 +10；埃德蒙忠诚 −3、管理功劳 +3", effect() { s.gold += 10; edmund.loyalty = clamp(edmund.loyalty - 3); edmund.merit += 3; s.style.wealth += 2; log(s, "info", "埃德蒙保护商路，带回10金币并增加3点功劳。"); } }
+        { name: "让他去", note: "埃德蒙忠诚 +8、功劳 +5；王室认可 −3", effect() { const o = officer(s, "edmund"); if (o) { o.loyalty = clamp(o.loyalty + 8); o.merit += 5; } s.legitimacy = clamp(s.legitimacy - 3); s.style.oath++; log(s, "info", "他接过军旗，没说谢。下次军议是他报的商路和军情，报得比奥斯温还细。"); } },
+        { name: "当众拒绝", note: "王室认可 +4；埃德蒙忠诚 −10、不满 +14", effect() { const o = officer(s, "edmund"); if (o) { o.loyalty = clamp(o.loyalty - 10); o.grievance = clamp((o.grievance || 0) + 14); } s.legitimacy = clamp(s.legitimacy + 4); s.style.iron += 2; log(s, "warn", "他把军旗放回桌上，放得很轻。“行，堂弟。”"); } },
+        { name: "先让他去护商路", note: "金币 +10；埃德蒙忠诚 −3、管理功劳 +3", effect() { const o = officer(s, "edmund"); if (o) { o.loyalty = clamp(o.loyalty - 3); o.merit += 3; } s.gold += 10; s.style.wealth += 2; log(s, "info", "他去护了一季商路，带回十金。回来说，商路上没人叫他堂兄。"); } }
       ]
     };
   }
   if (decision.type === "royal_tax") {
     return {
-      kicker: "王室催税", title: "摄政公爵要你补上父亲欠下的四十枚金币", portrait: "assets/ysabel.webp",
-      body: `<p>使者把王室命令放在长桌上。按时缴纳会提高王室认可；拒绝缴税则会明显降低王室认可，但能提高军心和威望。</p>`,
+      kicker: "王城催税", title: "摄政公爵要你补上父亲欠的四十金", portrait: "assets/ysabel.webp",
+      body: `<p>使者把王命放在长桌上，封蜡是公爵的。伊莎贝尔看了一眼说，账是真的，先王确实欠了。奥斯温说，欠是欠，但收账的不该是他。</p>`,
       options: [
-        { name: "支付全部40金币", note: "金币 −40，王室认可 +12", disabled: s.gold < 40, effect() { s.gold -= 40; s.legitimacy = clamp(s.legitimacy + 12); s.style.oath++; log(s, "info", "王室税金装箱南下，公爵的使者满意离开。"); } },
-        { name: "只付20金币并请求延期", note: "金币 −20，王室认可 +3，威望 −2", disabled: s.gold < 20, effect() { s.gold -= 20; s.legitimacy = clamp(s.legitimacy + 3); s.renown = clamp(s.renown - 2); s.style.wealth += 2; log(s, "warn", "使者收下20金币，并把剩余欠税写入回报。"); } },
-        { name: "烧掉命令，拒绝缴税", note: "威望 +8，军心 +6，王室认可 −12", effect() { s.renown = clamp(s.renown + 8); s.morale = clamp(s.morale + 6); s.legitimacy = clamp(s.legitimacy - 12); s.style.iron += 2; log(s, "warn", "使者带着烧毁的封蜡返回王城，渡鸦堡公开拒绝缴税。"); } }
+        { name: "全付，四十金", note: "金币 −40，王室认可 +12；公爵拿钱办事，加冕推迟 5 分钟", disabled: s.gold < 40, effect() { s.gold -= 40; s.legitimacy = clamp(s.legitimacy + 12); s.style.oath++; applyEventEffects(s, { coronationMin: 5 }); log(s, "info", "四十金装箱南下。使者走的时候第一次对你行了礼。"); } },
+        { name: "付二十，求延期", note: "金币 −20，王室认可 +3，威望 −2", disabled: s.gold < 20, effect() { s.gold -= 20; s.legitimacy = clamp(s.legitimacy + 3); s.renown = clamp(s.renown - 2); s.style.wealth += 2; log(s, "warn", "使者收了二十金，把剩下的写进回报。他写得很慢，让你看着他写。"); } },
+        { name: "烧了王命", note: "威望 +8，军心 +6，王室认可 −12；公爵被激怒，加冕提前 10 分钟", effect() { s.renown = clamp(s.renown + 8); s.morale = clamp(s.morale + 6); s.legitimacy = clamp(s.legitimacy - 12); s.style.iron += 2; applyEventEffects(s, { coronationMin: -10 }); log(s, "warn", "王命在火盆里烧了。使者带着烧剩的封蜡回了王城，大厅里有人在笑。"); } }
       ]
     };
   }
@@ -772,12 +819,12 @@ function decisionView(s, decision) {
     };
     const crownTechNote = `${techLevel(s, "royal_exchange") ? `；王家汇兑额外威望 +${10 * techLevel(s, "royal_exchange")}` : ""}${techLevel(s, "iron_crown_doctrine") ? `；铁冠军令军心 +${8 * techLevel(s, "iron_crown_doctrine")}` : ""}`;
     return {
-      kicker: "终章 · 铁冠", title: "王冠谷已经落入你手中", portrait: "assets/player.webp",
-      body: `<p>王冠谷已经被占领，北境七块领地全部归你统治。家臣把旧王朝的铁冠送进大厅，等待你决定如何完成加冕。</p>`,
+      kicker: "终章", title: "铁冠在桌上", portrait: "assets/player.webp",
+      body: `<p>王冠谷的城门开了。家臣把那顶冠从公爵的箱子里翻出来，放在你面前的桌上。它比想象的小，比想象的重。</p><p>怎么戴，你说。</p>`,
       options: [
-        { name: "保留各地旧规矩，再戴上铁冠", note: `守信风格 +2${crownTechNote}`, effect() { crownTechBonus(); s.style.oath++; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}保留各地旧规矩，然后戴上铁冠。`); } },
-        { name: "要求所有领主跪下宣誓，再戴上铁冠", note: `强硬风格 +2${crownTechNote}`, effect() { crownTechBonus(); s.style.iron += 2; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}要求所有领主跪下宣誓，然后戴上铁冠。`); } },
-        { name: "先清点国库和税册，再举行加冕", note: `经营风格 +2${crownTechNote}`, effect() { crownTechBonus(); s.style.wealth += 2; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}先清点国库和税册，随后才举行加冕。`); } }
+        { name: "各地规矩照旧。戴上", note: `守信风格 +2${crownTechNote}`, effect() { crownTechBonus(); s.style.oath++; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}让各地的规矩照旧，然后戴上了铁冠。`); } },
+        { name: "所有领主跪下宣誓。然后戴", note: `强硬风格 +2${crownTechNote}`, effect() { crownTechBonus(); s.style.iron += 2; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}让所有领主跪下宣了誓，然后戴上了铁冠。有人跪得快，有人跪得慢。`); } },
+        { name: "先清国库和税册。再戴", note: `经营风格 +2${crownTechNote}`, effect() { crownTechBonus(); s.style.wealth += 2; s.ended = true; s.endingReason = "unified"; log(s, "good", `${s.playerName}先清了国库和税册，三天后才戴上铁冠。伊莎贝尔说这是她见过最像样的加冕。`); } }
       ]
     };
   }
@@ -787,7 +834,7 @@ function decisionView(s, decision) {
 function pumpDecision() {
   if (!S || S.ended || !S.pendingDecisions.length || typeof document === "undefined") {
     $("modalMask")?.classList.add("hidden");
-    if (S && !S.battleSession && S.pauseState?.reason === "decision") resumeWorld(S, Date.now());
+    if (S && !S.battleSession && S.pauseState?.reason === "decision") resumeWorld(S, worldNow());
     return;
   }
   if (pauseWorld(S, "decision")) renderTop();
@@ -816,7 +863,7 @@ function pumpDecision() {
     // 只解开自己按下的那把锁。原先是无条件 resume，于是战斗中弹出的事件
     // 一旦被回答，连战斗的暂停也会被一并解开；现在又多了「离开暂停」，
     // 不按 reason 区分的话，切回来答个事件就等于替玩家点了「继续」。
-    if (!S.pendingDecisions.length && S.pauseState?.reason === "decision") resumeWorld(S, Date.now());
+    if (!S.pendingDecisions.length && S.pauseState?.reason === "decision") resumeWorld(S, worldNow());
     saveGame();
     renderAll();
     if (!S.ended) pumpDecision();

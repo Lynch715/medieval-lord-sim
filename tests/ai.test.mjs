@@ -154,3 +154,31 @@ const fixedRng = value => () => value;
 }
 
 console.log("ai tests passed");
+
+// ── 来袭预警：从行军任务派生；烽火台决定看得见多早 ──────────────────
+{
+  const s = game.createInitialState("预警", "oath", "standard");
+  game.ensureAIFactions(s);
+  const now = 1_000_000;
+  s.clock.elapsedMs = game.TIME_CONFIG.seasonDurationMs * 3;
+  const wolf = s.factions.wolf.armies[0];
+  // 灰麦原邻接渡鸦堡，狼牙能打渡鸦堡
+  assert.ok(game.aiTargets(s, "wolf").includes("ravenstone"));
+  assert.equal(game.beaconCovers(s, "ravenstone"), false, "开局没有烽火台");
+  // 手工造一个 AI 行军任务来验派生（runFactionTurn 要掷骰子）
+  s.jobs.push({ id: "aimarch", type: "MARCH", status: "running", armyId: wolf.id, startedAt: now, endAt: now + 60 * 1000, queueKey: `march:${wolf.id}`, payload: { originId: "pineford", destinationId: "ravenstone", factionId: "wolf" } });
+  assert.equal(game.incomingThreats(s, now).length, 0, "没有烽火台，刚出发时看不见");
+  assert.equal(game.incomingThreats(s, now + 60 * 1000 - game.THREAT_LATE_WINDOW_MS + 1000).length, 1, "最后十几秒才看见");
+  s.territories.ravenstone.buildings.watchtower = 1;
+  const threats = game.incomingThreats(s, now);
+  assert.equal(threats.length, 1, "有烽火台，出发就看见");
+  assert.equal(threats[0].targetId, "ravenstone");
+  assert.equal(threats[0].factionName, "狼牙氏族");
+  assert.equal(threats[0].beacon, true);
+  assert.ok(threats[0].remainingMs === 60 * 1000);
+  // 相邻自有领地的烽火台也算
+  s.territories.ravenstone.buildings.watchtower = 0;
+  s.territories.blackthorn.buildings.watchtower = 1;
+  assert.equal(game.beaconCovers(s, "ravenstone"), true, "黑棘镇的烽火台照得到渡鸦堡");
+}
+console.log("ai.test threats ok");
