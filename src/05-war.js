@@ -18,6 +18,8 @@ function battleEstimate(s, targetId, leaderIds, troops, planId, armyId = "army_1
   const composition = explicitComposition ? { ...emptyComposition(), ...explicitComposition } : selectedComposition(s, troops, armyId);
   const enemyComposition = defenderComposition(s, targetId);
   const unitPower = compositionPower(composition, targetId, planId, seasonOf(s).id, s);
+  const baselinePower = compositionPower(composition, targetId, planId, seasonOf(s).id);
+  const equipmentBonus = baselinePower > 0 ? unitPower / baselinePower - 1 : 0;
   const counter = counterMultiplier(composition, enemyComposition);
   const fatigue = 1;
   const effectiveMorale = leaderIds.includes("player") ? Math.max(45, s.morale) : s.morale;
@@ -27,6 +29,9 @@ function battleEstimate(s, targetId, leaderIds, troops, planId, armyId = "army_1
   attack *= knightMultiplier;
   if (leaderIds.includes("bran") && (d.terrainTags || []).some(tag => ["forest", "mountain"].includes(tag))) attack *= 1.08;
   if (leaderIds.includes("aveline") && (d.terrainTags || []).includes("river")) attack *= 1.08;
+  // 被动技
+  if (planId === "steady" && leadersHaveSkill(s, leaderIds, "steady_line")) attack *= 1.05;
+  if (!(d.terrainTags || []).includes("capital") && leadersHaveSkill(s, leaderIds, "cut_supply")) attack *= 1.05;
   const walls = t.buildings?.walls || (d.final ? 2 : 1);
   const watchtower = t.buildings?.watchtower || 0;
   const wallFactor = techLevel(s, "sappers") ? Math.max(.05, .09 - techLevel(s, "sappers") * .01) : .11;
@@ -40,13 +45,14 @@ function battleEstimate(s, targetId, leaderIds, troops, planId, armyId = "army_1
   if (defender) defense *= 1 + defender.stats.command / 700;
   if (defender?.id === "bran" && (d.terrainTags || []).some(tag => ["forest", "mountain"].includes(tag))) defense *= 1.1;
   if (defender?.id === "aveline" && (d.terrainTags || []).includes("river")) defense *= 1.08;
+  if (defender?.id === "regent") defense *= 1.06;
   const ratio = attack / Math.max(1, defense);
   let label = "胜负难料";
   if (ratio >= 1.28) label = "明显占优";
   else if (ratio >= 1.08) label = "略占上风";
   else if (ratio < .78) label = "近乎送死";
   else if (ratio < .94) label = "处于下风";
-  return { attack, defense, ratio, label, planMult, composition, defenderComposition: enemyComposition, unitPower, counter, knightMultiplier, fatigue, effectiveMorale };
+  return { attack, defense, ratio, label, equipmentBonus, planMult, composition, defenderComposition: enemyComposition, unitPower, counter, knightMultiplier, fatigue, effectiveMorale };
 }
 
 function casualtyForecast(s, targetId, leaderIds, troops, planId, armyId = "army_1") {
@@ -74,7 +80,8 @@ function battlePowerText(ratio) {
 }
 
 function battleBreakdownText(est) {
-  return "";
+  const pct = value => `${value >= 0 ? "+" : ""}${Math.round(value * 100)}%`;
+  return ` · 装备${pct(est.equipmentBonus || 0)} · 兵种克制${pct(est.counter - 1)} · 作战方式${pct(est.planMult - 1)}`;
 }
 
 function battleFatigueText(fatigue) {
@@ -108,7 +115,7 @@ function startBattle(s, draft, rng = Math.random) {
   if (!arrival && !armyIds.some(id => attackableTerritories(s, id).includes(draft.targetId))) return null;
   if (armies.some(army => !["idle", "marching"].includes(army.status))) return null;
   const army = armies[0];
-  const defaultLeaderIds = armies.map(item => item.commanderId || item.leaders?.[0] || "player");
+  const defaultLeaderIds = armies.flatMap(item => armyLeaderIds(s, item));
   const leaderIds = [...new Set((draft.leaderIds?.length ? draft.leaderIds : defaultLeaderIds).filter(Boolean))].slice(0, 3);
   const leaders = leaderIds.map(id => commanderById(s, id)).filter(person => person && (person.id === "player" || person.side === "player" && person.status === "active" || person.side === "player" && person.injured === 0)).slice(0, 3);
   const availableComposition = armyGroupComposition(s, armyIds);
@@ -140,14 +147,19 @@ function startBattle(s, draft, rng = Math.random) {
     composition: est.composition,
     lossesByType: emptyComposition(),
     ratio: est.ratio,
+    contribution: battleBreakdownText(est).replace(/^ · /, ""),
+    supply: draft.supplyAlreadyPaid ? (draft.suppliedGrain ?? supply) : supply,
     stage: 0,
     momentum: clamp((est.ratio - 1) * 42, -42, 42),
     playerLoss: 0,
     enemyLoss: 0,
     history: [],
     flags: { demanded: false, pushed: false, aggression: 0 },
-    seedMark: Math.round(rng() * 1e9)
+    seedMark: Math.round(rng() * 1e9),
+    skillsUsed: [], deeds: {}, goodStages: 0, duelDone: false, enemySkillDone: false
   };
+  // 先锋：开战先占一点优势
+  if (leadersHaveSkill(s, s.battleSession.leaderIds, "vanguard")) s.battleSession.momentum = clamp(s.battleSession.momentum + 6, -100, 100);
   armies.forEach(item => {
     item.status = "engaged";
     item.destinationId = draft.targetId;
@@ -175,12 +187,82 @@ function stageOptions(s, session) {
     if ((force >= 68 || ids.includes("renard")) && (session.composition?.knights || 0) >= 2) options.push({ id: "charge", name: "让披甲骑士正面冲锋", by: ids.includes("renard") ? "雷纳德" : "随军骑士", desc: "平原威力最大，但连续强攻会明显增加伤亡。", mult: 1.1 + force / 2400, casualty: 1.64, pushed: true });
     if (scheme >= 67) options.push({ id: "feint", name: "故意露出左翼", by: ids.includes("edmund") ? "埃德蒙" : "谋士提议", desc: "诱使敌军离开防线，再切断退路。", mult: 1.14 + scheme / 1600, casualty: .88 });
   } else {
+    const survivingKnights = (session.composition?.knights || 0) - (session.lossesByType?.knights || 0);
+    const openGround = (TERRITORY_DEFS[session.targetId]?.terrainTags || []).includes("plains");
+    if (session.flags.suppressed && survivingKnights >= 2 && openGround) options.push({
+      id: "breakthrough", name: "骑兵突破被压制的侧翼", by: "弓骑协同", combo: true,
+      desc: "上一轮弓手压住了敌阵，平原上的预备骑兵可以切入；比守住优势更冒险，但更有机会决胜。",
+      mult: 1.32, casualty: 1.05, pushed: true
+    });
     options.push({ id: "press", name: "派出剩余部队强攻", by: "通用命令", desc: "争取在天黑前结束战斗，但疲惫的部队会承受更多伤亡。", mult: 1.08, casualty: 1.48, pushed: true });
     options.push({ id: "hold", name: "停止追击，守住优势", by: "通用命令", desc: "不追求大胜，优先减少伤亡。", mult: 1.01, casualty: .72 });
     if (session.momentum > 10 && charm >= 64) options.push({ id: "surrender", name: "让号手劝他们放下武器", by: ids.includes("edmund") ? "埃德蒙" : "随军使者", desc: "仅在我军占据优势时可能奏效。", mult: .96 + charm / 1900, casualty: .38, surrender: true });
     options.push({ id: "retreat", name: "下令撤退", by: ids.includes("ysabel") ? "伊莎贝尔" : "通用命令", desc: "保住剩余士兵，本场无法占领目标。", retreat: true });
   }
-  return options.slice(0, 4);
+  // 带兵者的军令技：本阶段可用、本场没用过、条件满足的，各出一张卡
+  const tags = TERRITORY_DEFS[session.targetId]?.terrainTags || [];
+  const knightsLeft = (session.composition?.knights || 0) - (session.lossesByType?.knights || 0);
+  ids.forEach(id => {
+    const person = commanderById(s, id);
+    personSkills(s, id).forEach(skillId => {
+      const sk = SKILLS[skillId];
+      if (sk.type !== "order" || sk.stage !== session.stage) return;
+      if ((session.skillsUsed || []).includes(`${skillId}:${id}`)) return;
+      if (sk.terrain && !sk.terrain.some(tag => tags.includes(tag))) return;
+      if (sk.needKnights && knightsLeft < sk.needKnights) return;
+      if (sk.holdLine && session.momentum >= 8) return;
+      options.unshift({ id: `skill:${skillId}:${id}`, skillId, leaderId: id, skill: true, name: sk.name, by: person?.name || "将领", portrait: person?.portrait || null,
+        desc: sk.desc, mult: sk.mult, casualty: sk.casualty, pushed: !!sk.pushed });
+    });
+  });
+  // 单挑：交锋阶段，守城的是有名有姓的人，就能叫阵。每场一次，不占这一阶段的军令。
+  const defender = defenderLeader(s, session.targetId);
+  if (session.stage === 1 && defender && !session.duelDone) {
+    const champ = duelChampion(s, ids);
+    if (champ) options.unshift({ id: "duel", duel: true, name: `${champ.name}出阵叫阵`, by: champ.name, portrait: champ.portrait || null,
+      desc: `单挑${defender.name}（武力${personStat(defender, "force")}）。赢了优势大涨，输了${champ.name}负伤一季。不占本阶段军令。` });
+  }
+  return options;
+}
+
+function duelChampion(s, ids) {
+  return ids.map(id => commanderById(s, id)).filter(Boolean).sort((a, b) => personStat(b, "force") - personStat(a, "force"))[0] || null;
+}
+
+function resolveDuel(s, session, rng) {
+  const champ = duelChampion(s, session.leaderIds);
+  const defender = defenderLeader(s, session.targetId);
+  if (!champ || !defender) return null;
+  session.duelDone = true;
+  const chance = Math.max(.15, Math.min(.85, .5 + (personStat(champ, "force") - personStat(defender, "force")) / 60));
+  const win = rng() < chance;
+  const fill = text => text.replaceAll("{a}", champ.name).replaceAll("{d}", defender.name);
+  const pick = (pool) => pool[Math.floor(rng() * pool.length) % pool.length];
+  const delta = win ? 12 : -10;
+  session.momentum = clamp(session.momentum + delta, -100, 100);
+  if (win) {
+    session.deeds[champ.id] = (session.deeds[champ.id] || 0) + 3;
+    session.flags.duelWon = champ.id;
+  } else if (knightById(s, champ.id)) champ.injuredUntil = turnOf(s) + 1;
+  else if (champ.id !== "player") champ.injured = 1;
+  session.history.push({ name: "单挑", title: `${champ.name} 对 ${defender.name}`, text: `${fill(pick(DUEL_LINES.challenge))}${fill(pick(DUEL_LINES[win ? "win" : "lose"]))}`, duel: true });
+  saveGame();
+  return { ended: false, session, duel: win };
+}
+
+// 敌将出手：守城的领主带着自己的专属技能，每场在对应阶段发动一次
+function applyEnemySkill(s, session, history) {
+  if (session.enemySkillDone) return;
+  const defender = defenderLeader(s, session.targetId);
+  if (!defender) return;
+  const sig = SIGNATURE_SKILLS[defender.id];
+  const def = ENEMY_SKILL_TEXT[sig] || ENEMY_SKILL_TEXT._;
+  if (def.stage !== session.stage) return;
+  const tags = TERRITORY_DEFS[session.targetId]?.terrainTags || [];
+  if (def.terrain && !def.terrain.some(tag => tags.includes(tag))) return;
+  session.enemySkillDone = true;
+  session.momentum = clamp(session.momentum - def.momentum, -100, 100);
+  history.text += ` ${def.text.replaceAll("{name}", defender.name)}${sig && SKILLS[sig] ? `（${defender.name}·${SKILLS[sig].name}）` : ""}`;
 }
 
 function battleNarrative(session, choice, delta, loss, enemyLoss) {
@@ -192,7 +274,7 @@ function battleNarrative(session, choice, delta, loss, enemyLoss) {
 }
 
 function battleChoiceHint(choice) {
-  const hints = { ridge: "稳住先手 · 伤亡较低", scout: "谋略推进 · 首轮损失较低", forced: "快速推进 · 伤亡风险高", shield: "稳住战线 · 伤亡低", volley: "弓手压制 · 需要弓手", charge: "骑士冲锋 · 伤亡风险高", feint: "制造缺口 · 依赖谋略", press: "追击推进 · 伤亡风险高", hold: "守住优势 · 可能错失战果", surrender: "劝降机会 · 只在占优时出现", retreat: "保存兵力 · 放弃本次攻城" };
+  const hints = { breakthrough: "弓骑协同 · 强突破 · 中等伤亡", ridge: "稳住先手 · 伤亡较低", scout: "谋略推进 · 首轮损失较低", forced: "快速推进 · 伤亡风险高", shield: "稳住战线 · 伤亡低", volley: "弓手压制 · 需要弓手", charge: "骑士冲锋 · 伤亡风险高", feint: "制造缺口 · 依赖谋略", press: "追击推进 · 伤亡风险高", hold: "守住优势 · 可能错失战果", surrender: "劝降机会 · 只在占优时出现", retreat: "保存兵力 · 放弃本次攻城" };
   return hints[choice.id] || "改变当前战况";
 }
 
@@ -210,6 +292,29 @@ function applyBattleChoice(s, choiceId, rng = Math.random) {
   const choice = stageOptions(s, session).find(o => o.id === choiceId);
   if (!choice) return null;
   if (choice.retreat) return finishBattle(s, "retreat", rng);
+  if (choice.duel) return resolveDuel(s, session, rng);
+  let skillNote = "";
+  let enemyLossMult = 1;
+  if (choice.skill) {
+    const sk = SKILLS[choice.skillId];
+    session.skillsUsed = [...(session.skillsUsed || []), `${choice.skillId}:${choice.leaderId}`];
+    session.deeds[choice.leaderId] = (session.deeds[choice.leaderId] || 0) + 2;
+    if (sk.roll) {
+      const person = commanderById(s, choice.leaderId);
+      const defender = defenderLeader(s, session.targetId);
+      const mine = personStat(person, sk.roll.stat);
+      const theirs = sk.roll.vsDefender ? (defender ? personStat(defender, "force") : 55) : 50;
+      const chance = Math.max(.15, Math.min(.88, sk.roll.base + (mine - theirs) / sk.roll.div));
+      const ok = rng() < chance;
+      choice.mult = ok ? sk.mult : sk.failMult;
+      choice.casualty = ok ? sk.casualty : sk.failCasualty;
+      skillNote = ok ? `${sk.name}成了。` : `${sk.name}没成，反倒吃了亏。`;
+      if (!ok) session.deeds[choice.leaderId] -= 2;
+    }
+    if (sk.enemyLossMult && !(sk.roll && skillNote.includes("没成"))) enemyLossMult = sk.enemyLossMult;
+    if (sk.resetAggression) session.flags.aggression = 0;
+    if (sk.holdLine) session.flags.holdLine = true;
+  }
   const priorAggression = session.flags.aggression || 0;
   let adaptation = 1;
   let casualtySurge = 1;
@@ -223,61 +328,116 @@ function applyBattleChoice(s, choiceId, rng = Math.random) {
   const wave = .71 + rng() * .58;
   const effectiveMult = choice.mult * adaptation;
   let delta = (session.ratio * effectiveMult * wave - 1) * 34;
-  const counterBlow = choice.pushed && priorAggression > 0 ? priorAggression * (6 + rng() * 8) : 0;
+  const counterBlow = (choice.pushed && priorAggression > 0 ? priorAggression * (6 + rng() * 8) : 0) * (leadersHaveSkill(s, session.leaderIds, "guard_banner") ? .5 : 1);
   delta -= counterBlow;
   session.momentum = clamp(session.momentum + delta, -100, 100);
   const remaining = Math.max(1, session.troops - session.playerLoss);
   const oddsPenalty = Math.min(.1, Math.max(0, .9 / Math.max(.15, session.ratio) - 1) * .035);
   let loss = Math.max(1, Math.round(remaining * (.03 + Math.max(.007, 1 / Math.max(.2, session.ratio) * .014) + oddsPenalty) * choice.casualty * casualtySurge * (.78 + rng() * .45)));
   if (session.leaderIds.includes("ysabel")) loss = Math.max(1, Math.round(loss * .9));
+  if (leadersHaveSkill(s, session.leaderIds, "iron_wall")) loss = Math.max(1, Math.round(loss * .9));
+  if (session.stage === 0 && leadersHaveSkill(s, session.leaderIds, "scouting")) loss = Math.max(1, Math.round(loss * .8));
   const defender = s.territories[session.targetId].guard;
-  const enemyLoss = Math.max(1, Math.round(defender * .035 * effectiveMult * (.78 + rng() * .5)));
+  const enemyLoss = Math.max(1, Math.round(defender * .035 * effectiveMult * enemyLossMult * (.78 + rng() * .5)));
   session.playerLoss = Math.min(session.troops - 1, session.playerLoss + loss);
   session.lossesByType = allocateLosses(session.composition, session.playerLoss);
   session.enemyLoss = Math.min(defender, session.enemyLoss + enemyLoss);
+  if (choice.id === "volley") session.flags.suppressed = delta > 0;
+  if (choice.combo) session.flags.breakthrough = true;
+  if (delta >= 8) session.goodStages = (session.goodStages || 0) + 1;
   const history = battleNarrative(session, choice, delta, loss, enemyLoss);
+  if (skillNote) history.text = `${skillNote}${history.text}`;
+  if (choice.skill) history.skill = SKILLS[choice.skillId].name;
+  if (choice.id === "volley") history.text += delta > 0 ? " 弓手压制成功；若平原上仍有至少2名披甲骑士，决胜阶段可发起侧翼突破。" : " 敌阵未被压制，尚不能组织弓骑协同。";
+  if (choice.combo) history.text += " 前一轮弓手制造的缺口让骑兵切入敌阵，弓骑协同已生效。";
+  if (session.stage === 0 && session.contribution) history.text += ` 战前准备：${session.contribution}。`;
   if (counterBlow > 0) history.text += ` 连着强攻，对面看出来了，早就等着——优势掉了${Math.round(counterBlow)}点。`;
   // 带兵的人开口。按这一阶段的走势分三档，谁带兵谁说。
-  const speakerId = session.commanderId || session.leaderIds?.[0] || "player";
+  const speakerId = choice.skill ? choice.leaderId : (session.commanderId || session.leaderIds?.[0] || "player");
   const tier = delta >= 8 ? "good" : delta <= -8 ? "bad" : "even";
-  const quip = commanderBattleLine(s, speakerId, tier);
+  const skillLines = choice.skill ? SKILLS[choice.skillId].lines : null;
+  const quip = skillLines?.length ? skillLines[Math.floor(rng() * skillLines.length) % skillLines.length] : commanderBattleLine(s, speakerId, tier);
   if (quip) { history.quip = quip; history.speaker = commanderById(s, speakerId)?.name || "指挥官"; }
+  applyEnemySkill(s, session, history);
   session.history.push(history);
   session.stage++;
   if (session.stage >= 3) {
     const surrenderWin = session.flags.demanded && session.momentum > 4;
-    return finishBattle(s, session.momentum >= 8 || surrenderWin ? "win" : "loss", rng);
+    const won = session.momentum >= 8 || surrenderWin;
+    // 死守不退：打不赢也只算撤回
+    return finishBattle(s, won ? "win" : session.flags.holdLine ? "retreat" : "loss", rng);
   }
   saveGame();
   return { ended: false, session };
 }
 
+function markRecovered(s, id) {
+  s.recoveryRewards ||= Object.fromEntries([...new Set([
+    ...Object.keys(TERRITORY_DEFS).filter(tid => TERRITORY_DEFS[tid].owner === "player"),
+    ...ownTerritoryIds(s), ...(s.victories || [])
+  ])].map(tid => [tid, true]));
+  const first = !s.recoveryRewards[id];
+  s.recoveryRewards[id] = true;
+  return first;
+}
+
+function conquestReward(s, id) {
+  const d = TERRITORY_DEFS[id];
+  if (s.recoveryRewards?.[id] || d.owner === "player" || (s.victories || []).includes(id) || s.territories[id].owner === "player") return { gold: 0, grain: 0, volunteers: 0, label: "已收复过，无首次军资" };
+  if (d.type === "castle") return { gold: 30, grain: 16, volunteers: 3, label: "城堡军资" };
+  if (d.type === "fort") return { gold: 16, grain: 12, volunteers: 5, label: "要塞守备归附" };
+  if (d.grain >= 25) return { gold: 10, grain: 30, volunteers: 2, label: "粮镇开仓" };
+  return { gold: 24, grain: 12, volunteers: 2, label: "商镇军资" };
+}
+
+function recoverySupport(s, outcome = "win") {
+  const ids = ownTerritoryIds(s);
+  const hospital = Math.max(0, ...ids.map(id => s.territories[id].buildings.temple || 0));
+  const logistics = Math.max(0, ...ids.map(id => (s.territories[id].buildings.roads || 0) + (s.territories[id].buildings.workshop || 0)));
+  return { woundRate: (outcome === "win" ? .4 : .2) + hospital * .02,
+    durationMs: (outcome === "win" ? 90000 : 120000) - Math.min(30000, logistics * 3000) - treasureBonus(s, "recovery") * 1000, hospital, logistics };
+}
+
 function finishBattle(s, outcome, rng = Math.random) {
   const session = s.battleSession;
   if (!session) return null;
+  const support = recoverySupport(s, outcome);
+  if (outcome !== "win" && leadersHaveSkill(s, session.leaderIds, "retreat_count")) support.woundRate += .1;
+  const reward = outcome === "win" ? conquestReward(s, session.targetId) : null;
+  const economyBefore = forecast(s);
+  const before = { gold: s.gold, grain: s.grain, renown: s.renown, legitimacy: s.legitimacy, morale: s.morale };
   const targetId = session.targetId;
   const targetName = TERRITORY_DEFS[targetId].name;
-  const oldOwner = s.territories[targetId].owner;
   const lossesByType = session.lossesByType || allocateLosses(session.composition || selectedComposition(s, session.troops), session.playerLoss);
   const engagedArmies = (session.armyIds || [session.armyId || "army_1"]).map(id => armyEntity(s, id)).filter(Boolean);
   const engagedArmy = engagedArmies[0] || null;
+  const woundedByType = allocateLosses(lossesByType, Math.floor(session.playerLoss * support.woundRate));
+  const wounded = compositionTotal(woundedByType);
+  const dead = session.playerLoss - wounded;
   Object.keys(UNIT_DEFS).forEach(type => {
+    let woundLeft = woundedByType[type] || 0;
     let left = Math.max(0, lossesByType[type] || 0);
     engagedArmies.forEach(army => {
       if (left <= 0) return;
       const take = Math.min(left, army.composition[type] || 0);
       army.composition[type] = Math.max(0, (army.composition[type] || 0) - take);
+      army.wounded ||= emptyComposition();
+      const rescued = Math.min(take, woundLeft);
+      army.wounded[type] = (army.wounded[type] || 0) + rescued;
+      woundLeft -= rescued;
       left -= take;
     });
   });
   syncTroops(s);
-  s.casualties += session.playerLoss;
+  s.casualties += dead;
   s.warWeariness = 0;
   const leaders = session.leaderIds.map(id => commanderById(s, id)).filter(Boolean);
   // 领主不再进入受伤计时；战后只结算兵力、军心与领地归属。
   const injured = [];
   let persistentEnemyLoss = 0;
   let garrisoned = 0;
+  let delayedCoronation = false;
+  const captives = [];
   let lostGold = 0;
   let lostGrain = 0;
   if (outcome === "win") {
@@ -288,8 +448,16 @@ function finishBattle(s, outcome, rng = Math.random) {
       const moved = removeFromComposition(engagedArmy.composition, garrisoned);
       Object.keys(UNIT_DEFS).forEach(type => { territoryGarrison(s, targetId)[type] += moved[type]; });
     }
+    const firstRecovery = markRecovered(s, targetId);
+    if (firstRecovery) grantTreasureFor(s, "capture", targetId);
+    if (firstRecovery) {
+      s.gold += reward.gold;
+      s.grain += reward.grain;
+      if (engagedArmy) engagedArmy.composition.levy = (engagedArmy.composition.levy || 0) + reward.volunteers;
+      log(s, "good", `${reward.label}：获得${reward.gold}金币、${reward.grain}粮食，${reward.volunteers}名长矛兵加入出征军团。`);
+    }
     t.owner = "player";
-    delayCoronation(s, targetId);
+    delayedCoronation = delayCoronation(s, targetId);
     t.stability = 45;
     t.guard = Math.max(10, 8 + garrisoned);
     t.devastated = 2;
@@ -308,6 +476,7 @@ function finishBattle(s, outcome, rng = Math.random) {
       if (stillHolds === 0) {
         // 失去最后一块辖地才被俘；仍有其他城的领主只是退走。
         fallenLord.captured = true;
+        captives.push(fallenLord.name);
         s.pendingDecisions.push({ type: "lord_capture", lordId: fallenLord.id, territoryId: targetId });
         log(s, "info", `${fallenLord.name}没城了。在${targetName}城下被按住的时候还在骂。`);
       } else {
@@ -315,11 +484,13 @@ function finishBattle(s, outcome, rng = Math.random) {
       }
       // 该领主名下的骑士按 45% 被俘，其余战死
       (s.knights || []).filter(k => k.liegeLordId === fallenLord.id && k.status === "available").forEach(knight => {
-        if (rng() < .45) { knight.status = "captured"; knight.captured = true; log(s, "info", `${knight.name}在${targetName}城下被俘，马死了，人没死。`); }
+        if (rng() < (leadersHaveSkill(s, session.leaderIds, "pursue") ? .65 : .45)) { knight.status = "captured"; knight.captured = true; captives.push(knight.name); log(s, "info", `${knight.name}在${targetName}城下被俘，马死了，人没死。`); }
         else { knight.status = "gone"; knight.side = "gone"; knight.liegeLordId = null; }
       });
     }
-    log(s, "good", `${targetName}是你的了。这一仗死了${session.playerLoss}个自己人，对面大约${session.enemyLoss}个。留${garrisoned}人守城。`);
+    t.reclaimedAt = s.clock?.elapsedMs ?? 0;
+    pushNotice({ level: "major", kind: "capture", title: `收复${targetName}`, text: `旗子换过来了。留${garrisoned}人守城。`, tab: "map", territoryId: targetId });
+    log(s, "good", `${targetName}是你的了。这一仗阵亡${dead}人、救回${wounded}名伤兵，对面大约${session.enemyLoss}个。留${garrisoned}人守城。`);
   } else if (outcome === "retreat") {
     const t = s.territories[targetId];
     persistentEnemyLoss = Math.min(Math.max(0, t.guard - 8), Math.round(session.enemyLoss * .72));
@@ -328,7 +499,7 @@ function finishBattle(s, outcome, rng = Math.random) {
     s.morale = clamp(s.morale - (session.leaderIds.includes("ysabel") ? 2 : 6));
     s.renown = clamp(s.renown - 2);
     if (session.flags.pushed && session.momentum > 10 && session.leaderIds.includes("renard")) officer(s, "renard").grievance = clamp(officer(s, "renard").grievance + 8);
-    log(s, "warn", `从${targetName}撤了回来，丢下${session.playerLoss}人。对面也少了${persistentEnemyLoss}个守军，他们会慢慢补。`);
+    log(s, "warn", `从${targetName}撤了回来，阵亡${dead}人，救回${wounded}名伤兵。对面也少了${persistentEnemyLoss}个守军，他们会慢慢补。`);
   } else {
     const t = s.territories[targetId];
     persistentEnemyLoss = Math.min(Math.max(0, t.guard - 8), Math.round(session.enemyLoss * .72));
@@ -342,7 +513,7 @@ function finishBattle(s, outcome, rng = Math.random) {
     s.gold -= lostGold;
     s.grain -= lostGrain;
     leaders.forEach(o => { if (o.loyalty != null) o.loyalty = clamp(o.loyalty - 2); if (o.grievance != null) o.grievance = clamp(o.grievance + 3); });
-    log(s, "bad", `${targetName}没打下来。死了${session.playerLoss}人，跑的时候丢了${lostGold}金和${lostGrain}粮。对面守军少了${persistentEnemyLoss}个，他们会慢慢补。`);
+    log(s, "bad", `${targetName}没打下来。阵亡${dead}人、救回${wounded}名伤兵，跑的时候丢了${lostGold}金和${lostGrain}粮。对面守军少了${persistentEnemyLoss}个，他们会慢慢补。`);
   }
   const resumedAt = worldNow();
   resumeWorld(s, resumedAt);
@@ -355,15 +526,46 @@ function finishBattle(s, outcome, rng = Math.random) {
     engagedArmy.training = s.training;
     engagedArmy.status = "idle";
     engagedArmy.jobId = null;
-    startArmyRecovery(s, engagedArmy, outcome === "win" ? 90 * 1000 : 120 * 1000, recoveryAt);
+    startArmyRecovery(s, engagedArmy, support.durationMs, recoveryAt);
   });
-  const report = { targetId, targetName, outcome, losses: session.playerLoss, lossesByType, composition: clone(session.composition), enemyLoss: session.enemyLoss, persistentEnemyLoss, garrisoned, lostGold, lostGrain, history: clone(session.history), momentum: session.momentum, injured };
+  syncTroops(s);
+  const gains = Object.fromEntries(Object.keys(before).map(key => [key, s[key] - before[key]]));
+  const output = outcome === "win" ? territoryOutput(s, targetId) : null;
+  const strategic = outcome === "win" ? [
+    TERRITORY_DEFS[targetId].type === "castle" ? "区域核心已控制，同区自有领地产出获得加成" : "",
+    TERRITORY_DEFS[targetId].type === "fort" ? "相邻自有领地守军上限提高" : "",
+    delayedCoronation ? "摄政加冕推迟20分钟" : "",
+    targetId === CROWN_GATE_HOLDING ? "通往王冠谷的战略门户已打开" : ""
+  ].filter(Boolean) : [];
+  // 带兵者的经验与头功
+  const deeds = session.deeds || {};
+  const xp = session.leaderIds.map(id => {
+    const used = (session.skillsUsed || []).filter(key => key.endsWith(`:${id}`)).length;
+    const gain = BATTLE_XP.march + (session.goodStages || 0) * BATTLE_XP.goodStage + (outcome === "win" ? BATTLE_XP.win : BATTLE_XP.loss)
+      + used * BATTLE_XP.skill + (session.flags.duelWon === id ? BATTLE_XP.duel : 0);
+    const person = commanderById(s, id);
+    const before = person ? (ensureProgress(person), person.lv) : 0;
+    gainBattleXp(s, id, gain);
+    return { id, name: person?.name || "将领", gain, lv: person?.lv || 0, up: (person?.lv || 0) > before };
+  });
+  const mvpId = session.leaderIds.slice().sort((a, b) => (deeds[b] || 0) - (deeds[a] || 0))[0];
+  const mvp = mvpId && (deeds[mvpId] || 0) > 0 ? { name: commanderById(s, mvpId)?.name, why: session.flags.duelWon === mvpId ? "阵前单挑得胜" : "军令得力" } : null;
+  // 战报末尾让一个人开口：赢了且俘到守将，听守将的；否则听我方带兵的人。
+  const capturedLord = outcome === "win" ? officer(s, (s.pendingDecisions.find(d => d.type === "lord_capture" && d.territoryId === targetId) || {}).lordId) : null;
+  const voiceLeader = leaders.find(o => o.id !== "player" && LORD_LINES[o.id]?.battle) || leaders[0];
+  const voicePool = voiceLeader && LORD_LINES[voiceLeader.id]?.battle?.[outcome === "win" ? "good" : "bad"];
+  const voice = capturedLord && lordLine(s, capturedLord.id, "captured")
+    ? { name: capturedLord.name, line: lordLine(s, capturedLord.id, "captured"), enemy: true }
+    : voicePool?.length ? { name: voiceLeader.name, line: voicePool[turnOf(s) % voicePool.length] } : null;
+  const report = { captives, voice, xp, mvp, skillsUsed: (session.skillsUsed || []).map(key => SKILLS[key.split(":")[0]]?.name).filter(Boolean), economyBefore, economyAfter: forecast(s), dead, wounded, woundedByType, reward, gains, output, strategic, recoveryMs: support.durationMs,
+    contribution: session.contribution || "", supply: session.supply || 0, targetId, targetName, outcome, losses: session.playerLoss, lossesByType, composition: clone(session.composition), enemyLoss: session.enemyLoss, persistentEnemyLoss, garrisoned, lostGold, lostGrain, history: clone(session.history), momentum: session.momentum, injured };
   s.lastBattle = report;
   recordBattle(s, {
     dir: "attack", targetId, targetName, outcome,
     ourLoss: session.playerLoss, theirLoss: session.enemyLoss
   });
   s.battleSession = null;
+  s.pendingDecisions.unshift({ type: "battle_result", report: clone(report) });
   // 攻下王冠谷就是胜利。原本要求「拥有全部 24 块可占领地」——
   // 那与开城条件是两套完全不同的门槛，实测 7/120 局打进了王城却没人触发统一，
   // 因为没人能把整张地图涂满。铁冠在王冠谷里，拿到它就是复国成功。
@@ -552,6 +754,8 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
     t.guard = Math.max(18, Math.round(attack * .34));
     t.devastated = 2;
     log(s, "bad", `${TERRITORY_DEFS[targetId].name}丢了。${army.name}进了城。`);
+    retainerQuip(s, "cityLost");
+    pushNotice({ level: "bad", kind: "lost", title: `${TERRITORY_DEFS[targetId].name}失守`, text: `${army.name}进了城。`, tab: "map", territoryId: targetId });
     recordBattle(s, { dir: "defend", targetId, targetName: TERRITORY_DEFS[targetId].name, outcome: "lost", attacker: FACTIONS[faction]?.name || "敌军" });
     // 先扣伤亡再撤离：applyStationedLosses 按 locationId 找军团，撤走了就找不到。
     // retreatStationedArmies 要在 t.owner 已改判之后调，这样 ownTerritoryIds 拿到的是城破后的名单。
@@ -566,6 +770,7 @@ function resolveAIAttack(s, army, targetId, rng = Math.random, originId = army?.
   t.stability = clamp(t.stability - 5);
   t.devastated = Math.max(t.devastated, 1);
   log(s, "warn", `${army.name}抢了${TERRITORY_DEFS[targetId].name}一把：${grainLoss}粮、${goldLoss}金，人没进城。`);
+  pushNotice({ level: "bad", kind: "raided", title: `${TERRITORY_DEFS[targetId].name}遭劫`, text: `被抢走${grainLoss}粮、${goldLoss}金。城守住了。`, tab: "map", territoryId: targetId });
   recordBattle(s, {
     dir: "defend", targetId, targetName: TERRITORY_DEFS[targetId].name,
     outcome: "raided", attacker: FACTIONS[army.owner]?.name || "敌军",
@@ -689,6 +894,92 @@ function checkDefeat(s) {
 }
 
 function decisionView(s, decision) {
+  if (decision.type === "battle_result") return {
+    kicker: "战役结算", title: decision.report.outcome === "win" ? `${decision.report.targetName}，渡鸦旗再度升起` : "收拢军队，再作打算",
+    portrait: "assets/player.webp", body: battleSettlementHtml(decision.report),
+    options: [
+      { name: "收下战报，安排下一步", note: "收益已入账；伤兵将在军团整补完成后自动归队", effect() {} },
+      { name: "查看领地经营", note: "前往发展页安排补给与建设；其余战后处置仍会继续", effect() { s.tab = "domain"; } }
+    ]
+  };
+  if (decision.type === "skill_pick") {
+    const person = commanderById(s, decision.personId);
+    if (!person) return null;
+    ensureProgress(person);
+    const choices = (decision.choices || []).filter(id => SKILLS[id] && !person.skills.includes(id));
+    if (!choices.length) return null;
+    return {
+      kicker: `${person.name} · ${decision.level}级`, title: "学哪一手？", portrait: person.portrait || "assets/battle-plains.webp",
+      body: `<p>${person.name}升到了${decision.level}级。${COMMANDER_CLASSES[person.cls].name}这条路上，眼下有两样可以学。</p>`,
+      options: choices.map(id => ({ name: `${SKILLS[id].name}（${SKILLS[id].type === "order" ? "军令" : "被动"}）`, note: SKILLS[id].desc, effect() {
+        person.skills.push(id);
+        log(s, "good", `${person.name}学会了${SKILLS[id].name}。`);
+      } }))
+    };
+  }
+  if (decision.type === "retainer_ask") {
+    const o = officer(s, decision.officerId);
+    if (!o || o.side !== "player" || o.fief) return null;
+    const lands = fiefCandidates(s).slice(0, 2);
+    const purse = Math.max(15, Math.round((o.merit || 0) * 3));
+    const gift = ownedTreasures(s)[0];
+    return {
+      kicker: "家臣请赏", title: `${o.name}站在厅上，没坐`, portrait: o.portrait || "assets/oswin.webp",
+      body: `<p>“${retainerLine(o.id, "ask")}”</p>`,
+      options: [
+        ...lands.map(id => ({ name: `把${TERRITORY_DEFS[id].name}封给他`, note: `该地税收他拿三成，产出看他的治理（${o.stats?.govern ?? "?"}）；忠诚 +15，那口气消了`, effect() { grantFief(s, o.id, id); } })),
+        { name: `赏${purse}金`, note: `金币 −${purse}；那口气消一半`, disabled: s.gold < purse, effect() {
+          s.gold -= purse; o.grievance = clamp((o.grievance || 0) - 20); o.merit = Math.max(0, (o.merit || 0) - RETAINER_ASK_MERIT);
+          log(s, "info", `${o.name}领了${purse}金，没说什么。`);
+        } },
+        ...(gift ? [{ name: `把宝库里的${gift.name}赏给他`, note: `${TREASURE_KINDS[gift.kind].label(gift.value)}随之没了；忠诚 +10，那口气消了`, effect() {
+          s.treasures[gift.id].given = o.id; o.loyalty = clamp(o.loyalty + 10); o.grievance = 0; o.merit = Math.max(0, (o.merit || 0) - RETAINER_ASK_MERIT);
+          log(s, "good", `${gift.name}赏给了${o.name}。${o.name}拿在手里看了很久。`);
+        } }] : []),
+        { name: "打发他回去", note: "他会记着", effect() {
+          o.grievance = clamp((o.grievance || 0) + 12);
+          log(s, "warn", `${o.name}被打发走了。${o.name}：“${retainerLine(o.id, "dismiss")}”`);
+        } }
+      ]
+    };
+  }
+  if (decision.type === "tourney_invite") return tourneyInviteView(s, decision);
+  if (decision.type === "tourney_round") return tourneyRoundView(s, decision);
+  if (decision.type === "tourney_end") return tourneyEndView(s, decision);
+  if (decision.type === "title_up") {
+    const rank = TITLE_RANKS[decision.rank];
+    if (!rank) return null;
+    const bits = [`行政开支 −${Math.round(rank.adminRelief * 100)}%`, rank.legitimacy && `正统性 +${rank.legitimacy}`, rank.renown && `威望 +${rank.renown}`].filter(Boolean).join(" · ");
+    return {
+      kicker: `晋爵 · ${rank.name}`, title: rank.title, portrait: "assets/player.webp",
+      body: rank.body.map(p => `<p>${p}</p>`).join(""),
+      options: [{ name: rank.option, note: bits, effect() {
+        if (rank.legitimacy) s.legitimacy = clamp((s.legitimacy || 0) + rank.legitimacy);
+        if (rank.renown) s.renown = clamp(s.renown + rank.renown);
+        log(s, "good", `${s.playerName}受封${rank.name}。`);
+      } }]
+    };
+  }
+  if (decision.type === "chapter_done") {
+    const reward = CHAPTER_REWARDS[decision.chapterId];
+    const chapter = GOAL_CHAPTERS.find(ch => ch.id === decision.chapterId);
+    if (!reward || !chapter) return null;
+    return {
+      kicker: `${chapter.name} · 完成`, title: reward.title, portrait: "assets/oswin.webp",
+      body: reward.body.map(p => `<p>${p}</p>`).join(""),
+      options: [{ name: reward.option, note: reward.note, effect() {
+        if (reward.gold) s.gold += reward.gold;
+        if (reward.grain) s.grain += reward.grain;
+        if (reward.morale) s.morale = clamp(s.morale + reward.morale);
+        if (reward.legitimacy) s.legitimacy = clamp((s.legitimacy || 0) + reward.legitimacy);
+        if (reward.levy) {
+          const main = armyEntity(s, "army_1");
+          if (main) { main.composition.levy = (main.composition.levy || 0) + reward.levy; syncTroops(s); }
+        }
+        log(s, "good", `${chapter.name}完成。${reward.note}。`);
+      } }]
+    };
+  }
   if (decision.type === "world_event") {
     const event = WORLD_EVENTS.find(item => item.id === decision.eventId);
     return event ? scriptedEventView(s, event) : null;
@@ -893,3 +1184,115 @@ function currentStyle(s) {
   return Object.entries(s.style).sort((a, b) => b[1] - a[1])[0][0];
 }
 
+
+
+// ---------- 比武大会 ----------
+// 确定性的伪随机：同一局、同一时刻、同一轮、同一打法，结果永远相同。
+function tourneyRoll(s, salt) {
+  let h = 2166136261 >>> 0;
+  const text = `${s.clock?.elapsedMs || 0}|${s.playerName}|${salt}`;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h / 4294967296;
+}
+
+function tourneyChampion(s, id) {
+  if (id === "player") { const p = officer(s, "player"); return { id, name: s.playerName, force: p?.stats?.force ?? 68, scheme: p?.stats?.scheme ?? 60, prince: true }; }
+  const k = knightById(s, id);
+  return k ? { id, name: k.name, force: k.force || 50, scheme: k.scheme || 45, prince: false } : null;
+}
+
+function tourneyOpponent(s, year, round) {
+  const pool = (s.knights || []).filter(k => k.side !== "player" && !["gone", "executed"].includes(k.status));
+  if (!pool.length) return { name: "无名游侠", force: 55, scheme: 50 };
+  const k = pool[(year * 7 + round * 3) % pool.length];
+  return { name: k.name, force: (k.force || 50) + round * 4, scheme: (k.scheme || 45) + round * 3 };
+}
+
+function maybeOpenTourney(s) {
+  if (!s || s.ended || seasonOf(s).id !== "summer") return false;
+  const year = yearOf(s);
+  s.tourney ||= { held: [], titles: 0 };
+  if (s.tourney.held.includes(year)) return false;
+  s.tourney.held.push(year);
+  s.pendingDecisions.push({ type: "tourney_invite", year });
+  pushNotice({ level: "normal", kind: "tourney", title: `${TOURNEY_HOSTS[(year - 1) % TOURNEY_HOSTS.length]}办比武`, text: "告示贴到渡鸦堡门口了。", tab: "hall" });
+  return true;
+}
+
+function tourneyInviteView(s, decision) {
+  const host = TOURNEY_HOSTS[(decision.year - 1) % TOURNEY_HOSTS.length];
+  const knights = activeKnights(s).slice().sort((a, b) => (b.force || 0) - (a.force || 0)).slice(0, 3);
+  const enter = (id) => () => { s.pendingDecisions.splice(1, 0, { type: "tourney_round", year: decision.year, round: 1, champId: id, renown: 0, last: null }); };
+  return {
+    kicker: `夏季比武 · ${host}`, title: s.tourney?.titles ? "又到比武的时候了" : "北境的夏季比武",
+    portrait: "assets/oswin.webp",
+    body: `<p>今年的比武设在${host}。告示贴到了渡鸦堡门口，冠军赏${TOURNEY_PURSE}金，外加一件彩头。</p><p>奥斯温看了一眼告示。“${s.tourney?.titles ? "去年那件彩头还在库里摆着。再拿一件，库房就该嫌挤了。" : "去年那件彩头，听说是镀金的铁。"}”</p>`,
+    options: [
+      ...knights.map(k => ({ name: `派${k.name}下场`, note: `武力${k.force} · 谋略${k.scheme}；输了歇一季`, effect: enter(k.id) })),
+      { name: "我亲自下场", note: "赢了威望翻倍；输了丢脸、掉军心", effect: enter("player") },
+      { name: "今年不去", note: "什么也不发生", effect() { log(s, "info", `${host}的比武，渡鸦家没派人。`); } }
+    ]
+  };
+}
+
+function tourneyRoundView(s, decision) {
+  const champ = tourneyChampion(s, decision.champId);
+  if (!champ) return null;
+  const opp = tourneyOpponent(s, decision.year, decision.round);
+  const taunt = TOURNEY_TAUNTS[(decision.year * 5 + decision.round) % TOURNEY_TAUNTS.length];
+  const resolve = (tactic) => () => {
+    const roll = tourneyRoll(s, `${decision.year}-${decision.round}-${tactic}`);
+    let chance;
+    if (tactic === "steady") chance = .5 + (champ.force - opp.force) / 90;
+    else if (tactic === "charge") chance = .42 + (champ.force - opp.force) / 70;
+    else chance = .45 + (champ.scheme - opp.scheme) / 60;
+    chance = Math.max(.12, Math.min(.88, chance));
+    const win = roll < chance;
+    const pool = TOURNEY_RESULTS[tactic][win ? "win" : "lose"];
+    const text = pool[Math.floor(roll * 1000) % pool.length].replaceAll("{c}", champ.name);
+    const gain = win ? (tactic === "charge" ? 6 : 3) * (champ.prince ? 2 : 1) : 0;
+    const caught = !win && tactic === "trick";
+    const next = { year: decision.year, champId: decision.champId, renown: decision.renown + gain, last: { text, win, opp: opp.name, caught } };
+    if (win && decision.round < 3) s.pendingDecisions.splice(1, 0, { type: "tourney_round", round: decision.round + 1, ...next });
+    else s.pendingDecisions.splice(1, 0, { type: "tourney_end", champion: win && decision.round === 3, round: decision.round, ...next });
+  };
+  return {
+    kicker: `比武 · 第${decision.round}轮`, title: `对手：${opp.name}`,
+    portrait: champ.prince ? "assets/player.webp" : "assets/battle-plains.webp",
+    body: `${decision.last ? `<p>${decision.last.text}</p>` : ""}<p>${opp.name}隔着栅栏冲${champ.prince ? "你" : champ.name}喊：“${taunt}”</p>`,
+    options: Object.entries(TOURNEY_TACTICS).map(([id, t]) => ({ name: t.name, note: t.note, effect: resolve(id) }))
+  };
+}
+
+function tourneyEndView(s, decision) {
+  const champ = tourneyChampion(s, decision.champId);
+  if (!champ) return null;
+  const title = decision.champion ? `${champ.name}夺冠` : `${champ.name}止步第${decision.round}轮`;
+  const prize = decision.champion ? TREASURES.find(t => t.source.type === "tourney" && t.source.index === (s.tourney?.titles || 0) + 1) : null;
+  const wanderer = decision.champion ? (s.knights || []).find(k => k.side === "neutral" && !k.liegeLordId && k.status === "available") : null;
+  const body = decision.champion
+    ? `<p>${decision.last.text}</p><p>${TOURNEY_CHAMPION[decision.year % TOURNEY_CHAMPION.length].replaceAll("{c}", champ.name)}</p>${wanderer ? `<p>散场的时候，一个叫${wanderer.name}的游侠牵着马等在门口，说想跟着渡鸦家干。</p>` : ""}`
+    : `<p>${decision.last.text}</p>${decision.last.caught ? "<p>回城的路上，没人说话。</p>" : champ.prince ? "<p>你一瘸一拐地走下场，奥斯温递过来一块湿布，什么也没说。</p>" : `<p>${champ.name}被抬下场，嘴里还在骂。</p>`}`;
+  const notes = decision.champion
+    ? [`威望 +${decision.renown + 10}`, `金币 +${TOURNEY_PURSE}`, prize && `宝库：${prize.name}`, wanderer && `${wanderer.name}入列`].filter(Boolean).join(" · ")
+    : [decision.renown ? `威望 +${decision.renown}` : "", decision.last.caught ? "威望 −4" : "", champ.prince ? "军心 −3" : `${champ.name}歇一季`].filter(Boolean).join(" · ");
+  return {
+    kicker: "比武 · 散场", title, portrait: champ.prince ? "assets/player.webp" : "assets/battle-plains.webp", body,
+    options: [{ name: decision.champion ? "回渡鸦堡" : "认了", note: notes, effect() {
+      s.renown = clamp(s.renown + decision.renown + (decision.champion ? 10 : 0) - (decision.last.caught ? 4 : 0));
+      if (decision.champion) {
+        s.gold += TOURNEY_PURSE;
+        s.tourney.titles = (s.tourney.titles || 0) + 1;
+        if (prize) grantTreasure(s, prize.id, `${champ.name}从比武场上拿回来的。`);
+        if (!champ.prince) { const k = knightById(s, champ.id); if (k) k.loyalty = clamp((k.loyalty || 50) + 10); }
+        if (wanderer) { wanderer.side = "player"; wanderer.liegeLordId = "player"; wanderer.status = "active"; wanderer.recruitedAt = turnOf(s); }
+        pushNotice({ level: "major", kind: "tourney", title, text: "彩头进了宝库。", tab: "hall" });
+        log(s, "good", `${title}。`);
+      } else {
+        if (champ.prince) s.morale = clamp(s.morale - 3);
+        else { const k = knightById(s, champ.id); if (k) k.injuredUntil = turnOf(s) + 1; }
+        log(s, "info", `${title}。`);
+      }
+    } }]
+  };
+}

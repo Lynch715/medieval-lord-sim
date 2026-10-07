@@ -62,11 +62,13 @@ const fresh = () => game.createInitialState("地图测试", "oath", "standard");
   s.territories[member].owner = "player";
   s.territories[core].owner = "river";
   assert.equal(game.controlsRegionOf(s, member), false, "核心城堡在敌手时不该算控制大区");
-  const without = game.territoryOutput(s, member);
+  // 四季加总再比：单季产出是取整后的小数字，难度系数一动就可能被四舍五入抹平
+  const yearly = () => game.SEASONS.reduce((acc, season) => { const o = game.territoryOutput(s, member, season); return { grain: acc.grain + o.grain, gold: acc.gold + o.gold }; }, { grain: 0, gold: 0 });
+  const without = yearly();
 
   s.territories[core].owner = "player";
   assert.equal(game.controlsRegionOf(s, member), true, "核心城堡到手即控制大区");
-  const withCore = game.territoryOutput(s, member);
+  const withCore = yearly();
 
   assert.ok(withCore.gold > without.gold && withCore.grain > without.grain,
     `控制大区应当同时提高金币与粮食，实际 ${JSON.stringify(without)} → ${JSON.stringify(withCore)}`);

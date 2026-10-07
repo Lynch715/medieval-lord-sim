@@ -148,12 +148,16 @@ function submitLord(s, lordId, route = "persuade", rng = Math.random) {
   recordDeed(s, route === "force" ? "sworn" : route === "bribe" ? "bribed" : "persuaded", lordId);
   const said = lordLine(s, lordId, route === "force" ? "submitForce" : route === "bribe" ? "submitBribe" : "submitTalk");
   if (said) log(s, "info", `${lord.name}：“${said}”`);
+  grantTreasureFor(s, "submit", lordId);
+  pushNotice({ level: "major", kind: "submit", title: `${lord.name}归附`, text: said ? `“${said}”` : `${lord.name}带着他的地和人投到渡鸦家旗下。`, tab: "court" });
   lord.grievance = route === "force" ? clamp((lord.grievance || 0) + 10) : 0;
   // 打服时辖地已在战斗结算里易主；说服与收买则整片带过来
   if (route !== "force") {
     lordHoldings(s, lordId).forEach(id => {
       const t = s.territories[id];
+      if (markRecovered(s, id)) grantTreasureFor(s, "capture", id);
       t.owner = "player";
+      t.reclaimedAt = s.clock?.elapsedMs ?? 0;
       t.lordId = null;
       t.stability = clamp(Math.max(t.stability, 50));
     });
@@ -445,7 +449,29 @@ function weakestTerritoryId(s, stat = "stability") {
   return ownTerritoryIds(s).sort((a, b) => (s.territories[a][stat] || 0) - (s.territories[b][stat] || 0))[0];
 }
 
+// ---------- 宝库 ----------
+// s.treasures：到手的物件 id → { at: 第几季, given: 赏给了谁 }。赏出去的不再生效。
+function treasureOwned(s, id) { return !!s?.treasures?.[id] && !s.treasures[id].given; }
+function ownedTreasures(s) { return TREASURES.filter(t => treasureOwned(s, t.id)); }
+function treasureBonus(s, kind) {
+  return ownedTreasures(s).filter(t => t.kind === kind).reduce((sum, t) => sum + t.value, 0);
+}
+function grantTreasure(s, id, note = "") {
+  const t = TREASURES.find(item => item.id === id);
+  if (!s || !t || s.treasures?.[id]) return false;
+  s.treasures ||= {};
+  s.treasures[id] = { at: turnOf(s) };
+  log(s, "good", `${t.name}进了宝库。${note}`);
+  pushNotice({ level: "major", kind: "treasure", title: `宝库添了${t.name}`, text: `${t.desc}（${TREASURE_KINDS[t.kind].label(t.value)}）`, tab: "hall", treasureId: id });
+  return true;
+}
+function grantTreasureFor(s, type, key) {
+  const t = TREASURES.find(item => item.source.type === type && (item.source.territoryId ?? item.source.lordId ?? item.source.eventId ?? item.source.index) === key);
+  return t ? grantTreasure(s, t.id) : false;
+}
+
 function applyEventEffects(s, changes = {}, officerId = null) {
+  if (changes.treasure) grantTreasure(s, changes.treasure);
   changes = normalizeEventChanges(changes);
   ["gold", "grain", "support", "morale", "renown", "legitimacy", "warWeariness"].forEach(key => {
     if (changes[key] == null) return;
@@ -573,19 +599,41 @@ function nextArmyId(s) {
 function armyStatusText(s, army) {
   if (!army) return "未编成";
   const job = army.jobId ? (s.jobs || []).find(item => item.id === army.jobId && item.status === "running") : null;
-  if (army.status === "marching") return job ? `行军中 · ${formatDuration(getJobRemainingMs(job))}` : "行军中";
-  if (army.status === "recovering") return job ? `整补中 · ${formatDuration(getJobRemainingMs(job))}` : "整补中";
+  if (army.status === "marching") return job ? `行军中 · ${formatDuration(getJobRemainingMs(job, s.pauseState?.pausedAt ?? worldNow()))}` : "行军中";
+  if (army.status === "recovering") return job ? `整补中 · ${formatDuration(getJobRemainingMs(job, s.pauseState?.pausedAt ?? worldNow()))}` : "整补中";
   if (army.status === "engaged") return "交战中";
   if (army.status === "supporting") return "随同出征";
   return "待命";
 }
 
 function canUseCommander(s, id, ignoreArmyId = null) {
-  if (playerArmies(s).some(army => army.id !== ignoreArmyId && (army.commanderId || army.leaders?.[0]) === id)) return false;
+  if (playerArmies(s).some(army => army.id !== ignoreArmyId && ((army.commanderId || army.leaders?.[0]) === id || (army.deputies || []).includes(id)))) return false;
   if (id === "player") return true;
   const knight = knightById(s, id);
-  if (!knight || knight.side !== "player" || knight.status !== "active") return false;
+  if (knight) return knight.side === "player" && knight.status === "active" && !(knight.injuredUntil > turnOf(s));
+  // 已归附的领主也能带兵（2026-10 起）
+  const lord = officer(s, id);
+  return !!lord && lord.side === "player" && !lord.captured && !lord.injured;
+}
+
+// 能带兵的人：王子、在列骑士、已归附的领主
+function availableCommanders(s, ignoreArmyId = null) {
+  const lords = ownedOfficers(s).filter(o => o.id !== "player");
+  return [{ id: "player" }, ...lords, ...activeKnights(s)].map(p => p.id).filter(id => canUseCommander(s, id, ignoreArmyId));
+}
+
+// 军团副将：最多两名，不能是本军团的主将，不能已在别的军团
+function setArmyDeputies(s, armyId, ids) {
+  const army = armyEntity(s, armyId);
+  if (!army || army.owner !== "player" || army.status === "engaged") return false;
+  const clean = [...new Set((ids || []).filter(Boolean))].filter(id => id !== (army.commanderId || army.leaders?.[0]) && canUseCommander(s, id, armyId)).slice(0, 2);
+  army.deputies = clean;
   return true;
+}
+
+function armyLeaderIds(s, army) {
+  const main = army?.commanderId || army?.leaders?.[0] || "player";
+  return [main, ...((army?.deputies || []).filter(id => id !== main))];
 }
 
 function createArmyFromMain(s, name, commanderId, composition) {
@@ -823,3 +871,134 @@ function allocateLosses(comp, totalLoss) {
   return result;
 }
 
+
+
+// ---------- 家臣封地 ----------
+function retainerLine(id, kind) { return RETAINER_LINES[kind]?.[id] || RETAINER_LINES[kind]?._ || ""; }
+
+// 能封出去的地：自家的、不是核心城堡也不是王城、眼下没人管的
+function fiefCandidates(s) {
+  return ownTerritoryIds(s).filter(id => {
+    const d = TERRITORY_DEFS[id];
+    return d.type !== "castle" && d.type !== "capital" && !s.territories[id].fiefHolder;
+  }).sort((a, b) => (TERRITORY_DEFS[b].baseGold || 0) - (TERRITORY_DEFS[a].baseGold || 0));
+}
+
+function grantFief(s, officerId, territoryId) {
+  const o = officer(s, officerId);
+  const t = s.territories[territoryId];
+  if (!o || o.side !== "player" || o.id === "player" || o.fief || !t || !fiefCandidates(s).includes(territoryId)) return false;
+  t.fiefHolder = o.id;
+  o.fief = territoryId;
+  o.loyalty = clamp(o.loyalty + 15);
+  o.grievance = 0;
+  o.merit = Math.max(0, (o.merit || 0) - RETAINER_ASK_MERIT);
+  log(s, "good", `${TERRITORY_DEFS[territoryId].name}封给了${o.name}。${o.name}：“${retainerLine(o.id, "grant")}”`);
+  pushNotice({ level: "normal", kind: "fief", title: `${o.name}受封${TERRITORY_DEFS[territoryId].name}`, text: `“${retainerLine(o.id, "grant")}”`, portrait: o.portrait, tab: "court" });
+  return true;
+}
+
+function revokeFief(s, officerId) {
+  const o = officer(s, officerId);
+  if (!o || !o.fief) return false;
+  const id = o.fief;
+  if (s.territories[id]?.fiefHolder === o.id) s.territories[id].fiefHolder = null;
+  o.fief = null;
+  o.loyalty = clamp(o.loyalty - 20);
+  o.grievance = clamp((o.grievance || 0) + 25);
+  log(s, "warn", `${TERRITORY_DEFS[id].name}从${o.name}手里收了回来。${o.name}：“${retainerLine(o.id, "revoke")}”`);
+  return true;
+}
+
+// 家臣的心思，一句话说清：给将领页看
+function retainerMood(o) {
+  if (o.id === "player") return "";
+  if (o.grievance >= 60) return "快坐不住了";
+  if (o.fief) return o.grievance >= 30 ? "有地，但心里有疙瘩" : "心满意足";
+  if ((o.merit || 0) >= RETAINER_ASK_MERIT) return "在等封地";
+  if (o.grievance >= 30) return "憋着火";
+  return "还在攒功劳";
+}
+
+
+// ---------- 带兵者：等级、经验、技能 ----------
+function personStat(person, key) { return Math.round(person?.stats?.[key] ?? person?.[key] ?? 0); }
+function addPersonStat(person, key, n) {
+  if (person.stats) person.stats[key] = Math.min(99, (person.stats[key] || 0) + n);
+  else person[key] = Math.min(99, (person[key] || 0) + n);
+}
+function personClass(person) {
+  const f = personStat(person, "force"), c = personStat(person, "command"), m = personStat(person, "scheme");
+  return f >= c && f >= m ? "brave" : c >= m ? "marshal" : "strategist";
+}
+function seedIndex(text) { let h = 7; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0; return h; }
+
+// 按身份给起始等级：王子、老管家 2 级；大叛臣 6 级；深写附庸 4 级；附庸 3 级；骑士 1–3 级
+function startingLevel(person) {
+  if (person.id === "player" || person.id === "oswin") return 2;
+  const def = LORD_DEFS[person.id];
+  if (def) return def.tier === "liege" ? 6 : SIGNATURE_SKILLS[person.id] ? 4 : 3;
+  const n = Number(String(person.id).split("_")[1]) || 1;
+  return 1 + (n % 3);
+}
+
+// 老存档与新局都走这里：字段缺了就按身份补，补过的不再动
+function ensureProgress(person) {
+  if (!person || person.lv) return person;
+  person.lv = startingLevel(person);
+  person.xp = LEVEL_XP[person.lv - 1];
+  person.cls = personClass(person);
+  const pool = CLASS_SKILL_POOLS[person.cls];
+  const seed = seedIndex(String(person.id));
+  person.skills = [SIGNATURE_SKILLS[person.id] || pool[seed % pool.length]];
+  SKILL_LEVELS.filter(lv => lv <= person.lv).forEach((lv, i) => {
+    const left = pool.filter(id => !person.skills.includes(id));
+    if (left.length) person.skills.push(left[(seed + i) % left.length]);
+  });
+  return person;
+}
+
+function commanderPeople(s) {
+  return [...(s?.officers || []), ...(s?.knights || [])];
+}
+function ensureAllProgress(s) { commanderPeople(s).forEach(ensureProgress); }
+
+function personSkills(s, id) {
+  const person = commanderById(s, id);
+  if (!person) return [];
+  ensureProgress(person);
+  return (person.skills || []).filter(sk => SKILLS[sk]);
+}
+function leadersHaveSkill(s, leaderIds, skillId) { return (leaderIds || []).some(id => personSkills(s, id).includes(skillId)); }
+
+function skillChoicesFor(person) {
+  const pool = CLASS_SKILL_POOLS[person.cls || personClass(person)].filter(id => !person.skills.includes(id));
+  if (pool.length <= 2) return pool;
+  const seed = seedIndex(`${person.id}:${person.lv}`);
+  const first = pool[seed % pool.length];
+  const rest = pool.filter(id => id !== first);
+  return [first, rest[(seed >> 3) % rest.length]];
+}
+
+function gainBattleXp(s, id, amount) {
+  const person = commanderById(s, id);
+  if (!person || amount <= 0) return null;
+  ensureProgress(person);
+  person.xp = (person.xp || 0) + amount;
+  const ups = [];
+  while (person.lv < LEVEL_XP.length && person.xp >= LEVEL_XP[person.lv]) {
+    person.lv++;
+    const main = COMMANDER_CLASSES[person.cls].stat;
+    ["force", "command", "scheme"].forEach(key => addPersonStat(person, key, key === main ? 1 : 0));
+    ups.push(person.lv);
+    if (SKILL_LEVELS.includes(person.lv)) {
+      const choices = skillChoicesFor(person);
+      if (choices.length) s.pendingDecisions.push({ type: "skill_pick", personId: person.id, level: person.lv, choices });
+    }
+  }
+  if (ups.length) {
+    log(s, "good", `${person.name}升到${person.lv}级。`);
+    pushNotice({ level: "normal", kind: "levelup", title: `${person.name}升到${person.lv}级`, text: SKILL_LEVELS.includes(person.lv) ? "可以学一个新技能了。" : `${COMMANDER_CLASSES[person.cls].name}，${STAT_LABELS[COMMANDER_CLASSES[person.cls].stat]}又长了。`, portrait: person.portrait, tab: "court" });
+  }
+  return ups;
+}

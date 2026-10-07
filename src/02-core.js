@@ -14,7 +14,7 @@ let hiddenAt = 0;
 // 不是游戏进度，不该占存档字段、也不该有迁移。
 // 必须存在渲染之外 —— 每次建造或研究都会 renderAll() 重建整个面板，
 // 状态若只留在 DOM 上，玩家一点建造，刚展开的那块地就自己合上了。
-const foldState = { territories: new Set(), branches: new Set(), sections: new Set(["own"]), seeded: false };
+const foldState = { territories: new Set(), branches: new Set(), sections: new Set(["own"]), seeded: false, panels: new Map(), logLimit: 30 };
 
 // 表单草稿。与 foldState 同理放在运行时而不是存档里：这是「界面上填了什么」，
 // 不是游戏进度，不该占存档字段、也不该有迁移。
@@ -112,11 +112,12 @@ function armyCommander(s, army) {
 }
 
 function activeKnights(s) {
-  return (s?.knights || []).filter(knight => knight.side === "player" && knight.status === "active");
+  // 比武负伤的骑士歇一季，不带兵、不算战力
+  return (s?.knights || []).filter(knight => knight.side === "player" && knight.status === "active" && !(knight.injuredUntil > turnOf(s)));
 }
 
 function assignedCommanderIds(s) {
-  return new Set((s?.armies || []).filter(army => army.owner === "player").map(army => army.commanderId || army.leaders?.[0]).filter(Boolean));
+  return new Set((s?.armies || []).filter(army => army.owner === "player").flatMap(army => [army.commanderId || army.leaders?.[0], ...(army.deputies || [])]).filter(Boolean));
 }
 
 function knightBattleMultiplier(s, selectedIds = null) {
@@ -361,8 +362,11 @@ function resumeWorld(s, now = worldNow()) {
 function startJob(s, job = {}) {
   if (!s) return null;
   s.jobs ||= [];
-  const now = Number.isFinite(job.startedAt) ? job.startedAt : worldNow();
-  const endAt = Number.isFinite(job.endAt) ? job.endAt : now + Math.max(0, job.durationMs || 0);
+  const requestedAt = Number.isFinite(job.startedAt) ? job.startedAt : worldNow();
+  const duration = Number.isFinite(job.endAt) ? Math.max(0, job.endAt - requestedAt) : Math.max(0, job.durationMs || 0);
+  // 暂停中的新任务也落在冻结时刻，恢复时只整体平移一次。
+  const now = s.pauseState?.pausedAt ?? requestedAt;
+  const endAt = now + duration;
   const record = {
     id: job.id || `job_${now}_${Math.random().toString(36).slice(2, 8)}`,
     type: job.type || "BUILD",
@@ -378,11 +382,35 @@ function startJob(s, job = {}) {
   return record;
 }
 
+// 捷报队列。只给界面看，不进存档：读档时清空正合适 —— 离开期间世界不推进，
+// 不会有「回来一看攒了一堆没看的捷报」这种情况。引擎各处只管 push，UI 每帧取走。
+// level：normal（建成练成）/ major（收城、归附、章节、晋爵）/ bad（丢城、遭劫）
+const NOTICE_QUEUE = [];
+function pushNotice(notice) {
+  if (!notice?.title) return;
+  NOTICE_QUEUE.push({ level: "normal", tab: "hall", ...notice });
+  if (NOTICE_QUEUE.length > 30) NOTICE_QUEUE.splice(0, NOTICE_QUEUE.length - 30);
+}
+function drainNotices() { return NOTICE_QUEUE.splice(0); }
+
+const JOB_NOTICE_TAB = { BUILD: "domain", RESEARCH: "domain", RECRUIT: "campaign", RECOVER: "campaign", MARCH: "map", CITY_ACTION: "map", OFFICER_RECRUIT: "court", KNIGHT_ACTION: "court" };
+
 function finishJob(s, job, now = worldNow(), rng = Math.random) {
   if (!job || job.status !== "running") return false;
   job.status = "completed";
   job.completedAt = now;
+  const before = s.lastAction;
   applyCompletedJob(s, job, rng);
+  // AI 的行军与整补也走这条路，只有玩家自己的事才报捷
+  const owner = job.armyId ? armyEntity(s, job.armyId)?.owner : "player";
+  if (owner === "player" && s.lastAction && s.lastAction !== before) {
+    pushNotice({
+      kind: job.type, title: s.lastAction.name, text: s.lastAction.text,
+      tab: JOB_NOTICE_TAB[job.type] || "hall",
+      territoryId: job.territoryId || job.payload?.destinationId || null,
+      buildingType: job.type === "BUILD" ? job.payload?.buildingType : null
+    });
+  }
   return true;
 }
 
@@ -483,13 +511,14 @@ function applyCompletedJob(s, job, rng = Math.random) {
     const territory = s.territories[job.territoryId];
     const type = job.payload?.buildingType;
     if (!territory || !BUILDINGS[type]) return false;
+    const benefit = buildingBenefit(s, job.territoryId, type);
     territory.buildings[type] = Math.min(BUILDING_MAX_LEVEL, (territory.buildings[type] || 0) + 1);
     if (type === "barracks") territory.guard += 7;
     if (type === "walls") territory.guard += 5;
     if (type === "watchtower") territory.guard += 3;
     territory.stability = clamp(territory.stability + 3);
     s.style.wealth++;
-    const text = `${TERRITORY_DEFS[job.territoryId].name}完成${BUILDINGS[type].name}第${territory.buildings[type]}级建设。`;
+    const text = `${TERRITORY_DEFS[job.territoryId].name}完成${BUILDINGS[type].name}第${territory.buildings[type]}级建设。${benefit}。`;
     s.lastAction = { name: "领地建设完成", text };
     log(s, "good", text);
     return true;
@@ -545,11 +574,12 @@ function applyCompletedJob(s, job, rng = Math.random) {
     }
     const battlePlan = job.payload?.battlePlan;
     if (army.owner === "player" && battlePlan && s.territories[destinationId]?.owner !== "player") {
-      startBattle(s, { ...battlePlan, armyId: army.id, armyIds: groupIds, armyOrigins: job.payload?.armyOrigins, originId, targetId: destinationId, arrival: true, supplyAlreadyPaid: true });
+      startBattle(s, { ...battlePlan, armyId: army.id, armyIds: groupIds, armyOrigins: job.payload?.armyOrigins, originId, targetId: destinationId, arrival: true, supplyAlreadyPaid: true, suppliedGrain: job.payload?.suppliedGrain });
     }
     const text = `${army.name}抵达${TERRITORY_DEFS[destinationId].name}。`;
-    s.lastAction = { name: "行军完成", text };
-    log(s, "good", text);
+    // AI 的行军以前也会改写 lastAction，把玩家自己刚做完的事从总览横幅上顶掉
+    if (army.owner === "player") s.lastAction = { name: "行军完成", text };
+    log(s, army.owner === "player" ? "good" : "info", text);
     return true;
   }
   if (job.type === "RECOVER") {
@@ -557,7 +587,11 @@ function applyCompletedJob(s, job, rng = Math.random) {
     if (!army) return false;
     army.status = "idle";
     army.jobId = null;
-    const text = `${army.name}完成整补，可以再次行军或出征。`;
+    const healed = compositionTotal(army.wounded || {});
+    Object.keys(UNIT_DEFS).forEach(type => { army.composition[type] = (army.composition[type] || 0) + (army.wounded?.[type] || 0); });
+    army.wounded = emptyComposition();
+    syncTroops(s);
+    const text = `${army.name}完成整补${healed ? `，${healed}名伤兵已归队` : ""}，可以再次行军或出征。`;
     if (army.owner === "player") s.lastAction = { name: "军团整补完成", text };
     log(s, "info", text);
     return true;

@@ -108,7 +108,9 @@ const STYLES = {
 };
 
 const DIFFICULTIES = {
-  standard: { name: "普通", income: 1, enemy: 1.2, winter: 1 },
+  // 2026-10 加了爵位、宝库、比武、封地这一批回报之后，原难度下统一率从 60 涨到 72、崩溃从 13 掉到 2。
+  // 收入压 1.5%、敌军抬 0.02 拉回 64 / 13。收入这个旋钮极陡：0.97 时崩溃 29 局，0.94 时 105 局，别大动。
+  standard: { name: "普通", income: .985, enemy: 1.22, winter: 1 },
   hard: { name: "困难", income: .9, enemy: 1.36, winter: 1.18 },
   brutal: { name: "极难", income: .82, enemy: 1.52, winter: 1.38 }
 };
@@ -556,16 +558,16 @@ const OFFICER_STAT_KEYS = ["command", "govern"];
 // turn / 季节 / 年份全部由它派生，任何代码都无法靠调用函数凭空推进世界。
 const BUILDING_MAX_LEVEL = 5;
 const BUILDINGS = {
-  fields: { name: "农田与磨坊", base: 15, desc: "提高粮食流量；高等级解锁轮作与冬储。" },
+  fields: { name: "农田与磨坊", base: 15, desc: "提高粮食产出和仓容；农业科技进一步放大收益。" },
   market: { name: "集市与商栈", base: 18, desc: "提高金币流量；低稳定时更容易被劫掠。" },
   barracks: { name: "兵营与铁匠铺", base: 21, desc: "提高守军和征募规模，解锁更高阶兵种。" },
   walls: { name: "城墙与塔楼", base: 26, desc: "强化守城，是抵挡反攻的最后一道保险。" },
   granary: { name: "粮仓与地窖", base: 19, desc: "扩大储粮容量，降低换季损耗。" },
   academy: { name: "学宫与书院", base: 28, desc: "提高知识流量，缩短科技发展周期。" },
-  workshop: { name: "军械工坊", base: 24, desc: "降低募兵与远征装备成本，提高部队补充效率。" },
-  roads: { name: "驿道与桥梁", base: 22, desc: "提高金币流量，降低行军和商路损耗。" },
+  workshop: { name: "军械工坊", base: 24, desc: "提高部分兵种每批征募人数；与驿道共同缩短战后整补。" },
+  roads: { name: "驿道与桥梁", base: 22, desc: "提高金币产出；与军械工坊共同缩短战后整补。" },
   watchtower: { name: "烽火台", base: 23, desc: "提高守军上限，提前发现敌军反攻。" },
-  temple: { name: "神殿与施舍院", base: 25, desc: "提高民心恢复速度，降低领地动荡。" }
+  temple: { name: "神殿与施舍院", base: 25, desc: "施舍院救护伤兵；全境最高等级提高战后伤兵存活率。" }
 };
 
 const PLANS = {
@@ -620,11 +622,11 @@ const WORLD_EVENTS = [
     ["病人送修道院", "金币 −8，民心 −3，军心 +2", { gold: -8, support: -3, morale: 2 }, "伤兵和下城的病人分批送去了修道院。修士收了钱，没收笑脸。"],
     ["封了下城", "最低稳定 −7，民心 −8；最低守军 +3", { stabilityWeak: -7, support: -8, guardWeak: 3 }, "守军堵了下城的口子，谁也不许出。里头的人在墙上砸了一夜。"] ] },
   { id: "wandering_masons", kicker: "外来人", title: "一帮南方石匠想留下，条件是免三年人头税", portrait: "assets/ysabel.webp", body: "他们会修墙、修磨坊、修桥，手艺比本地的好。本地匠人说，这帮人一来，好活全没了。", options: [
-    ["免", "金币 −11，最低守军 +6，民心 +2", { gold: -11, guardWeak: 6, support: 2 }, "石匠在墙根搭了工棚，当周就上了北塔。本地匠人在酒馆骂了一个月。"],
+    ["免", "金币 −11，最低守军 +6，民心 +2", { gold: -11, guardWeak: 6, support: 2, treasure: "plumb_bob" }, "石匠在墙根搭了工棚，当周就上了北塔。本地匠人在酒馆骂了一个月。"],
     ["外来的本地的一起干", "金币 −16，稳定 +4", { gold: -16, stabilityAll: 4 }, "两边分了工钱和工位。吵了三天，第四天开工。"],
     ["不免，让他们走", "无需花费；威望 −1", { renown: -1, flag: "masons_left" }, "他们收了家伙往南走。本地匠人很高兴，墙还是那堵墙。"] ] },
   { id: "salt_merchants", seasons: ["autumn", "winter"], kicker: "盐", title: "盐商愿意交钱交盐，要你派兵护路", portrait: "assets/ysabel.webp", body: "派兵是负担，可北境自己不产盐。这条路通了，以后每个冬天都有盐进来。", options: [
-    ["派兵护送", "金币 +13，粮食 +7，战争疲劳 +3", { gold: 13, grain: 7, warWeariness: 3, flag: "salt_guarded" }, "一队兵跟着盐车走了一趟。盐商交了钱和盐，说明年还来。"],
+    ["派兵护送", "金币 +13，粮食 +7，战争疲劳 +3", { gold: 13, grain: 7, warWeariness: 3, flag: "salt_guarded", treasure: "salt_jar" }, "一队兵跟着盐车走了一趟。盐商交了钱和盐，说明年还来。"],
     ["只收税，不派人", "金币 +18，民心 −3", { gold: 18, support: -3, flag: "salt_robbed" }, "税收了。盐商回程在林子边被抢了两车。他没再说明年的事。"],
     ["沿路村子自己巡", "金币 +7，稳定 +5", { gold: 7, stabilityAll: 5 }, "村里排了守夜的班。盐车过去了，村里人第一次觉得这条路是自己的。"] ] },
   { id: "clipped_coin", kicker: "坏钱", title: "集市上每三枚银币就有一枚被剪了边", portrait: "assets/ysabel.webp", body: "不收，买卖停摆。收，坏钱进你的金库。伊莎贝尔说，剪边的人就在城里，但抓不到。", options: [
@@ -818,3 +820,282 @@ const GLYPH_PATHS = {
   temple: '<path d="M8 40h32M12 37V20h24v17M8 20h32L24 9 8 20Zm9 0v17m7-17v17m7-17v17"/>'
 };
 
+
+// ---------- 爵位 ----------
+// 按收复领地数晋升，只升不降（丢了地，爵位还在，脸丢了）。
+// 加成只动行政开支：地越多官越大，底下的人越好使唤，这一刀切在扩张成本上。
+// 试过每级再送正统性与威望：120 局统一率从 60 跳到 80 —— 正统性直接喂说服，滚雪球太快。
+// 只留行政开支减免时是 63/120，在 ±5 个百分点以内。
+const TITLE_RANKS = [
+  { id: "prince", name: "渡鸦家的王子", lands: 0, adminRelief: 0 },
+  { id: "earl", name: "渡鸦伯", lands: 7, adminRelief: .08,
+    title: "七块地，够得上一个伯爵了",
+    body: ["奥斯温翻出老爷子那件旧礼袍，虫蛀了两个洞，他拿蜡烛油糊上。“将就穿。底下那帮人只认袍子，不认洞。”", "大厅里站了一圈人，有几个上个月还在背后骂你。今天“伯爵大人”喊得最响的，就是这几个狗东西。"],
+    option: "让他们喊" },
+  { id: "marquess", name: "北境侯", lands: 11, adminRelief: .16,
+    title: "北境一半的旗子是渡鸦",
+    body: ["布兰·狼牙派人送来一封信，通篇是骂娘的话，最后一句是“咱们走着瞧”。", "奥斯温把信扔进火盆里。“他怕了。不怕的人不写信，直接来砍你。”"],
+    option: "把信使的马留下" },
+  { id: "duke", name: "北境公", lands: 16, adminRelief: .24,
+    title: "离王冠谷只剩那几座破城",
+    body: ["摄政公爵在城里放话，说渡鸦家的小崽子是个乡下来的野种。", "奥斯温笑出了声，这是你头一回听他笑。“野种也是先王的野种。他算哪门子的种？”"],
+    option: "叫人把这话传回去" }
+];
+
+// ---------- 复国目标章节赏赐 ----------
+// 每章一次，领过就记在 s.goalRewards，目标谓词回退了也不再发。第四章完成即终局，不另发。
+const CHAPTER_REWARDS = {
+  found: { gold: 60, grain: 60, title: "渡鸦堡转起来了",
+    body: ["奥斯温把账本合上，难得没叹气。", "“仓里有粮，营里有人，学宫那几个书呆子总算没白吃饭。老爷子在的时候，也就这个样子。”", "他从柜子底下摸出一只钱袋，往桌上一扔。“我攒的。拿去，别问哪来的。”"],
+    option: "收下钱袋", note: "金币 +60 · 粮食 +60" },
+  march: { levy: 15, morale: 8, title: "刀见过血了",
+    body: ["头一块地拿回来，头一个叛臣跪了。消息比马跑得快，北境的酒馆里已经有人在骂你。", "“骂得越凶，心里越虚。”奥斯温说，“村里来了十几个后生，说要跟着你打。我让他们先去领矛，领完再去领饭。”"],
+    option: "让他们入营", note: "长矛兵 +15 编入主力 · 军心 +8" },
+  siegeprep: { gold: 120, morale: 10, legitimacy: 5, title: "王冠谷的门缝开了",
+    body: ["攻城器械拉到了营外，公爵大道断了，王冠谷的信使三天没出过城。", "奥斯温盯着地图看了很久。“该有的都有了。剩下的就是去敲门。敲不开，就砸。”", "库房里清出一批压箱底的银器，他叫人全熔了发饷。"],
+    option: "发饷", note: "金币 +120 · 军心 +10 · 正统性 +5" }
+};
+
+// ---------- 家臣插嘴 ----------
+// 关键节点由一名在场的家臣冒一句，跟在捷报条里。只从已归附的人里挑，没有对应台词的人不开口。
+// 声音：奥斯温干、损、记老账；雷纳德短，只谈阵；伊莎贝尔只谈账；埃德蒙阴阳怪气叫「堂弟」；
+// 罗德里克三句不离饷；艾芙琳慢，说水；布兰骂娘。
+const RETAINER_QUIPS = {
+  firstMaxBuilding: {
+    oswin: ["五层了。老爷子那会儿修到三层就塌过一回，砸死两头驴。", "修是修高了。冬天烧柴，您记得多备点。"],
+    ysabel: ["这笔钱总算花出个样子。下一笔别乱花。"],
+    edmund: ["修得挺高，堂弟。打起仗来，头一个被人拆的也是它。"],
+    roderic: ["修这玩意儿的钱，够发我好几年饷。……算了，修得好。"],
+    bran: ["盖房子盖上瘾了？老子还以为你就会这个。"]
+  },
+  firstWin: {
+    oswin: ["老爷子头一仗也是赢的。后来他就不数了。您还是数着点。", "赢了。我去让厨房多杀一只鸡。就一只。"],
+    renard: ["赢了。别笑，收尸的还没回来。"],
+    bran: ["这才像个人样。下回别让那帮孙子跑那么多。"],
+    edmund: ["赢一回而已，堂弟。别急着给自己修雕像。"],
+    roderic: ["赢了好。赢了才有饷。"]
+  },
+  firstLoss: {
+    oswin: ["败一回不丢人。连败三回，就没人跟您了。", "人回来了几个，我去点。您先把甲脱了。"],
+    renard: ["前排先松的。下回我站前排。"],
+    bran: ["输了就输了，哭个鸟。回去喝酒，明天再砍。"],
+    ysabel: ["输一仗不贵。贵的是输完了还不认。"],
+    edmund: ["我早说那个阵摆得不对。……我没说过？那我现在说。"]
+  },
+  grainLow: {
+    oswin: ["仓底见了。再这么吃，下个月就该吃马了。"],
+    ysabel: ["粮账我对了三遍。没对错，是真没了。"],
+    roderic: ["兵饿着肚子不守墙。这话我说过一百遍了。"],
+    bran: ["没粮就去抢。这还要我教？"],
+    aveline: ["河地的鱼今年还行。不够，能顶几天。"]
+  },
+  supportLow: {
+    oswin: ["村里有人把您的告示揭了，拿去擦屁股。我没叫人追。"],
+    ysabel: ["收税的回来说，有三个村子关门不开。"],
+    edmund: ["老百姓开始骂你了，堂弟。骂得比骂我还难听。"],
+    renard: ["再这样，就得派兵进村。兵进了村，就没人陪咱们打仗了。"]
+  },
+  cityLost: {
+    oswin: ["丢了就丢了。记着是谁拿走的。"],
+    renard: ["给我两百人，三天拿回来。"],
+    bran: ["让人从眼皮底下把城抢了？丢他娘的人。"],
+    roderic: ["守城的人呢？没饷的人不拼命，我早说了。"]
+  }
+};
+
+// ---------- 宝库 ----------
+// 十六件有名有姓的东西。每件只有一个来处，没到手时在宝库里是个剪影，下面写着去哪儿拿。
+// 加成种类刻意挑「手感」型的：仓容、战后整补、研究时间、知识，外加一点点金币产出。
+// 第一版给的是金粮各 +3%、每季军心 +1：120 局统一率从 63 跳到 93，崩溃局归零 ——
+// 粮食是这局游戏的核心约束，任何直接喂粮、喂军心的加成都会把它整个垫平。现在 66/120。
+const TREASURE_KINDS = {
+  goldPct: { label: v => `金币产出 +${Math.round(v * 100)}%` },
+  grainPct: { label: v => `粮食产出 +${Math.round(v * 100)}%` },
+  morale: { label: v => `每季军心 +${v}` },
+  knowledge: { label: v => `每季知识 +${v}` },
+  researchTime: { label: v => `研究时间 −${Math.round(v * 100)}%` },
+  storage: { label: v => `仓容 +${v}` },
+  recovery: { label: v => `战后整补 −${v}秒` }
+};
+const TREASURES = [
+  { id: "ferry_bell", name: "渡口铜铃", kind: "storage", value: 25, source: { type: "capture", territoryId: "pineford" }, hint: "拿下松林渡",
+    desc: "原先挂在渡船头上。船沉过两回，铃一直没沉。" },
+  { id: "sluice_key", name: "河望水闸钥匙", kind: "storage", value: 25, source: { type: "capture", territoryId: "riverwatch" }, hint: "拿下河望城",
+    desc: "铁钥匙有小臂长。交出来的时候用布包了三层。" },
+  { id: "gate_bar", name: "灰门的门闩", kind: "recovery", value: 6, source: { type: "capture", territoryId: "ashgate" }, hint: "拿下灰门",
+    desc: "一根橡木门闩，刻着历任守将的名字。最后一个让人用刀刮掉了。" },
+  { id: "pass_horn", name: "北境关号角", kind: "recovery", value: 6, source: { type: "capture", territoryId: "highpass" }, hint: "拿下北境关",
+    desc: "牛角号，吹起来像驴叫。关上的兵说，听惯了就好听。" },
+  { id: "skull_cup", name: "狼穴的头骨杯", kind: "recovery", value: 6, source: { type: "capture", territoryId: "wolfden" }, hint: "拿下狼穴",
+    desc: "布兰拿它喝酒。洗了三遍，还有股膻味。" },
+  { id: "pay_ledger", name: "石颚堡欠饷簿", kind: "goldPct", value: .01, source: { type: "capture", territoryId: "stonejaw" }, hint: "拿下石颚堡",
+    desc: "记了十一年，每一页都是同一个数往上加。" },
+  { id: "old_map", name: "鸦阶的旧地图", kind: "researchTime", value: .05, source: { type: "capture", territoryId: "crowstep" }, hint: "拿下鸦阶",
+    desc: "北境每条小路都画着。有几条，你父亲都不知道。" },
+  { id: "toll_scale", name: "十字渡过河秤", kind: "goldPct", value: .01, source: { type: "capture", territoryId: "crossford" }, hint: "拿下十字渡",
+    desc: "收过河税的铜秤。秤砣让人换过，比别家的重一钱。" },
+  { id: "post_token", name: "公爵驿马令", kind: "researchTime", value: .05, source: { type: "capture", territoryId: "duchyroad" }, hint: "切断公爵大道",
+    desc: "一块铜牌，凭它能在大道上换马。驿站的人认牌不认人。" },
+  { id: "silver_spurs", name: "银马刺", kind: "recovery", value: 6, source: { type: "tourney", index: 1 }, hint: "第一回比武夺冠",
+    desc: "冠军的彩头。马不太喜欢。" },
+  { id: "red_lance", name: "红缨长枪", kind: "goldPct", value: .01, source: { type: "tourney", index: 2 }, hint: "第二回比武夺冠",
+    desc: "枪杆上的红缨是主办城的姑娘们缝的，针脚歪得各有各的样。" },
+  { id: "lion_shield", name: "金狮纹盾", kind: "knowledge", value: 2, source: { type: "tourney", index: 3 }, hint: "第三回比武夺冠",
+    desc: "三回冠军才给的盾。盾上那头狮子画得像只猫。" },
+  { id: "plumb_bob", name: "石匠的铅锤", kind: "knowledge", value: 2, source: { type: "event", eventId: "wandering_masons" }, hint: "留下南方来的石匠",
+    desc: "吊在墙边，墙歪一指都看得出来。石匠走的时候没要回去。" },
+  { id: "salt_jar", name: "盐商的盐罐", kind: "goldPct", value: .01, source: { type: "event", eventId: "salt_merchants" }, hint: "派兵护送盐车",
+    desc: "一罐白盐，罐底压着张字条：路上多谢。" },
+  { id: "broken_sword", name: "狼牙的断剑", kind: "recovery", value: 6, source: { type: "submit", lordId: "bran" }, hint: "让布兰·狼牙低头",
+    desc: "他往桌上一扔，断了半截。他说另外半截在你爹身上。" },
+  { id: "ferry_chart", name: "河望渡船图", kind: "storage", value: 25, source: { type: "submit", lordId: "aveline" }, hint: "让艾芙琳·多尔归附",
+    desc: "她亲手画的。哪段河冬天能走人，哪段夏天会淹死马。" }
+];
+
+// ---------- 比武大会 ----------
+// 每年夏天一届，主办城轮着来。三轮，每轮三种打法：稳着打看武力，抢攻看武力加运气，使诈看谋略、
+// 被识破当场判负。结果全是确定性的（按世界时钟取哈希），同一局同一步永远是同一个结果。
+const TOURNEY_HOSTS = ["钟市", "自由城", "王渡", "盐桥", "日照湖"];
+const TOURNEY_PURSE = 40;
+const TOURNEY_TACTICS = {
+  steady: { name: "稳着打", note: "看武力，赢面最稳" },
+  charge: { name: "抢攻", note: "看武力，凭运气，赢了威望翻倍" },
+  trick: { name: "使诈", note: "看谋略；被识破当场判负，还丢脸" }
+};
+const TOURNEY_TAUNTS = [
+  "渡鸦家的？听说你们家穷得马都瘦。",
+  "别哭着下场就行。",
+  "我押了自己十个银币。你别让我赔。",
+  "上回跟我对枪的那个，现在说话还漏风。",
+  "你那根枪是借来的吧？",
+  "快点。我下一场还约了人喝酒。",
+  "你们老王子的事我听说了。节哀，然后滚下马。",
+  "看台上那个穿红裙子的在看我。你挡着她了。"
+];
+const TOURNEY_RESULTS = {
+  steady: {
+    win: ["两马交错，对面的枪擦着肩甲过去。{c}的枪尖顶在他胸口，人从马背上翻了下去。", "三个回合，{c}一步没乱。第三回合对面的马先怯了，人跟着歪下去。"],
+    lose: ["三个回合没分出来。第四回合{c}的马先乱了步子，枪杆断在半空。", "{c}守得太死，被对面一枪挑开了盾。看台上一片嘘声。"]
+  },
+  charge: {
+    win: ["{c}冲得比谁都早，看台上有人骂抢跑。没用，对面已经躺在沙地里了。", "{c}一夹马就撞了上去。对面的枪还没放平，人先飞了。"],
+    lose: ["冲太猛，枪尖扎了个空。对面侧身一磕，{c}连人带枪滚下马。", "{c}的马跑到一半蹄子打滑，自己先摔了。对面都没碰着他。"]
+  },
+  trick: {
+    win: ["开场前有人往对面的马料里加了把东西。那马跑到一半停下来，拉了一地。", "{c}在交错前一刻把盾往对面马眼前一晃。马惊了，人没坐住。"],
+    lose: ["裁判从{c}的马鞍底下摸出一块铁片。全场都在嘘，有人扔了只烂鞋上来。", "那一手对面早见过。他笑着让开，反手一枪把{c}拍下了马。"]
+  }
+};
+const TOURNEY_CHAMPION = [
+  "{c}举着枪绕场一圈。看台上扔下来的东西，一半是花，一半是烂菜。",
+  "主办城的老爷把彩头递过来，手有点抖。{c}接过去，转身就交给了随从。"
+];
+
+// ---------- 家臣野心 ----------
+// 功劳攒到 RETAINER_ASK_MERIT 又没封地，他会自己上门。每人隔 RETAINER_ASK_GAP 季最多来一次。
+const RETAINER_ASK_MERIT = 12;
+const RETAINER_ASK_GAP = 2;
+const RETAINER_LINES = {
+  ask: {
+    oswin: "我伺候渡鸦家三十年，没跟谁要过东西。今天要一回。我想死在自己的屋子里。",
+    renard: "我的人跟着我打了几仗，睡的是马棚。给块地，让他们有个地方埋自己。",
+    ysabel: "账我替你记了这么久，该记一笔我自己的了。",
+    edmund: "堂弟，你手里的地越来越多，我手里还是一把剑。这账不对吧？",
+    roderic: "饷是补了。可我手底下的人，不能一辈子守别人的关。",
+    aveline: "河地人在问，我到底是殿下的伯爵，还是殿下的客人。",
+    bran: "老子跪了，没白跪吧？地呢？",
+    _: "仗也打了，城也守了。殿下，该给句话了。"
+  },
+  grant: {
+    oswin: "……够了。比老爷子给的多。", renard: "行。", ysabel: "那块地的账，我会做得比你的还干净。",
+    edmund: "多谢堂弟。这回我记你的好。", roderic: "这才像话。", aveline: "河地人会知道的。", bran: "这还差不多。", _: "谢殿下。"
+  },
+  dismiss: {
+    oswin: "……是。我老了，是该少说两句。", renard: "知道了。", ysabel: "我记下了。", edmund: "好，堂弟。好。",
+    roderic: "又是以后。你们家的人都爱说以后。", aveline: "河地人也会知道的。", bran: "操。", _: "……是。"
+  },
+  revoke: {
+    oswin: "地您收回去吧。屋子我会腾干净。", renard: "我的人怎么办？……算了。", ysabel: "账本我留下，钥匙也留下。",
+    edmund: "收回去？堂弟，你会后悔的。", roderic: "给了又拿走，比不给还难看。", aveline: "河地人会记很多年。", bran: "老子就知道。", _: "……遵命。"
+  }
+};
+
+// ---------- 带兵者的等级、职业与技能 ----------
+// 带兵者：王子、在列骑士、已归附的领主。等级 1–10，靠出征攒经验。
+// 职业按三项里最高的那项定：勇将（武力）、统帅（统率）、谋士（谋略）。升级主属性 +1。
+// 3、6、9 级各学一个新技能，从职业池里二选一。
+const LEVEL_XP = [0, 30, 70, 120, 180, 250, 330, 420, 520, 630];
+const SKILL_LEVELS = [3, 6, 9];
+const COMMANDER_CLASSES = {
+  brave: { name: "勇将", stat: "force" },
+  marshal: { name: "统帅", stat: "command" },
+  strategist: { name: "谋士", stat: "scheme" }
+};
+// 数值经过 120 局模拟校准：经验、属性成长、技能倍率、单挑、敌将技能五个旋钮一起调。
+// 初版（经验翻倍、升级主属性 +2 其余 +1、单挑 ±25/15、技能倍率原值）统一率 114/120。
+const BATTLE_XP = { march: 5, goodStage: 2, win: 10, loss: 3, duel: 8, skill: 1 };
+
+// type：order 军令技（某一阶段多一张军令卡，每场一次）；passive 被动技（在场就生效）
+// roll：带判定的军令，按 stat 判成败；成功用 mult/casualty，失败用 failMult/failCasualty
+const SKILLS = {
+  // 专属
+  prince_lead: { name: "亲冒矢石", type: "order", stage: 1, mult: 1.17, casualty: 1.05, desc: "王子顶在最前面，全军跟着压上去。",
+    lines: ["旗给我！跟着我的马屁股冲！", "我爹死在前头，我不死在后头。上！"] },
+  retreat_count: { name: "清点退路", type: "passive", desc: "撤退或战败时，多救回一成伤兵。" },
+  knight_charge: { name: "骑士长冲阵", type: "order", stage: 1, needKnights: 2, mult: 1.255, casualty: 1.15, pushed: true, desc: "披甲骑士不少于两名时，排成一线直插敌阵。",
+    lines: ["骑士，跟我来。别回头。", "枪放平。今天不留活口。"] },
+  thrift: { name: "精打细算", type: "passive", desc: "本人在场，伤亡少一成，出征补给少带一成。" },
+  lure: { name: "诱敌深入", type: "order", stage: 1, roll: { stat: "scheme", base: .45, div: 60 }, mult: 1.306, casualty: .9, failMult: 0.881, failCasualty: 1.2, desc: "故意示弱，把敌军引进口袋。看谋略，玩砸了自己吃亏。",
+    lines: ["左翼往后撤，撤得难看点。让他们以为咱们怂了。", "急什么，堂弟。让他们追。"] },
+  wolf_raid: { name: "狼群夜袭", type: "order", stage: 0, terrain: ["forest", "mountain"], mult: 1.221, casualty: .95, desc: "林地、山地专用。趁夜摸上去，开局就压住对面。",
+    lines: ["熄火。等月亮下去，咬他们的喉咙。", "狼牙的崽子们，开饭了！"] },
+  floodgate: { name: "开闸放水", type: "order", stage: 0, terrain: ["river"], mult: 1.153, casualty: .85, enemyLossMult: 2, desc: "河地专用。上游开闸，让水替你打第一阵。",
+    lines: ["开闸。", "让河替我们打这一仗。"] },
+  hold_fast: { name: "死守不退", type: "order", stage: 2, mult: 1.017, casualty: .5, holdLine: true, desc: "决胜阶段专用。就算打不赢，也只算撤回，伤亡减半。",
+    lines: ["谁退一步，我先砍谁。", "墙在人在。墙没了，人也别想跑。"] },
+  royal_reserve: { name: "王城预备队", type: "passive", desc: "守王城时，预备队一队接一队地出来。" },
+  // 勇将
+  charge_line: { name: "冲阵", type: "order", stage: 1, mult: 1.127, casualty: 1.1, pushed: true, cls: "brave", desc: "带一队人撞开敌阵的口子。", lines: ["跟上！冲开一个口子！", "盾举起来，往里撞！"] },
+  guard_banner: { name: "护旗", type: "passive", cls: "brave", desc: "连着强攻时，对面的反扑减半。" },
+  slay: { name: "斩将", type: "order", stage: 2, roll: { stat: "force", base: .45, div: 50, vsDefender: true }, mult: 1.272, casualty: 1, failMult: 0.915, failCasualty: 1.15, cls: "brave", desc: "直取敌将。看武力，对上守将的武力。",
+    lines: ["看见那面旗没有？旗底下那个，我去拿他的脑袋。", "都让开，那个是我的。"] },
+  bloodfight: { name: "血战", type: "order", stage: 2, mult: 1.204, casualty: 1.35, pushed: true, cls: "brave", desc: "拿人命换胜势。", lines: ["今天谁也别想活着回去，他们也一样！", "砍！砍到刀卷了刃再说！"] },
+  pursue: { name: "追亡", type: "passive", cls: "brave", desc: "打赢后，敌方骑士更容易被俘。" },
+  // 统帅
+  iron_wall: { name: "铁壁", type: "passive", cls: "marshal", desc: "本人在场，伤亡少一成。" },
+  regroup: { name: "整队", type: "order", stage: 1, mult: 1.0, casualty: .6, resetAggression: true, cls: "marshal", desc: "收拢队伍喘口气，前面连攻攒下的破绽一笔勾销。", lines: ["停！收队！喘口气再打。", "都给我站回线后面去。"] },
+  rotate: { name: "轮换", type: "order", stage: 2, mult: 1.06, casualty: .7, cls: "marshal", desc: "前后排轮着上，拖垮对面。", lines: ["前排换下来，后排顶上。", "别急。他们比我们先累。"] },
+  steady_line: { name: "坚阵", type: "passive", cls: "marshal", desc: "用「稳扎稳打」时战力 +5%。" },
+  vanguard: { name: "先锋", type: "passive", cls: "marshal", desc: "开战时先占一点优势。" },
+  // 谋士
+  scouting: { name: "斥候", type: "passive", cls: "strategist", desc: "接敌阶段伤亡少两成。" },
+  fire: { name: "火攻", type: "order", stage: 0, roll: { stat: "scheme", base: .5, div: 60 }, mult: 1.204, casualty: .9, enemyLossMult: 1.6, failMult: 0.932, failCasualty: 1.05, cls: "strategist", desc: "看风向放火。看谋略，风不对就白烧。",
+    lines: ["往上风点火。", "等风。风一起，就点。"] },
+  decoy: { name: "疑兵", type: "order", stage: 1, mult: 1.085, casualty: .82, cls: "strategist", desc: "多插旗、多点灶，让对面以为来了大军。", lines: ["多插几面旗，让他们以为咱们来了一千人。", "灶多挖几口。"] },
+  sow_discord: { name: "离间", type: "order", stage: 2, roll: { stat: "scheme", base: .45, div: 55 }, mult: 1.17, casualty: .85, failMult: 1.0, failCasualty: 1, cls: "strategist", desc: "对着敌阵喊话，让他们自己先乱。看谋略。",
+    lines: ["喊话过去：他们的主子早就跑了。", "告诉他们，投降的今晚有肉吃。"] },
+  cut_supply: { name: "截粮", type: "passive", cls: "strategist", desc: "开战前烧了对面的粮，守军战力 −5%（王城无效）。" }
+};
+const SIGNATURE_SKILLS = { player: "prince_lead", oswin: "retreat_count", renard: "knight_charge", ysabel: "thrift", edmund: "lure", bran: "wolf_raid", aveline: "floodgate", roderic: "hold_fast", regent: "royal_reserve" };
+const CLASS_SKILL_POOLS = {
+  brave: ["charge_line", "guard_banner", "slay", "bloodfight", "pursue"],
+  marshal: ["iron_wall", "regroup", "rotate", "steady_line", "vanguard"],
+  strategist: ["scouting", "fire", "decoy", "sow_discord", "cut_supply"]
+};
+
+// 敌将守城时出手一次：哪一阶段、扣多少优势、战况里怎么写
+const ENEMY_SKILL_TEXT = {
+  wolf_raid: { stage: 0, momentum: 10, terrain: ["forest", "mountain"], text: "林子里突然全是火把。狼牙的人从背后摸上来了。" },
+  floodgate: { stage: 0, momentum: 10, terrain: ["river"], text: "上游的闸开了。水下来的时候，前排还在列阵。" },
+  hold_fast: { stage: 2, momentum: 10, text: "墙上的人一个没退，拿尸体堵缺口。" },
+  knight_charge: { stage: 1, momentum: 10, text: "城里的骑士冲出来了，枪放得很平。" },
+  lure: { stage: 1, momentum: 10, text: "对面的左翼突然垮了。追进去才发现是个口袋。" },
+  royal_reserve: { stage: 2, momentum: 10, text: "王城的预备队从侧门出来，一队接一队。" },
+  _: { stage: 1, momentum: 6, text: "{name}亲自压阵，对面的人顶住了。" }
+};
+
+const DUEL_LINES = {
+  challenge: ["{a}拍马出阵，冲着对面喊：“{d}！出来，跟老子单挑！”", "{a}把枪往地上一戳：“{d}，别躲在墙后头。出来。”"],
+  win: ["两马交错三回。第三回，{d}的盔飞了出去，人趴在马脖子上逃回阵里。", "{a}一枪挑断了{d}的缰绳。{d}摔下马，让人拖了回去。对面的旗晃了晃。"],
+  lose: ["{a}被一枪挑下马，亲兵冲上去才把人抢回来。", "两个回合，{a}的枪就断了。{d}没追，只在马上笑。"]
+};

@@ -102,6 +102,8 @@ assert.ok(!bs.pendingDecisions.some(d => d.type === "conquest"), "旧的战后�
 // 布兰还持有 highpass，所以不会被俘。
 const ms = game.createInitialState("多地测试", "iron", "standard");
 ms.territories.pineford.lordId = "bran";
+// 布兰守林地会发动「狼群夜袭」（2026-10 敌将技能），这里测的是俘获逻辑不是胜负，把守军压低保证能打下来
+ms.territories.pineford.guard = 10;
 const msess = game.startBattle(ms, { targetId: "pineford", leaderIds: ["player"], troops: ms.troops, plan: "assault" }, fixedRng(.8));
 assert.ok(msess, "应能对松林渡发起进攻");
 game.applyBattleChoice(ms, "ridge", fixedRng(.9));

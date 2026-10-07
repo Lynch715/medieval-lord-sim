@@ -1,5 +1,5 @@
 // 离线：代码走网络优先（上线立刻是新版），图片走缓存优先 + 后台更新。
-const VER = "iron-crown-v1";
+const VER = "iron-crown-v12-skillfold";
 const SHELL = [
   "./",
   "./index.html",

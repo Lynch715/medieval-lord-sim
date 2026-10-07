@@ -78,6 +78,13 @@ function createInitialState(name, startingStyle, difficulty) {
   initClock(state);
   initTimers(state, state.clock.startedAt);
   log(state, "info", `${state.playerName}在雨夜戴上了渡鸦堡的印戒。`);
+  ensureLedger(state);
+  // 新局显式建好这三样；读到 undefined 就说明是这批功能上线前的老存档 —— 见 seedLegacyMilestones
+  state.titleRank = 0;
+  state.goalRewards = {};
+  state.quips = {};
+  state.treasures = {};
+  ensureAllProgress(state);
   return state;
 }
 
@@ -234,6 +241,10 @@ function hydrateState(raw) {
 
 function hydrateLatest(raw) {
   if (!raw || raw.version !== VERSION) return null;
+  raw.recoveryRewards ||= Object.fromEntries([...new Set([
+    ...Object.keys(TERRITORY_DEFS).filter(id => TERRITORY_DEFS[id].owner === "player"),
+    ...ownTerritoryIds(raw), ...(raw.victories || [])
+  ])].map(id => [id, true]));
   raw.selectedTerritoryId ||= "ravenstone";
   raw.clock ||= makeClock(0);
   raw.timers ||= initTimers(raw, worldNow());
@@ -340,6 +351,7 @@ raw.knights = [...knightMap.values()].map(knight => ({ ...knight, status: knight
     raw.battleSession.flags.aggression ??= 0;
   }
   ensureAIFactions(raw);
+  ensureAllProgress(raw);
   return raw;
 }
 
@@ -434,6 +446,9 @@ function territoryOutput(s, id, season = seasonOf(s)) {
   const wealth = 1;
   const bestGovernor = ownedOfficers(s).filter(o => !o.injured).sort((a, b) => b.stats.govern - a.stats.govern)[0];
   const admin = 1 + Math.max(0, (bestGovernor?.stats.govern || 55) - 55) / 550;
+  // 封给家臣的地，产出跟着他的治理走：治理 35 的人管地约 −10%，治理 88 的约 +11%
+  const holderOfficer = t.fiefHolder && t.fiefHolder !== "charter" ? officer(s, t.fiefHolder) : null;
+  const holderGovern = holderOfficer ? Math.max(.88, Math.min(1.15, 1 + ((holderOfficer.stats?.govern || 60) - 60) / 250)) : 1;
   const diff = difficultyOf(s).income;
   const grainTech = (1 + techLevel(s, "heavy_plow") * .08) * (1 + techLevel(s, "crop_rotation") * .1) * (1 + techLevel(s, "seed_selection") * .08) * (season.id === "winter" ? 1 + techLevel(s, "winter_storage") * .12 : 1) * (season.id !== "winter" ? 1 + techLevel(s, "irrigation") * .06 : 1);
   const goldTech = (1 + techLevel(s, "tax_registry") * .08) * (1 + techLevel(s, "coinage") * .08) * (1 + techLevel(s, "trade_guild") * .08);
@@ -450,8 +465,9 @@ function territoryOutput(s, id, season = seasonOf(s)) {
   const grainBase = (d.grain + t.buildings.fields * 8 + 4) * grainTech;
   const goldBase = (d.gold + t.buildings.market * 3 + t.buildings.roads * roadGold + 1) * goldTech;
   return {
-    grain: Math.max(0, Math.round(grainBase * season.grain * stability * damage * share * diff * regionBonus)),
-    gold: Math.max(0, Math.round(goldBase * season.gold * goldStability * damage * share * wealth * admin * diff * regionBonus))
+    // 封地只分金币不分粮：口粮是全境的命脉，分出去三成粮，封几块地就能饿垮（模拟里崩溃从 13 局跳到 80 局）
+    grain: Math.max(0, Math.round(grainBase * season.grain * stability * damage * holderGovern * diff * regionBonus)),
+    gold: Math.max(0, Math.round(goldBase * season.gold * goldStability * damage * share * holderGovern * wealth * admin * diff * regionBonus))
   };
 }
 
@@ -484,7 +500,7 @@ const ADMIN_FREE_TERRITORIES = 4;
 function administrationCost(s) {
   const billed = Math.max(0, ownTerritoryIds(s).length - ADMIN_FREE_TERRITORIES);
   if (!billed) return 0;
-  const relief = Math.max(.6, 1 - techLevel(s, "provincial_offices") * .08 - techLevel(s, "law_code") * .06);
+  const relief = Math.max(.6, 1 - techLevel(s, "provincial_offices") * .08 - techLevel(s, "law_code") * .06) * (1 - (titleRank(s).adminRelief || 0));
   return Math.ceil(billed * ADMIN_GOLD_PER_TERRITORY * relief);
 }
 
@@ -514,10 +530,13 @@ function forecast(s, season = seasonOf(s)) {
   // 于是早中期能攒出上千存粮，把后期「单季接近打平」的设计整个垫平 ——
   // 实测一局从 129 攒到 1446，玩家依旧「根本吃不完」。
   // 压到 15 之后，想囤过冬的余粮就得真的去修粮仓和农田。
-  const storageCap = 105 + ownTerritoryIds(s).length * 15 + fieldLevels * 35 + granaryLevels * 32;
+  const storageCap = 105 + ownTerritoryIds(s).length * 15 + fieldLevels * 35 + granaryLevels * 32 + treasureBonus(s, "storage");
   const projected = s.grain + gross.grain - grainCost;
   const spoilageRate = Math.max(.05, .18 - granaryLevels * .018);
   const spoilage = Math.max(0, Math.round((projected - storageCap) * spoilageRate));
+  // 宝库的产出加成乘在毛收入上，和建筑、科技一样会被开支吃掉
+  gross.gold = Math.round(gross.gold * (1 + treasureBonus(s, "goldPct")));
+  gross.grain = Math.round(gross.grain * (1 + treasureBonus(s, "grainPct")));
   return { ...gross, grainCost, goldCost, adminCost, storageCap, spoilage, netGold: gross.gold - goldCost, netGrain: gross.grain - grainCost - spoilage };
 }
 
@@ -528,7 +547,7 @@ const ACADEMY_KNOWLEDGE_PER_LEVEL = 1.5;
 
 function knowledgePerSeason(s) {
   const academyLevels = ownTerritoryIds(s).reduce((sum, id) => sum + (s.territories[id].buildings.academy || 0), 0);
-  return 3 + academyLevels * ACADEMY_KNOWLEDGE_PER_LEVEL + techLevel(s, "relay_roads") * 2;
+  return 3 + academyLevels * ACADEMY_KNOWLEDGE_PER_LEVEL + techLevel(s, "relay_roads") * 2 + treasureBonus(s, "knowledge");
 }
 
 function resourceFlow(s, season = seasonOf(s)) {
@@ -539,6 +558,51 @@ function resourceFlow(s, season = seasonOf(s)) {
 
 // 累积到某个绝对时刻，而非累积一段时长——这样重复调用天然幂等，
 // 在线逐帧推进与离线一次性补算才可能得到完全相同的结果。
+// ---------- 季报 ----------
+// 季账不是逐笔记账：季初拍一张快照，季末拿当下和快照比，差多少就是这一季干了多少。
+// 唯一需要逐秒累计的是「产出流入」—— 它和花销混在同一个金币数里，不单独记就分不开。
+// ledger 与 seasonReports 都是惰性建立的，老存档不用迁移：第一季的账从读档那一刻起算。
+function ledgerSnapshot(s) {
+  const levels = ownTerritoryIds(s).reduce((sum, id) => sum + Object.values(s.territories[id].buildings || {}).reduce((a, b) => a + (b || 0), 0), 0);
+  const techs = Object.values(s.tech || {}).reduce((sum, branch) => sum + Object.values(branch.levels || {}).reduce((a, b) => a + (b || 0), 0), 0);
+  return {
+    gold: s.gold, grain: s.grain, troops: s.troops || 0,
+    lands: ownTerritoryIds(s).length, levels, techs,
+    knights: activeKnights(s).length, lords: ownedOfficers(s).length,
+    battles: s.battles || 0, wins: s.wins || 0,
+    renown: s.renown || 0, legitimacy: s.legitimacy || 0, support: s.support || 0
+  };
+}
+
+function ensureLedger(s) {
+  s.ledger ||= { start: ledgerSnapshot(s), goldFlow: 0, grainFlow: 0 };
+  s.seasonReports ||= [];
+  return s.ledger;
+}
+
+function closeSeasonLedger(s, endedTurn) {
+  const ledger = ensureLedger(s);
+  const a = ledger.start, b = ledgerSnapshot(s);
+  const d = key => Math.round((b[key] || 0) - (a[key] || 0));
+  const report = {
+    turn: endedTurn,
+    label: `第${Math.floor(endedTurn / 4) + 1}年${SEASONS[((endedTurn % 4) + 4) % 4].name}季`,
+    goldIn: Math.round(ledger.goldFlow), grainIn: Math.round(ledger.grainFlow),
+    goldNet: d("gold"), grainNet: d("grain"),
+    goldSpent: Math.max(0, Math.round(ledger.goldFlow - (b.gold - a.gold))),
+    grainSpent: Math.max(0, Math.round(ledger.grainFlow - (b.grain - a.grain))),
+    troops: d("troops"), lands: d("lands"), levels: d("levels"), techs: d("techs"),
+    knights: d("knights"), lords: d("lords"), battles: d("battles"), wins: d("wins"),
+    renown: d("renown"), legitimacy: d("legitimacy"), support: d("support"),
+    totals: { gold: Math.round(b.gold), grain: Math.round(b.grain), troops: Math.round(b.troops), lands: b.lands }
+  };
+  s.seasonReports.push(report);
+  if (s.seasonReports.length > 80) s.seasonReports.splice(0, s.seasonReports.length - 80);
+  s.ledger = { start: b, goldFlow: 0, grainFlow: 0 };
+  s.unreadReport = true;
+  return report;
+}
+
 function accrueTo(s, at) {
   if (!s?.clock) return 0;
   const from = s.clock.lastProcessedAt;
@@ -548,6 +612,9 @@ function accrueTo(s, at) {
   const seasonSeconds = TIME_CONFIG.seasonDurationMs / 1000;
   const flow = resourceFlow(s, seasonOf(s));
   s.gold += flow.goldPerSecond * seconds;
+  const ledger = ensureLedger(s);
+  ledger.goldFlow += flow.goldPerSecond * seconds;
+  ledger.grainFlow += flow.grainPerSecond * seconds;
   // 仓储损耗已含在 netGrain 里（netGrain = 产出 − 消耗 − 损耗），
   // 因此这里不能再单独扣一次，否则是重复计算。
   s.grain += flow.grainPerSecond * seconds;
@@ -594,6 +661,48 @@ function fortProjection(s, id) {
   const forts = (TERRITORY_DEFS[id]?.adj || []).filter(nb =>
     TERRITORY_DEFS[nb]?.type === "fort" && s.territories[nb]?.owner === owner).length;
   return FORT_GUARD_PROJECTION * Math.min(2, forts);
+}
+
+// Shared by the upgrade preview and the actual completion message. No mutation of live state.
+function buildingBenefit(s, id, type) {
+  const t = s.territories[id];
+  if (!t || !BUILDINGS[type] || t.buildings[type] >= BUILDING_MAX_LEVEL) return "已达最高级";
+  const next = { ...s, territories: { ...s.territories, [id]: { ...t,
+    stability: clamp(t.stability + 3), buildings: { ...t.buildings, [type]: t.buildings[type] + 1 }
+  } } };
+  const before = forecast(s), after = forecast(next);
+  const minutes = TIME_CONFIG.seasonDurationMs / 60000;
+  const parts = [];
+  for (const [key, label] of [["gold", "金币产出"], ["grain", "粮食产出"]]) {
+    const delta = after[key] - before[key];
+    if (delta) parts.push(`${label} +${(delta / minutes).toFixed(1)}/分`);
+  }
+  if (after.storageCap > before.storageCap) parts.push(`仓容 +${after.storageCap - before.storageCap}`);
+  if (type === "granary") parts.push("超仓损耗率降低，最低5%");
+  if (type === "academy") {
+    parts.push(`知识 +${((knowledgePerSeason(next) - knowledgePerSeason(s)) / minutes).toFixed(1)}/分`);
+    parts.push(`研究并发 ${researchCapacity(s)}→${researchCapacity(next)}`);
+  }
+  if (["barracks", "workshop"].includes(type)) {
+    Object.keys(UNIT_DEFS).forEach(unit => {
+      const delta = recruitAmount(next, unit, id) - recruitAmount(s, unit, id);
+      if (delta) parts.push(`${UNIT_DEFS[unit].name}每批 +${delta}人`);
+      if (unitLevel(next, unit) > unitLevel(s, unit)) parts.push(`${UNIT_DEFS[unit].name}装备升至${unitLevel(next, unit)}级`);
+    });
+    if (type === "barracks" && t.buildings.barracks === 1 && s.renown < 15) parts.push("满足骑兵征募的兵营门槛（仍需对应科技）");
+  }
+  const guard = { barracks: 7, walls: 5, watchtower: 4 }[type];
+  if (guard) parts.push(`守军上限约 +${Math.round(guard * (1 + fortProjection(s, id)))}`);
+  if (type === "watchtower") parts.push("本地与相邻领地提前预警");
+  if (type === "temple") parts.push(`本领施舍院救护加成 ${t.buildings.temple * 2}→${next.territories[id].buildings.temple * 2}个百分点（全境取最高）`);
+  if (type === "roads" || type === "workshop") {
+    const best = state => Math.max(0, ...ownTerritoryIds(state).map(tid =>
+      (state.territories[tid].buildings.roads || 0) + (state.territories[tid].buildings.workshop || 0)));
+    const saved = (best(next) - best(s)) * 3000;
+    parts.push(saved ? `战后整补缩短${saved / 1000}秒` : "整补由全境最高驿道与工坊合计等级决定");
+  }
+  parts.push(`本地稳定 +${next.territories[id].stability - t.stability}`);
+  return parts.join(" · ");
 }
 
 function buildingCost(s, id, type) {
@@ -667,7 +776,7 @@ function queueResearch(s, branch, techId, now = worldNow()) {
   return startJob(s, {
     type: "RESEARCH",
     startedAt: now,
-    endAt: now + researchDuration(tech, level),
+    endAt: now + Math.round(researchDuration(tech, level) * (1 - treasureBonus(s, "researchTime"))),
     queueKey: `research:${techId}`,
     payload: { branch, techId, level, gold: cost.gold, knowledge: cost.knowledge }
   });
@@ -832,10 +941,15 @@ function fireTimer(s, key, at, rng, options = {}) {
     // accrueTo 已把 elapsedMs 推过边界，所以要显式指明刚结束的那一季。
     const endedSeason = SEASONS[(turnOf(s) + 3) % 4];
     settleSeasonEconomy(s, { resourcesAlreadyAccrued: true, season: endedSeason });
+    const report = closeSeasonLedger(s, turnOf(s) - 1);
+    if (!options.offline) pushNotice({ kind: "season", title: `${report.label}结账`, text: `入账${report.goldIn}金、${report.grainIn}粮；结余${report.goldNet >= 0 ? "+" : "−"}${Math.abs(report.goldNet)}金。`, tab: "hall" });
     s.officers.forEach(o => { o.injured = 0; });
+    const treasureMorale = treasureBonus(s, "morale");
+    if (treasureMorale) s.morale = clamp(s.morale + treasureMorale);
     s.warWeariness = 0;
     handleOfficerPolitics(s);
     if (!options.offline) queueSeasonEvents(s, rng);
+    if (!options.offline && !s.battleSession) maybeOpenTourney(s);
     return true;
   }
   if (def.faction) { runFactionTurn(s, def.faction, rng, at); return true; }
@@ -889,6 +1003,8 @@ function advanceWorld(s, now = worldNow(), options = {}) {
   }
   accrueTo(s, horizon);
   jobs += processCompletedJobs(s, horizon, rng);
+  steps += checkMilestones(s);
+  checkRetainerQuips(s);
   if (!options.offline) checkDefeat(s);
   checkCampaignEnd(s);
   // 超出补算上限的部分直接跳过，不结算也不累积，避免离开一整天后被补算淹没
@@ -956,6 +1072,13 @@ function updateWorldTime(now = worldNow()) {
 function handleOfficerPolitics(s) {
   ownedOfficers(s).forEach(o => {
     if (o.id === "player") return;
+    // 功劳够了又没地，他自己上门要。隔两季最多来一次，已经在排队的不重复排。
+    if ((o.merit || 0) >= RETAINER_ASK_MERIT && !o.fief && turnOf(s) - (o.askedAt ?? -99) >= RETAINER_ASK_GAP
+      && !s.pendingDecisions.some(d => d.type === "retainer_ask" && d.officerId === o.id)) {
+      o.askedAt = turnOf(s);
+      s.pendingDecisions.push({ type: "retainer_ask", officerId: o.id });
+      pushNotice({ level: "normal", kind: "ask", title: `${o.name}来要赏`, text: `“${retainerLine(o.id, "ask")}”`, portrait: o.portrait, tab: "court" });
+    }
     if (o.merit >= 12 && !o.fief) {
       const ambitionPressure = Math.ceil(o.ambition / 24) + (o.merit >= 24 ? 1 : 0);
       o.grievance = clamp(o.grievance + ambitionPressure);
@@ -1170,6 +1293,81 @@ const GOAL_CHAPTERS = [
     { id: "crownvale", text: "攻下王冠谷，夺回铁冠", hint: "盯住顶栏的加冕倒计时", check: s => owns(s, "crownvale") },
   ] },
 ];
+
+// ---------- 家臣插嘴 ----------
+// 「头一回」类只说一次；阈值类（粮食见底、民心跌破）跨过阈值才说，回升后重新上膛。
+// 挑人不用 rng：用已推进的毫秒数取模，不扰动战役模拟的随机序列。
+function retainerQuip(s, key) {
+  const table = RETAINER_QUIPS[key];
+  if (!table) return null;
+  const speakers = ownedOfficers(s).filter(o => o.id !== "player" && table[o.id]);
+  if (!speakers.length) return null;
+  const pick = Math.floor((s.clock?.elapsedMs || 0) / 1000);
+  const who = speakers[pick % speakers.length];
+  const pool = table[who.id];
+  const line = pool[pick % pool.length];
+  log(s, "info", `${who.name}：“${line}”`);
+  pushNotice({ level: "normal", kind: "quip", title: who.name, text: `“${line}”`, portrait: who.portrait, tab: "hall" });
+  return { name: who.name, line };
+}
+
+// 老存档第一次跑到这里时，把「已经成立的」爵位、章节、头一回全部静默记上：
+// 不补发赏赐，也不一口气弹三场登位仪式。
+function seedLegacyMilestones(s) {
+  if (s.titleRank !== undefined) return;
+  const lands = ownTerritoryIds(s).length;
+  s.titleRank = TITLE_RANKS.reduce((rank, r, i) => lands >= r.lands ? i : rank, 0);
+  const view = goalView(s);
+  const reached = view.finished ? view.chapters.length : view.activeIndex;
+  s.goalRewards = Object.fromEntries(view.chapters.slice(0, reached).map(ch => [ch.id, true]));
+  s.quips = { firstMaxBuilding: ownTerritoryIds(s).some(id => Object.values(s.territories[id].buildings || {}).some(lv => lv >= BUILDING_MAX_LEVEL)), firstWin: (s.wins || 0) > 0, firstLoss: (s.battles || 0) > (s.wins || 0) };
+}
+
+function checkRetainerQuips(s) {
+  if (!s || s.ended) return;
+  const q = s.quips ||= {};
+  const once = (key, cond) => { if (!q[key] && cond) { q[key] = true; retainerQuip(s, key); } };
+  const gate = (key, low, recover) => {
+    if (!q[key] && low) { q[key] = true; retainerQuip(s, key); }
+    else if (q[key] && recover) q[key] = false;
+  };
+  once("firstMaxBuilding", ownTerritoryIds(s).some(id => Object.values(s.territories[id].buildings || {}).some(lv => lv >= BUILDING_MAX_LEVEL)));
+  once("firstWin", (s.wins || 0) > 0);
+  once("firstLoss", (s.battles || 0) > (s.wins || 0) && (s.battleLog || []).some(b => b.dir === "attack" && b.outcome !== "win"));
+  gate("grainLow", s.grain < 20, s.grain > 60);
+  gate("supportLow", s.support < 30, s.support > 40);
+}
+
+// ---------- 爵位与章节赏赐 ----------
+function titleRank(s) { return TITLE_RANKS[Math.max(0, Math.min(TITLE_RANKS.length - 1, s?.titleRank || 0))]; }
+
+// 每次推进世界后检查一遍。只负责「发现」并排进决策队列，赏赐在玩家点选项时才入账 ——
+// 与战报、事件同一套流程，机器人与离线补算都不用特殊处理。
+function checkMilestones(s) {
+  if (!s || s.ended) return 0;
+  seedLegacyMilestones(s);
+  let queued = 0;
+  const lands = ownTerritoryIds(s).length;
+  let rank = s.titleRank || 0;
+  while (rank + 1 < TITLE_RANKS.length && lands >= TITLE_RANKS[rank + 1].lands) {
+    rank++;
+    s.pendingDecisions.push({ type: "title_up", rank });
+    pushNotice({ level: "major", kind: "title", title: `晋${TITLE_RANKS[rank].name}`, text: TITLE_RANKS[rank].title, tab: "hall" });
+    queued++;
+  }
+  s.titleRank = rank;
+  s.goalRewards ||= {};
+  const view = goalView(s);
+  const reached = view.finished ? view.chapters.length : view.activeIndex;
+  view.chapters.slice(0, reached).forEach(ch => {
+    if (s.goalRewards[ch.id] || !CHAPTER_REWARDS[ch.id]) return;
+    s.goalRewards[ch.id] = true;
+    s.pendingDecisions.push({ type: "chapter_done", chapterId: ch.id });
+    pushNotice({ level: "major", kind: "chapter", title: `${ch.name}完成`, text: CHAPTER_REWARDS[ch.id].title, tab: "hall" });
+    queued++;
+  });
+  return queued;
+}
 
 // 章节视图：当前章 = 第一个未完成的章。谓词不是单调的（军队会打光、领地会丢），
 // 已完成的章节回退时会重新变成当前章 —— 这是有意的：引导反映真实状态，不记旧账。

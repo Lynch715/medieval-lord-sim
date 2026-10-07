@@ -106,14 +106,26 @@ function fight(state, random) {
   if (!game.startBattle(state, draft, random)) return false;
   while (state.battleSession) {
     const session = state.battleSession;
-    const options = game.stageOptions(state, session);
-    const choice = session.stage === 0
+    let options = game.stageOptions(state, session);
+    // 机器人也会叫阵：我方最能打的比守将高出一截才上
+    const duel = options.find(option => option.duel);
+    if (duel) {
+      const champ = game.duelChampion(state, session.leaderIds);
+      const def = game.defenderLeader(state, session.targetId);
+      if (champ && def && game.personStat(champ, "force") >= game.personStat(def, "force") + 6) {
+        game.applyBattleChoice(state, "duel", random);
+        options = game.stageOptions(state, session);
+      }
+    }
+    // 有技能军令就先用技能（死守不退只在劣势时出现）
+    const skill = options.find(option => option.skill);
+    const choice = skill || (session.stage === 0
       ? options.find(option => option.id === "scout") || options.find(option => option.id === "ridge")
       : session.stage === 1
         ? options.find(option => option.id === "feint") || options.find(option => option.id === "volley") || options.find(option => option.id === "shield")
         : session.momentum > 10
           ? options.find(option => option.id === "surrender") || options.find(option => option.id === "hold")
-          : options.find(option => option.id === "press") || options.find(option => option.id === "hold");
+          : options.find(option => option.id === "press") || options.find(option => option.id === "hold"));
     game.applyBattleChoice(state, choice.id, random);
   }
   resolveDecisions(state);

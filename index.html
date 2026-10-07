@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
-  <meta name="theme-color" content="#0a0b0a">
+  <meta name="theme-color" content="#1c1510">
   <meta name="description" content="继承渡鸦堡，在四季经营、家臣政治与真实战争中夺取铁冠。">
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="icon/icon-32.png">
@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>模拟中世纪领主 · 铁冠之路</title>
-  <link rel="stylesheet" href="style.css?v=36">
+  <link rel="stylesheet" href="style.css?v=2026100810">
 </head>
 <body>
   <div class="weather" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -25,7 +25,7 @@
       <div class="house-mark" aria-hidden="true"><span>R</span><small>渡鸦家</small></div>
     </div>
     <div class="menu-copy glass">
-      <span class="eyebrow">A LORDSHIP SIMULATION</span>
+      <span class="eyebrow">北境 · 渡鸦家</span>
       <h1>模拟中世纪领主</h1>
       <div class="title-rule"><i></i><b>铁冠之路</b><i></i></div>
       <p class="subtitle">父亲死了。旗换了一半。你手里有四块地、一枚印戒、几季的粮。</p>
@@ -88,10 +88,10 @@
         <article class="lord-card">
           <img src="assets/player.webp" alt="玩家领主">
           <div class="portrait-fade"></div>
-          <div class="lord-copy"><span id="oathBadge">合法继承人</span><h2 id="playerNameText">罗恩</h2><p>渡鸦家的王子 · 渡鸦堡</p></div>
+          <div class="lord-copy"><span id="oathBadge">合法继承人</span><h2 id="playerNameText">罗恩</h2><p id="lordTitleLine">渡鸦家的王子 · 渡鸦堡</p></div>
         </article>
-        <section class="side-panel glass">
-          <div class="section-title"><h3>军政根基</h3><span id="territoryCount">1 / 7</span></div>
+        <details id="sideFold" class="side-panel glass side-fold" open>
+          <summary class="section-title"><h3>军政根基</h3><span><em id="sideSummary"></em><span id="territoryCount">1 / 7</span></span></summary>
           <div class="meter-row"><span>金币</span><b id="goldSideText">58</b></div><div class="meter gold"><i id="goldBar"></i></div>
           <div class="meter-row"><span>粮食</span><b id="grainSideText">125</b></div><div class="meter green"><i id="grainBar"></i></div>
           <div class="meter-row"><span>军队</span><b id="armySideText">42</b></div><div class="meter red"><i id="armyBar"></i></div>
@@ -99,21 +99,19 @@
           <div class="meter-row"><span>军心</span><b id="moraleText">55</b></div><div class="meter red"><i id="moraleBar"></i></div>
           <div class="meter-row"><span>声望</span><b id="renownText">8</b></div><div class="meter gold"><i id="renownBar"></i></div>
           <div class="meter-row"><span>正统性</span><b id="legitimacyText">35</b></div><div class="meter gold"><i id="legitimacyBar"></i></div>
-        </section>
-        <section class="side-panel glass">
-          <div class="section-title"><h3>实时资源</h3><span id="netGoldText">+7金/分</span></div>
+          <div class="section-title side-subhead"><h3>进账</h3><span id="netGoldText">+7金/分</span></div>
           <div id="forecastList" class="forecast-list"></div>
-        </section>
+        </details>
       </aside>
 
       <section class="main-column">
         <nav id="gameNav" class="game-nav" aria-label="游戏功能">
-          <button class="active" data-tab="hall"><span>总</span>总览</button>
-          <button data-tab="domain"><span>发</span>发展</button>
-          <button data-tab="court"><span>将</span>将领</button>
-          <button data-tab="campaign"><span>军</span>军队</button>
-          <button data-tab="map"><span>图</span>地图</button>
-          <button data-tab="chronicle"><span>志</span>日志</button>
+          <button class="active" data-tab="hall"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 21V9l3 2V7l2.5 1.5L12 4l2.5 4.5L17 7v4l3-2v12z"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/></svg></span>总览</button>
+          <button data-tab="domain"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 21V8"/><path d="M12 12c-3 0-5-2-5-5 3 0 5 2 5 5zM12 12c3 0 5-2 5-5-3 0-5 2-5 5zM12 17c-3 0-5-2-5-5 3 0 5 2 5 5zM12 17c3 0 5-2 5-5-3 0-5 2-5 5z"/><path d="M12 8c0-2 0-3 0-5"/></svg></span>发展</button>
+          <button data-tab="court"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 14 0v4H5z"/><path d="M12 5v7M8 16v3h8v-3M9 12h6"/></svg></span>将领</button>
+          <button data-tab="campaign"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4l10 10M4 5l1-1 3 0M15 14l-2 2M14 17l3 3 2-1 1-2-3-3M19 4L9 14M20 5l-1-1-3 0M9 14l2 2M10 17l-3 3-2-1-1-2 3-3"/></svg></span>军队</button>
+          <button data-tab="map"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg></span>地图</button>
+          <button data-tab="chronicle"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11M9 8h6M9 11h4"/></svg></span>日志</button>
         </nav>
         <div class="turn-strip"><div><i class="live-dot"></i><b id="phaseText">春耕</b><span id="turnHint">距离换季 5:00</span></div><span class="clock-live">实时推进</span></div>
         <div id="threatStrip" class="threat-strip hidden" aria-live="polite"></div>
@@ -142,6 +140,7 @@
     </div>
   </div>
   <div id="updateBar" class="update-bar hidden"><span>有新版本</span><button id="updateGo" type="button">刷新</button></div>
+  <div id="noticeStack" class="notice-stack" aria-live="polite"></div>
   <div id="toast" class="toast" role="status"></div>
   <script src="src/01-data.js?v=36"></script>
   <script src="src/02-core.js?v=36"></script>

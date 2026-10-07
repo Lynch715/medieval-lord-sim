@@ -4,6 +4,7 @@
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    buildingBenefit, conquestReward, markRecovered, recoverySupport, battleSettlementHtml, battleBreakdownText,
     createInitialState, hydrateState, seasonOf, forecast, resourceFlow, territoryOutput, buildingCost, BUILDINGS, BUILDING_MAX_LEVEL,
     attackableTerritories, battleEstimate, startBattle, stageOptions, applyBattleChoice,
     finishBattle, defenderLeader, runFactionTurn, resolveAIAttack, resolveAIAnnex, aiTargets, aiArmyCap, aiSeasonIncome, aiArmyPower, reinforceAIArmy, compositionTotal, officer, FACTION_TIMER_KEY, startMarch, incomingThreats, beaconCovers, THREAT_LATE_WINDOW_MS, marchDurationForDistance, territoryDistance, decisionView, subjects, TERRITORY_DEFS, playableTerritoryIds, LORD_DEFS, LORD_ARCHETYPES, SEAT_TO_LORD, lordAt, lordHoldings, lordVassals, adjacencyPressure, lordResistance, persuasionLeverage, canPersuadeLord, lordBribeCost, submitLord, SUBMIT_LOYALTY, demandFealty, bribeLord, lordRouteStatus, BRIBE_LEGITIMACY_COST, FIEF_PROMISE_DUE_MS, PERSUADE_LEGITIMACY_GAIN,
@@ -19,7 +20,13 @@ if (typeof module !== "undefined" && module.exports) {
     redeployArmy, stationedArmies, stationedPower, applyStationedLosses, retreatStationedArmies,
     STATIONED_DEFENSE_FACTOR, STATIONED_RECOVERING_FACTOR, runningRecruitJob, shiftScheduled,
     CIVILIAN_GRAIN_PER_HEAD, SUPPLY_PER_GRAIN, compositionSupply, applyShortage, forecast,
-    GOAL_CHAPTERS, GOAL_BASELINES, goalView, totalBuildingLevels, anyTechCompleted
+    GOAL_CHAPTERS, GOAL_BASELINES, goalView, totalBuildingLevels, anyTechCompleted,
+    ledgerSnapshot, ensureLedger, closeSeasonLedger, pushNotice, drainNotices, NOTICE_QUEUE,
+    TITLE_RANKS, CHAPTER_REWARDS, titleRank, checkMilestones, administrationCost, RETAINER_QUIPS, retainerQuip, checkRetainerQuips, seedLegacyMilestones,
+    TREASURES, TREASURE_KINDS, grantTreasure, grantTreasureFor, treasureBonus, ownedTreasures, treasureOwned,
+    maybeOpenTourney, tourneyRoll, TOURNEY_HOSTS, TOURNEY_RESULTS, knightById,
+    grantFief, revokeFief, fiefCandidates, retainerMood, RETAINER_ASK_MERIT, RETAINER_LINES,
+    SKILLS, SIGNATURE_SKILLS, CLASS_SKILL_POOLS, LEVEL_XP, ensureProgress, ensureAllProgress, personSkills, leadersHaveSkill, gainBattleXp, personStat, availableCommanders, setArmyDeputies, armyLeaderIds, canUseCommander, duelChampion, startingLevel
   };
 }
 
