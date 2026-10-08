@@ -893,6 +893,28 @@ function checkDefeat(s) {
   return false;
 }
 
+// 世界事件里点名的家臣，要是还没投过来，就换成在场的人说话
+const EVENT_STAND_INS = {
+  renard: { name: "雷纳德", stand: "守备队长" },
+  ysabel: { name: "伊莎贝尔", stand: "管账的老书记" },
+  edmund: { name: "埃德蒙", stand: "侍从长" }
+};
+
+function worldEventSpeakers(s, event) {
+  const absent = Object.entries(EVENT_STAND_INS).filter(([id]) => officer(s, id)?.side !== "player");
+  if (!absent.length) return event;
+  const swap = text => absent.reduce((out, [, v]) => String(out).split(v.name).join(v.stand), text);
+  // 单文件版会把图片路径换成内联数据，所以拿 LORD_DEFS 里的同一个值比，不拼路径
+  const absentPortrait = absent.some(([id]) => event.portrait === LORD_DEFS[id]?.portrait);
+  return {
+    ...event,
+    title: swap(event.title),
+    body: swap(event.body),
+    portrait: absentPortrait ? LORD_DEFS.oswin.portrait : event.portrait,
+    options: event.options.map(([name, note, changes, chronicle]) => [swap(name), swap(note), changes, swap(chronicle)])
+  };
+}
+
 function decisionView(s, decision) {
   if (decision.type === "battle_result") return {
     kicker: "战役结算", title: decision.report.outcome === "win" ? `${decision.report.targetName}，渡鸦旗再度升起` : "收拢军队，再作打算",
@@ -982,7 +1004,7 @@ function decisionView(s, decision) {
   }
   if (decision.type === "world_event") {
     const event = WORLD_EVENTS.find(item => item.id === decision.eventId);
-    return event ? scriptedEventView(s, event) : null;
+    return event ? scriptedEventView(s, worldEventSpeakers(s, event)) : null;
   }
   if (decision.type === "npc_arc") {
     const event = NPC_ARCS.find(item => item.id === decision.eventId);
@@ -1084,11 +1106,11 @@ function decisionView(s, decision) {
   if (decision.type === "cousin_demand") {
     return {
       kicker: "家事", title: "埃德蒙要单独带一次兵", portrait: "assets/edmund.webp",
-      body: `<p>“让我单独领一次兵。”他盯着桌上的军旗，“我打得赢，他们自然闭嘴。堂弟，你也一样。”</p><p>已经有几个骑士跟在他后头了。让他领兵，他的功劳会涨，野心也会。</p>`,
+      body: `<p>“让我单独领一次兵。”他盯着桌上的军旗，“我打得赢，他们自然闭嘴。堂弟，你也一样。”</p><p>已经有几个骑士跟在他后头了。让他领兵，他的战功会涨，胃口也会。</p>`,
       options: [
-        { name: "让他去", note: "埃德蒙忠诚 +8、功劳 +5；王室认可 −3", effect() { const o = officer(s, "edmund"); if (o) { o.loyalty = clamp(o.loyalty + 8); o.merit += 5; } s.legitimacy = clamp(s.legitimacy - 3); s.style.oath++; log(s, "info", "他接过军旗，没说谢。下次军议是他报的商路和军情，报得比奥斯温还细。"); } },
+        { name: "让他去", note: "埃德蒙忠诚 +8、战功 +5；王室认可 −3", effect() { const o = officer(s, "edmund"); if (o) { o.loyalty = clamp(o.loyalty + 8); o.merit += 5; } s.legitimacy = clamp(s.legitimacy - 3); s.style.oath++; log(s, "info", "他接过军旗，没说谢。下次军议是他报的商路和军情，报得比奥斯温还细。"); } },
         { name: "当众拒绝", note: "王室认可 +4；埃德蒙忠诚 −10、不满 +14", effect() { const o = officer(s, "edmund"); if (o) { o.loyalty = clamp(o.loyalty - 10); o.grievance = clamp((o.grievance || 0) + 14); } s.legitimacy = clamp(s.legitimacy + 4); s.style.iron += 2; log(s, "warn", "他把军旗放回桌上，放得很轻。“行，堂弟。”"); } },
-        { name: "先让他去护商路", note: "金币 +10；埃德蒙忠诚 −3、管理功劳 +3", effect() { const o = officer(s, "edmund"); if (o) { o.loyalty = clamp(o.loyalty - 3); o.merit += 3; } s.gold += 10; s.style.wealth += 2; log(s, "info", "他去护了一季商路，带回十金。回来说，商路上没人叫他堂兄。"); } }
+        { name: "先让他去护商路", note: "金币 +10；埃德蒙忠诚 −3、战功 +3", effect() { const o = officer(s, "edmund"); if (o) { o.loyalty = clamp(o.loyalty - 3); o.merit += 3; } s.gold += 10; s.style.wealth += 2; log(s, "info", "他去护了一季商路，带回十金。回来说，商路上没人叫他堂兄。"); } }
       ]
     };
   }
@@ -1122,6 +1144,22 @@ function decisionView(s, decision) {
   return null;
 }
 
+// 选项色条：按净得失算，不是看有没有加减号。金粮按三分之一折算，
+// 其余（民心、军心、声望、忠诚、兵）一点算一点。净值相差不大就算「有得有失」。
+function optionTone(note) {
+  let score = 0, hits = 0;
+  String(note || "").replace(/([\u4e00-\u9fa5A-Za-z]+)\s*([+−-])\s*(\d+)/g, (_, label, sign, amount) => {
+    const w = /金币|粮食|金|粮/.test(label) ? 1 / 3 : 1;
+    score += (sign === "+" ? 1 : -1) * Number(amount) * w;
+    hits++;
+    return "";
+  });
+  if (!hits) return "neutral";
+  if (score >= 3) return "gain";
+  if (score <= -3) return "risk";
+  return "mixed";
+}
+
 function pumpDecision() {
   if (!S || S.ended || !S.pendingDecisions.length || typeof document === "undefined") {
     $("modalMask")?.classList.add("hidden");
@@ -1140,9 +1178,7 @@ function pumpDecision() {
   $("modalResources").innerHTML = [["金币", Math.round(S.gold)], ["粮食", Math.round(S.grain)], ["军队", Math.round(S.troops)], ["民心", Math.round(S.support)], ["军心", Math.round(S.morale)], ["声望", Math.round(S.renown)]].map(([label, value]) => `<span><small>${label}</small><b>${value}</b></span>`).join("");
   $("modal").scrollTop = 0;
   $("modalOptions").innerHTML = view.options.map((opt, i) => {
-    const plus = (opt.note.match(/\+/g) || []).length;
-    const minus = (opt.note.match(/−/g) || []).length;
-    const tone = plus && !minus ? "gain" : minus && !plus ? "risk" : plus && minus ? "mixed" : "neutral";
+    const tone = optionTone(cleanDisplayText(opt.note));
     return `<button class="${tone}" data-decision-option="${i}" ${opt.disabled ? "disabled" : ""}><b>${esc(cleanDisplayText(opt.name))}</b><small>${esc(cleanDisplayText(opt.note))}</small></button>`;
   }).join("");
   $("modalOptions").querySelectorAll("[data-decision-option]").forEach(button => button.addEventListener("click", () => {

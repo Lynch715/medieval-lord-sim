@@ -1,5 +1,5 @@
 // 离线：代码走网络优先（上线立刻是新版），图片走缓存优先 + 后台更新。
-const VER = "iron-crown-v13-skillsheet";
+const VER = "iron-crown-v14-auditfix";
 const SHELL = [
   "./",
   "./index.html",

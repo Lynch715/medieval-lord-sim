@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>模拟中世纪领主 · 铁冠之路</title>
-  <link rel="stylesheet" href="style.css?v=2026100811">
+  <link rel="stylesheet" href="style.css?v=2026100812">
 </head>
 <body>
   <div class="weather" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -76,10 +76,17 @@
         <div><span>金币</span><b id="goldText">58</b></div>
         <div><span>粮食</span><b id="grainText">125</b></div>
         <div><span>军队</span><b id="troopText">42</b></div>
-        <button id="speedBtn" class="icon-btn speed-btn" type="button" aria-label="时间倍速">1×</button>
-        <button id="pauseBtn" class="icon-btn" type="button" aria-label="暂停或继续">暂</button>
-        <button id="saveBtn" class="icon-btn" type="button" aria-label="保存进度">存</button>
-        <button id="restartBtn" class="icon-btn" type="button" aria-label="重新开始">重</button>
+      </div>
+      <div class="top-tools">
+        <button id="speedBtn" class="tool-btn speed-btn" type="button" aria-label="时间倍速"><b id="speedVal">1×</b><span>倍速</span></button>
+        <button id="pauseBtn" class="tool-btn" type="button" aria-label="暂停世界"><svg class="ico-pause" viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="4" width="3.4" height="12"/><rect x="11.6" y="4" width="3.4" height="12"/></svg><svg class="ico-play" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4l10 6-10 6z"/></svg><span id="pauseLbl">暂停</span></button>
+        <div class="tool-menu">
+          <button id="menuBtn" class="tool-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="菜单"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="5" width="14" height="1.8"/><rect x="3" y="9.1" width="14" height="1.8"/><rect x="3" y="13.2" width="14" height="1.8"/></svg><span>菜单</span></button>
+          <div id="menuPop" class="menu-pop" hidden>
+            <button id="saveBtn" type="button">保存进度</button>
+            <button id="restartBtn" type="button" class="danger">删档重开</button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -92,9 +99,9 @@
         </article>
         <details id="sideFold" class="side-panel glass side-fold" open>
           <summary class="section-title"><h3>军政根基</h3><span><em id="sideSummary"></em><span id="territoryCount">1 / 7</span></span></summary>
-          <div class="meter-row"><span>金币</span><b id="goldSideText">58</b></div><div class="meter gold"><i id="goldBar"></i></div>
-          <div class="meter-row"><span>粮食</span><b id="grainSideText">125</b></div><div class="meter green"><i id="grainBar"></i></div>
-          <div class="meter-row"><span>军队</span><b id="armySideText">42</b></div><div class="meter red"><i id="armyBar"></i></div>
+          <div class="meter-row"><span>金币 <small id="goldSideNote"></small></span><b id="goldSideText">58</b></div><div class="meter gold"><i id="goldBar"></i></div>
+          <div class="meter-row"><span>粮食 <small id="grainSideNote"></small></span><b id="grainSideText">125</b></div><div class="meter green"><i id="grainBar"></i></div>
+          <div class="meter-row"><span>军队 <small id="armySideNote"></small></span><b id="armySideText">42</b></div><div class="meter red"><i id="armyBar"></i></div>
           <div class="meter-row"><span>民心</span><b id="supportText">52</b></div><div class="meter green"><i id="supportBar"></i></div>
           <div class="meter-row"><span>军心</span><b id="moraleText">55</b></div><div class="meter red"><i id="moraleBar"></i></div>
           <div class="meter-row"><span>声望</span><b id="renownText">8</b></div><div class="meter gold"><i id="renownBar"></i></div>

@@ -56,7 +56,7 @@
   --text: #2a1f15;
   --text-2: #4a3a29;
   --muted: #6e5a42;
-  --faint: #95816a;
+  --faint: #7a6750;
   --line: rgba(96, 66, 32, .22);
   --line-strong: rgba(96, 66, 32, .45);
   --gold: #9b6b1f;
@@ -656,14 +656,8 @@ button:disabled { opacity: .42; cursor: not-allowed !important; filter: none !im
   .topbar { position: relative; align-items: flex-start; padding: 11px 12px; }
   .top-resources { display: grid; grid-template-columns: repeat(4,1fr); width: calc(100% - 150px); gap: 2px; }
   .top-resources > div { min-width: 0; padding: 5px 6px; }
-  /* 手机上只留必要的图标按钮。「存」有自动存档兜底，可以省；
-     「暂」不能省 —— 切应用前先停表正是手机上最常做的一件事；
-     「倍速」同样不能省 —— 它是引擎级的节奏开关，手机上原本被这条规则一起藏掉了。 */
-  .top-resources .icon-btn:not(#restartBtn):not(#pauseBtn):not(#speedBtn) { display: none; }
-  .top-resources #restartBtn { position: absolute; right: 12px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(24,18,12,.9); }
-  .top-resources #pauseBtn { position: absolute; right: 58px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(24,18,12,.9); }
-  .top-resources #pauseBtn.paused { background: var(--vermilion); }
-  .top-resources #speedBtn { position: absolute; right: 104px; top: 12px; display: block; width: 38px; height: 38px; background: rgba(24,18,12,.9); }
+  /* 手机上倍速、暂停、菜单三个按钮挤到右上角 */
+
   /* 底部导航是 fixed，且高度里含 env(safe-area-inset-bottom)；这里的下内边距
      必须跟着含，否则有手势条的机器（iPhone 约 34px、部分安卓 48px）会把最后
      一行内容压在导航栏底下。无头预览的 inset 恒为 0，所以这个 bug 只在真机可见。 */
@@ -1166,7 +1160,7 @@ button.skill-chip:hover { filter: brightness(1.05); box-shadow: 0 0 0 2px rgba(1
 .skill-sheet { position: fixed; inset: 0; z-index: 130; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(14,9,5,.35); }
 .skill-sheet.open { display: flex; }
 .skill-sheet-card {
-  --text: #2a1f15; --text-2: #4a3a29; --muted: #6e5a42; --faint: #95816a; --line: rgba(96,66,32,.22); --line-strong: rgba(96,66,32,.45); --gold: #9b6b1f; --gold-light: #6f4310;
+  --text: #2a1f15; --text-2: #4a3a29; --muted: #6e5a42; --faint: #7a6750; --line: rgba(96,66,32,.22); --line-strong: rgba(96,66,32,.45); --gold: #9b6b1f; --gold-light: #6f4310;
   position: relative; width: min(420px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 18px 20px 16px; color: var(--text);
   border: 1px solid var(--paper-edge); background: var(--paper-tex), linear-gradient(180deg, #f6edd8, #e8d7b2); box-shadow: 0 20px 50px rgba(0,0,0,.5);
   animation: reportIn .2s ease-out;
@@ -1180,3 +1174,79 @@ button.skill-chip:hover { filter: brightness(1.05); box-shadow: 0 0 0 2px rgba(1
 .skill-sheet-card q { display: block; margin-top: 12px; padding-left: 10px; border-left: 2px solid var(--vermilion); color: var(--text-2); font: 14px/1.6 var(--serif); quotes: none; }
 .skill-pool { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: start; margin-top: 12px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
 @media (max-width: 540px) { .skill-sheet { align-items: flex-end; padding: 0 0 calc(64px + env(safe-area-inset-bottom)); } .skill-sheet-card { width: 100%; border-left: 0; border-right: 0; } }
+
+/* 名册分组小标题 */
+.roster-sub { display: flex; align-items: baseline; gap: 8px; margin: 14px 0 8px; font: 600 14px var(--serif); color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.roster-sub:first-child { margin-top: 2px; }
+.roster-sub small { color: var(--muted); font: 12px var(--sans, inherit); }
+.knight-note { font-size: 12px !important; color: var(--faint) !important; margin: -4px 0 6px !important; }
+.roster-filter { display: flex; gap: 6px; margin: 2px 0 6px; }
+.roster-filter .ghost-btn { min-height: 30px; padding: 4px 12px; font-size: 13px; }
+.roster-filter .ghost-btn.on { background: var(--btn-hover); border-color: var(--gold); color: var(--text); }
+.officer-card.enemy.idle { opacity: .78; }
+@media (max-width: 820px) {
+  .officer-card.enemy { grid-template-columns: 72px 1fr; min-height: 0; }
+  .officer-card.enemy > img { height: 96px; border-bottom: 1px solid var(--line-strong); }
+  .officer-card.enemy .card-copy { padding: 10px; }
+  .officer-card.enemy .card-copy > p { margin: 4px 0 6px; font-size: 12px; }
+  .officer-card.enemy .lord-routes .route:not(.on) { display: none; }
+}
+
+/* 顶栏工具：图标 + 字 */
+.top-tools { display: flex; align-items: stretch; gap: 6px; margin-left: 4px; }
+.tool-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 52px; min-height: 48px; padding: 4px 0; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; font-family: var(--serif); }
+.tool-btn:hover { border-color: var(--gold); color: var(--gold-light); background: var(--btn-bg); }
+.tool-btn svg { width: 17px; height: 17px; fill: currentColor; }
+.tool-btn b { font: 600 16px/17px var(--serif); color: inherit; }
+.tool-btn span { font-size: 11px; line-height: 1; color: inherit; margin: 0; }
+.tool-btn .ico-play { display: none; }
+#pauseBtn.paused .ico-play { display: block; }
+#pauseBtn.paused .ico-pause { display: none; }
+#pauseBtn.paused { color: var(--on-vermilion); border-color: #5e170e; background: var(--vermilion); }
+.speed-btn.fast { color: var(--gold-light); border-color: var(--gold); background: var(--btn-bg); }
+.tool-menu { position: relative; display: flex; }
+.menu-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; display: grid; min-width: 140px; padding: 4px; border: 1px solid var(--line-strong); background: var(--surface); box-shadow: 0 10px 24px rgba(0,0,0,.35); }
+.menu-pop[hidden] { display: none; }
+.menu-pop button { padding: 10px 12px; border: 0; background: none; color: var(--text); text-align: left; font: 14px var(--serif); cursor: pointer; }
+.menu-pop button:hover { background: var(--btn-hover); }
+.menu-pop button.danger { color: var(--red); border-top: 1px solid var(--line); margin-top: 2px; }
+.menu-pop { background: #2a2017; }
+@media (max-width: 820px) {
+  .top-tools { position: absolute; right: 12px; top: 11px; gap: 4px; margin: 0; }
+  .tool-btn { width: 44px; min-height: 42px; padding: 3px 0; background: rgba(24,18,12,.9); }
+  .tool-btn span { font-size: 10px; }
+}
+.topbar .top-resources { margin-left: auto; }
+.roster-fold > summary { cursor: pointer; list-style: none; }
+.roster-fold > summary::-webkit-details-marker { display: none; }
+.roster-fold > summary::before { content: "▸"; color: var(--gold); font-size: 12px; }
+.roster-fold[open] > summary::before { content: "▾"; }
+@media (max-width: 820px) {
+  .knight-card { min-height: 0; grid-template-columns: 40px 1fr; }
+  .knight-card .knight-mark { margin: 8px; font-size: 18px; }
+  .knight-card p { margin: 4px 0 6px; }
+}
+@media (max-width: 820px) { .officer-card.enemy > .knight-mark { align-self: start; height: 64px; } }
+.benefit-more { margin: -4px 0 8px; font-size: 12px; color: var(--muted); }
+.benefit-more summary { cursor: pointer; color: var(--gold); list-style: none; }
+.benefit-more summary::-webkit-details-marker { display: none; }
+.benefit-more summary::after { content: " ▸"; }
+.benefit-more[open] summary::after { content: " ▾"; }
+.benefit-more p { margin: 4px 0 0; line-height: 1.6; }
+.meter-row small { margin-left: 4px; color: var(--muted); font-size: 11px; }
+/* 军团只有一支时别留一大片空 */
+@media (min-width: 821px) {
+  .corps-grid { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .corps-grid > .corps-card:only-child .stat-chips, .corps-grid > .corps-card:only-child select { max-width: 560px; }
+}
+.army-roster > .section-note, .army-roster > .secondary-btn { grid-column: 1 / -1; }
+.army-roster > .section-note { margin: 0 0 2px; }
+.settlement-ledger { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.settlement-ledger summary { cursor: pointer; color: var(--gold); list-style: none; font-size: 13px; }
+.settlement-ledger summary::-webkit-details-marker { display: none; }
+.settlement-ledger summary::after { content: " ▸"; }
+.settlement-ledger[open] summary::after { content: " ▾"; }
+.map-legend-fold > summary { cursor: pointer; list-style: none; color: var(--gold); font-size: 13px; margin-bottom: 6px; }
+.map-legend-fold > summary::-webkit-details-marker { display: none; }
+.map-legend-fold > summary::after { content: " ▸"; }
+.map-legend-fold[open] > summary::after { content: " ▾"; }

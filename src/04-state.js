@@ -701,7 +701,7 @@ function buildingBenefit(s, id, type) {
     const saved = (best(next) - best(s)) * 3000;
     parts.push(saved ? `战后整补缩短${saved / 1000}秒` : "整补由全境最高驿道与工坊合计等级决定");
   }
-  parts.push(`本地稳定 +${next.territories[id].stability - t.stability}`);
+  parts.push(`本地民心 +${next.territories[id].stability - t.stability}`);
   return parts.join(" · ");
 }
 

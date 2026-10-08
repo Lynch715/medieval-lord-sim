@@ -917,7 +917,7 @@ function retainerMood(o) {
   if (o.fief) return o.grievance >= 30 ? "有地，但心里有疙瘩" : "心满意足";
   if ((o.merit || 0) >= RETAINER_ASK_MERIT) return "在等封地";
   if (o.grievance >= 30) return "憋着火";
-  return "还在攒功劳";
+  return "还在攒战功";
 }
 
 
