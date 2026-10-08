@@ -314,6 +314,71 @@ function officerCard(o, enemy = false) {
   </article>`;
 }
 
+// ---------- 技能说明卡 ----------
+// 任何地方的技能标签都能点：将领卡、骑士卡、军团卡、战况记录。点开在页面上弹一张小卡，
+// 不走事件弹窗（那个会停世界）。点卡外面或者 ✕ 关掉。
+const STAGE_NAMES = ["接敌", "交锋", "决胜"];
+const TERRAIN_NAMES = { forest: "林地", mountain: "山地", river: "河地", plains: "平原", fortified: "要塞", capital: "王城" };
+function pct(x) { const v = Math.round((x - 1) * 100); return `${v >= 0 ? "+" : "−"}${Math.abs(v)}%`; }
+function skillEffectLines(sk) {
+  if (sk.type === "passive") return [sk.desc];
+  const lines = [];
+  const when = [`${STAGE_NAMES[sk.stage]}阶段`, sk.terrain ? `${sk.terrain.map(t => TERRAIN_NAMES[t] || t).join("或")}才能用` : "", sk.needKnights ? `需要披甲骑士${sk.needKnights}名以上` : "", sk.holdLine ? "只在打不赢的时候出现" : ""].filter(Boolean).join("，");
+  lines.push(`${when}。每场一次。`);
+  if (sk.roll) {
+    const stat = STAT_LABELS[sk.roll.stat];
+    lines.push(`要过${stat}判定${sk.roll.vsDefender ? "（对守将的武力）" : ""}，${stat}越高越容易成。`);
+    lines.push(`成了：这一阵推进力${pct(sk.mult)}，伤亡${pct(sk.casualty)}${sk.enemyLossMult ? `，敌军折损×${sk.enemyLossMult}` : ""}。`);
+    lines.push(`没成：推进力${pct(sk.failMult)}，伤亡${pct(sk.failCasualty)}。`);
+  } else {
+    lines.push(`这一阵推进力${pct(sk.mult)}，伤亡${pct(sk.casualty)}${sk.enemyLossMult ? `，敌军折损×${sk.enemyLossMult}` : ""}。`);
+  }
+  if (sk.pushed) lines.push("算一次强攻：连着强攻，对面会看出破绽反扑。");
+  if (sk.resetAggression) lines.push("前面连攻攒下的破绽一笔勾销。");
+  if (sk.holdLine) lines.push("用了以后，就算最后没打赢，也只算撤回，不算战败。");
+  return lines;
+}
+function skillSource(id) {
+  const owner = Object.entries(SIGNATURE_SKILLS).find(([, sk]) => sk === id)?.[0];
+  if (owner) return `专属 · ${LORD_DEFS[owner]?.name || (owner === "player" ? "王子" : owner)}`;
+  return `${COMMANDER_CLASSES[SKILLS[id]?.cls]?.name || ""}技能`;
+}
+function openSkillSheet(html) {
+  let sheet = $("skillSheet");
+  if (!sheet) { sheet = document.createElement("div"); sheet.id = "skillSheet"; sheet.className = "skill-sheet"; document.body.appendChild(sheet); }
+  sheet.innerHTML = `<div class="skill-sheet-card" role="dialog" aria-label="技能说明"><button type="button" class="skill-sheet-close" aria-label="关闭">✕</button>${html}</div>`;
+  sheet.classList.add("open");
+  sheet.querySelector(".skill-sheet-close").onclick = () => sheet.classList.remove("open");
+}
+function skillSheetHtml(id, ownerId) {
+  const sk = SKILLS[id];
+  if (!sk) return "";
+  const owner = ownerId ? commanderById(S, ownerId) : null;
+  const line = sk.lines?.length ? sk.lines[0] : "";
+  return `<div class="skill-sheet-head"><span class="skill-chip ${sk.type}">${sk.type === "order" ? "军令" : "被动"}</span><h3>${sk.name}</h3><small>${skillSource(id)}${owner && SIGNATURE_SKILLS[owner.id] !== id ? ` · ${esc(owner.name)}` : ""}</small></div>
+    <p class="skill-sheet-desc">${sk.desc}</p>
+    <ul>${skillEffectLines(sk).map(t => `<li>${t}</li>`).join("")}</ul>
+    ${line ? `<q>“${line}”</q>` : ""}`;
+}
+function skillPoolHtml(personId, at) {
+  const person = commanderById(S, personId);
+  if (!person) return "";
+  ensureProgress(person);
+  const pool = CLASS_SKILL_POOLS[person.cls].filter(id => !person.skills.includes(id));
+  return `<div class="skill-sheet-head"><span class="skill-chip locked">${at}级</span><h3>${esc(person.name)}到${at}级能学什么</h3><small>${COMMANDER_CLASSES[person.cls].name}这条路，到时候从里面挑两样给你选一样</small></div>
+    <div class="skill-pool">${pool.map(id => `<button type="button" class="skill-chip ${SKILLS[id].type}" data-skill="${id}">${SKILLS[id].name}</button><span>${SKILLS[id].desc}</span>`).join("")}</div>`;
+}
+if (typeof document !== "undefined") document.addEventListener("click", event => {
+  const chip = event.target.closest?.("[data-skill], [data-skill-pool]");
+  if (chip) {
+    event.preventDefault(); event.stopPropagation();
+    openSkillSheet(chip.dataset.skill ? skillSheetHtml(chip.dataset.skill, chip.dataset.skillOwner) : skillPoolHtml(chip.dataset.skillPool, chip.dataset.skillAt));
+    return;
+  }
+  const sheet = $("skillSheet");
+  if (sheet?.classList.contains("open") && !event.target.closest?.(".skill-sheet-card")) sheet.classList.remove("open");
+}, true);
+
 // 带兵者的等级、属性、技能。卡片上通用。
 function progressHtml(person, { compact = false } = {}) {
   if (!person) return "";
@@ -323,8 +388,8 @@ function progressHtml(person, { compact = false } = {}) {
   const pct = lv >= LEVEL_XP.length ? 100 : Math.round(((person.xp || 0) - lo) / Math.max(1, hi - lo) * 100);
   const cls = COMMANDER_CLASSES[person.cls];
   const stats = ["command", "force", "scheme"].map(key => `<span class="${cls.stat === key ? "main" : ""}">${STAT_LABELS[key]}<b>${personStat(person, key)}</b></span>`).join("");
-  const learned = (person.skills || []).filter(id => SKILLS[id]).map(id => `<span class="skill-chip ${SKILLS[id].type}" title="${esc(SKILLS[id].desc)}">${SKILLS[id].name}</span>`).join("");
-  const locked = SKILL_LEVELS.filter(at => at > lv).slice(0, compact ? 1 : 3).map(at => `<span class="skill-chip locked">${at}级可学</span>`).join("");
+  const learned = (person.skills || []).filter(id => SKILLS[id]).map(id => `<button type="button" class="skill-chip ${SKILLS[id].type}" data-skill="${id}" data-skill-owner="${person.id}">${SKILLS[id].name}</button>`).join("");
+  const locked = SKILL_LEVELS.filter(at => at > lv).slice(0, compact ? 1 : 3).map(at => `<button type="button" class="skill-chip locked" data-skill-pool="${person.id}" data-skill-at="${at}">${at}级可学</button>`).join("");
   return `<div class="progress-block">
     <div class="lv-line"><b class="lv">${lv}<small>级</small></b><span class="cls">${cls.name}</span><i class="xp"><em style="width:${pct}%"></em></i><small class="xp-text">${lv >= LEVEL_XP.length ? "满级" : `${person.xp}/${hi}`}</small></div>
     <div class="combat-stats">${stats}</div>
@@ -721,8 +786,8 @@ function deputyPickerHtml(s, army) {
       ? `<select data-deputy-army="${army.id}" data-deputy-slot="${i}"><option value="">副将${i + 1}：空</option>${opts.map(id => { const p = commanderById(s, id); return `<option value="${id}" ${id === cur ? "selected" : ""}>${esc(p?.name || id)} · ${(ensureProgress(p), p.lv)}级${knightById(s, id) ? "骑士" : id === "player" ? "" : "领主"}</option>`; }).join("")}</select>`
       : (cur ? `<span>${esc(commanderById(s, cur)?.name || "")}</span>` : "");
   };
-  const skills = armyLeaderIds(s, army).flatMap(id => personSkills(s, id).map(sk => SKILLS[sk].name));
-  return `<div class="deputy-row">${slot(0)}${slot(1)}</div>${skills.length ? `<div class="skill-row small">${skills.map(n => `<span class="skill-chip">${n}</span>`).join("")}</div>` : ""}`;
+  const skills = armyLeaderIds(s, army).flatMap(id => personSkills(s, id).map(sk => ({ sk, id })));
+  return `<div class="deputy-row">${slot(0)}${slot(1)}</div>${skills.length ? `<div class="skill-row small">${skills.map(({ sk, id }) => `<button type="button" class="skill-chip ${SKILLS[sk].type}" data-skill="${sk}" data-skill-owner="${id}">${SKILLS[sk].name}</button>`).join("")}</div>` : ""}`;
 }
 
 function armyCorpsHtml(s = S) {
@@ -805,7 +870,7 @@ function renderActiveBattle() {
   const situation = battleSituation(session);
   const phaseNames = ["接近敌军", "正面交战", "最后阶段"];
   panel.innerHTML = `<section class="battle-session"><div class="battle-visual" style="background-image:url('${battleBackground(session.targetId)}')"><div class="battle-unit-row">${Object.entries(UNIT_DEFS).map(([type, unit]) => `<span class="battle-unit-chip">${glyphSvg(type)}<span>${unit.short}</span><b>${session.composition[type] || 0}</b></span>`).join("")}</div><div class="battle-commanders"><div class="commander-side" style="--crest-color:${FACTIONS.player.color}"><span class="crest">${crestSvg("player", FACTIONS.player.name)}</span><div><b>${playerLeaders.map(o => esc(o.name)).join("、")}</b><small>${FACTIONS.player.name} · ${compositionText(session.composition)}</small></div></div><div class="commander-side enemy" style="--crest-color:${FACTIONS[enemyFaction].color}"><span class="crest">${crestSvg(enemyFaction, FACTIONS[enemyFaction].name)}</span><div><b>${esc(enemyCommander?.name || FACTIONS[enemyFaction].name)}</b><small>${target.name} · 守军 ${S.territories[session.targetId].guard}</small></div></div></div></div><div class="battle-session-head"><span class="eyebrow">战役 · ${esc(target.terrain)}</span><h2>${target.name}之战 · ${stageName}</h2><div class="battle-timeline">${phaseNames.map((name, index) => `<span class="battle-phase ${index < session.stage ? "done" : index === session.stage ? "active" : ""}"><i>${index + 1}</i>${name}</span>`).join("")}</div><div class="stat-chips"><span>出征 ${session.troops}</span><span>${compositionText(session.composition)}</span><span>损失 ${compositionText(session.lossesByType || {})}</span><span>${PLANS[session.plan].name}</span></div><div class="momentum-label"><span>我军劣势</span><b>${battleMomentumText(session.momentum)}</b><span>我军优势</span></div><div class="momentum-track"><i style="left:${marker}%"></i></div></div><p class="contribution">${esc(session.contribution || "")}</p><div class="battle-situation"><b>战况推演 · ${situation.title}</b><p>${situation.text}</p></div>
-    <div class="battle-stage-list">${session.history.length ? session.history.map(h => `<article class="battle-stage${h.skill ? " used-skill" : ""}${h.duel ? " used-duel" : ""}"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}${h.skill ? `<span class="skill-chip order">${esc(h.skill)}</span>` : ""}</h3><p>${esc(h.text)}</p>${h.quip ? `<q class="battle-quip"><b>${esc(h.speaker || "")}</b>“${esc(h.quip)}”</q>` : ""}</div></article>`).join("") : `<div class="empty-state">两军尚未接触。请选择第一道军令。</div>`}</div>
+    <div class="battle-stage-list">${session.history.length ? session.history.map(h => `<article class="battle-stage${h.skill ? " used-skill" : ""}${h.duel ? " used-duel" : ""}"><time>${esc(h.name)}</time><div><h3>${esc(h.title)}${h.skill ? `<button type="button" class="skill-chip order"${h.skillId ? ` data-skill="${h.skillId}"` : ""}>${esc(h.skill)}</button>` : ""}</h3><p>${esc(h.text)}</p>${h.quip ? `<q class="battle-quip"><b>${esc(h.speaker || "")}</b>“${esc(h.quip)}”</q>` : ""}</div></article>`).join("") : `<div class="empty-state">两军尚未接触。请选择第一道军令。</div>`}</div>
     <div class="battle-choices"><h3>${stageName}：选择军令</h3>${(() => { const skills = options.filter(o => o.skill); return skills.length ? panelFold("battleSkills", "将领技能", `${skills.length}张可用 · 每场一次`, `<div class="choice-stack">${skills.map(choiceCard).join("")}</div>`, () => !isNarrow(), "skill-fold") : ""; })()}<div class="choice-stack">${options.filter(o => !o.skill).map(choiceCard).join("")}</div></div></section>`;
   panel.querySelectorAll("[data-stage-choice]").forEach(button => button.addEventListener("click", () => {
     applyBattleChoice(S, button.dataset.stageChoice);

@@ -1159,3 +1159,24 @@ h3 .skill-chip { margin-left: 8px; vertical-align: middle; font-size: 11px; }
 .skill-fold > summary.section-head { margin: 0 0 10px; }
 .skill-fold > summary h2 { font-size: 18px; color: var(--vermilion-2); }
 .skill-fold:not([open]) > summary { padding: 10px 12px; border: 1px solid rgba(163,48,31,.4); background: rgba(163,48,31,.06); }
+
+/* ===== 技能说明卡 ===== */
+button.skill-chip { cursor: pointer; font-family: var(--serif); }
+button.skill-chip:hover { filter: brightness(1.05); box-shadow: 0 0 0 2px rgba(155,107,31,.2); }
+.skill-sheet { position: fixed; inset: 0; z-index: 130; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(14,9,5,.35); }
+.skill-sheet.open { display: flex; }
+.skill-sheet-card {
+  --text: #2a1f15; --text-2: #4a3a29; --muted: #6e5a42; --faint: #95816a; --line: rgba(96,66,32,.22); --line-strong: rgba(96,66,32,.45); --gold: #9b6b1f; --gold-light: #6f4310;
+  position: relative; width: min(420px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 18px 20px 16px; color: var(--text);
+  border: 1px solid var(--paper-edge); background: var(--paper-tex), linear-gradient(180deg, #f6edd8, #e8d7b2); box-shadow: 0 20px 50px rgba(0,0,0,.5);
+  animation: reportIn .2s ease-out;
+}
+.skill-sheet-close { position: absolute; right: 10px; top: 8px; width: 30px; height: 30px; border: 0; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; }
+.skill-sheet-head { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2px 10px; padding-right: 26px; }
+.skill-sheet-head h3 { margin: 0; font: 700 21px var(--serif); }
+.skill-sheet-head small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.skill-sheet-desc { margin: 12px 0 8px; color: var(--text-2); font: 15px/1.7 var(--serif); }
+.skill-sheet-card ul { margin: 0; padding-left: 18px; color: var(--text); font-size: 14px; line-height: 1.7; }
+.skill-sheet-card q { display: block; margin-top: 12px; padding-left: 10px; border-left: 2px solid var(--vermilion); color: var(--text-2); font: 14px/1.6 var(--serif); quotes: none; }
+.skill-pool { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: start; margin-top: 12px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+@media (max-width: 540px) { .skill-sheet { align-items: flex-end; padding: 0 0 calc(64px + env(safe-area-inset-bottom)); } .skill-sheet-card { width: 100%; border-left: 0; border-right: 0; } }

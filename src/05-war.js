@@ -347,7 +347,7 @@ function applyBattleChoice(s, choiceId, rng = Math.random) {
   if (delta >= 8) session.goodStages = (session.goodStages || 0) + 1;
   const history = battleNarrative(session, choice, delta, loss, enemyLoss);
   if (skillNote) history.text = `${skillNote}${history.text}`;
-  if (choice.skill) history.skill = SKILLS[choice.skillId].name;
+  if (choice.skill) { history.skill = SKILLS[choice.skillId].name; history.skillId = choice.skillId; }
   if (choice.id === "volley") history.text += delta > 0 ? " 弓手压制成功；若平原上仍有至少2名披甲骑士，决胜阶段可发起侧翼突破。" : " 敌阵未被压制，尚不能组织弓骑协同。";
   if (choice.combo) history.text += " 前一轮弓手制造的缺口让骑兵切入敌阵，弓骑协同已生效。";
   if (session.stage === 0 && session.contribution) history.text += ` 战前准备：${session.contribution}。`;
